@@ -36,6 +36,12 @@ void AProceduralOfficeGenerator::BeginPlay()
     }
 }
 
+void AProceduralOfficeGenerator::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    DestroySpawnedComponents();
+    Super::EndPlay(EndPlayReason);
+}
+
 #if WITH_EDITOR
 void AProceduralOfficeGenerator::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
 {
