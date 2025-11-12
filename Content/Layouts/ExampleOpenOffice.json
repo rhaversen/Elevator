@@ -1,0 +1,82 @@
+{
+  "Rooms": [
+    {
+      "Name": "Bullpen",
+      "Origin": {
+        "X": 0.0,
+        "Y": 0.0
+      },
+      "Size": {
+        "X": 3200.0,
+        "Y": 1800.0
+      },
+      "Usage": "OpenWorkspace",
+      "CubicleGrid": {
+        "X": 5,
+        "Y": 3
+      },
+      "Doors": [
+        {
+          "Location": {
+            "X": 1600.0,
+            "Y": -900.0
+          },
+          "Width": 200.0,
+          "FacingYaw": 0.0
+        },
+        {
+          "Location": {
+            "X": -1600.0,
+            "Y": 0.0
+          },
+          "Width": 180.0,
+          "FacingYaw": 90.0
+        }
+      ]
+    },
+    {
+      "Name": "Conference",
+      "Origin": {
+        "X": 3700.0,
+        "Y": 300.0
+      },
+      "Size": {
+        "X": 1200.0,
+        "Y": 900.0
+      },
+      "Usage": "Meeting",
+      "Doors": [
+        {
+          "Location": {
+            "X": -600.0,
+            "Y": 0.0
+          },
+          "Width": 160.0,
+          "FacingYaw": 180.0
+        }
+      ]
+    },
+    {
+      "Name": "Breakout",
+      "Origin": {
+        "X": -2600.0,
+        "Y": 800.0
+      },
+      "Size": {
+        "X": 1400.0,
+        "Y": 900.0
+      },
+      "Usage": "PrivateOffice",
+      "Doors": [
+        {
+          "Location": {
+            "X": 700.0,
+            "Y": -450.0
+          },
+          "Width": 150.0,
+          "FacingYaw": -90.0
+        }
+      ]
+    }
+  ]
+}
