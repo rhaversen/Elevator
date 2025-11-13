@@ -55,7 +55,9 @@ void AProceduralOfficeGenerator::PostEditChangeProperty(FPropertyChangedEvent& P
         const FName Name = PropertyChangedEvent.Property->GetFName();
         if (Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, LayoutFileRelativePath) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, FloorHeight) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, FloorThickness) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingHeight) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingThickness) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, FloorMesh) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingMesh) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WallMesh) ||
@@ -172,7 +174,18 @@ void AProceduralOfficeGenerator::PlaceSurface(EOfficeElementType Type, const FVe
 
     const float SizeX = FMath::Max(MaxX - MinX, 1.0f);
     const float SizeY = FMath::Max(MaxY - MinY, 1.0f);
-    const FVector Center((MinX + MaxX) * 0.5f, (MinY + MaxY) * 0.5f, bIsFloor ? FloorHeight : CeilingHeight);
+    const float Thickness = bIsFloor ? FloorThickness : CeilingThickness;
+    const FVector MeshSize = Mesh->GetBounds().BoxExtent * 2.0f;
+
+    FVector Center((MinX + MaxX) * 0.5f, (MinY + MaxY) * 0.5f, 0.0f);
+    if (bIsFloor)
+    {
+        Center.Z = FloorHeight - (Thickness * 0.5f);
+    }
+    else
+    {
+        Center.Z = CeilingHeight + (Thickness * 0.5f);
+    }
 
     UMaterialInterface* Material = bIsFloor ? FloorMaterialOverride.Get() : CeilingMaterialOverride.Get();
     UInstancedStaticMeshComponent* Component = GetOrCreateISMC(Mesh, bIsFloor ? FName(TEXT("Floor")) : FName(TEXT("Ceiling")), Material);
@@ -181,19 +194,10 @@ void AProceduralOfficeGenerator::PlaceSurface(EOfficeElementType Type, const FVe
         return;
     }
 
-    const FVector MeshSize = Mesh->GetBounds().BoxExtent * 2.0f;
     const float ScaleX = SizeX / FMath::Max(MeshSize.X, KINDA_SMALL_NUMBER);
     const float ScaleY = SizeY / FMath::Max(MeshSize.Y, KINDA_SMALL_NUMBER);
-    FVector Scale(ScaleX, ScaleY, 1.0f);
-
-    FRotator Rotation = FRotator::ZeroRotator;
-    if (!bIsFloor)
-    {
-        Rotation.Pitch = 180.0f;
-        Scale.Z *= -1.0f;
-    }
-
-    const FTransform InstanceTransform(Rotation, Center, Scale);
+    const float ScaleZ = Thickness / FMath::Max(MeshSize.Z, KINDA_SMALL_NUMBER);
+    const FTransform InstanceTransform(FRotator::ZeroRotator, Center, FVector(ScaleX, ScaleY, ScaleZ));
     Component->AddInstance(InstanceTransform);
 }
 

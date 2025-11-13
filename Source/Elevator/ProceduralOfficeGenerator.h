@@ -96,8 +96,14 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Layout")
     float FloorHeight = 0.0f;
 
+    UPROPERTY(EditAnywhere, Category = "Layout", meta = (ClampMin = "0.1"))
+    float FloorThickness = 20.0f;
+
     UPROPERTY(EditAnywhere, Category = "Layout")
     float CeilingHeight = 320.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Layout", meta = (ClampMin = "0.1"))
+    float CeilingThickness = 20.0f;
 
     UPROPERTY(EditAnywhere, Category = "Modules")
     TObjectPtr<UStaticMesh> FloorMesh;
