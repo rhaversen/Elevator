@@ -65,6 +65,13 @@ void AProceduralOfficeGenerator::PostEditChangeProperty(FPropertyChangedEvent& P
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, FloorMaterialOverride) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingMaterialOverride) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WallMaterialOverride) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WindowMesh) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WindowMaterialOverride) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WindowFrameMesh) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WindowFrameMaterialOverride) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WindowFrameThickness) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WindowFrameDepth) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WindowHeightRatio) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, SpawnPointTag) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubiclePartitionMesh) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubiclePartitionMaterialOverride) ||
@@ -171,6 +178,9 @@ void AProceduralOfficeGenerator::BuildElement(const FOfficeElementDefinition& El
         case EOfficeElementType::Wall:
             PlaceWall(Element.Start, Element.End, Element.Thickness);
             break;
+        case EOfficeElementType::Window:
+            PlaceWindow(Element.Start, Element.End, Element.Thickness, Element.SectionCount);
+            break;
         case EOfficeElementType::SpawnPoint:
             PlaceSpawnPoint(Element.Start, Element.HeightOffset, Element.Yaw);
             break;
@@ -263,6 +273,136 @@ void AProceduralOfficeGenerator::PlaceWall(const FVector2D& Start, const FVector
     const float Yaw = FMath::Atan2(Direction2D.Y, Direction2D.X) * (180.0f / PI);
     const FTransform InstanceTransform(FRotator(0.0f, Yaw, 0.0f), Location, FVector(ScaleX, ScaleY, ScaleZ));
     Component->AddInstance(InstanceTransform);
+}
+
+void AProceduralOfficeGenerator::PlaceWindow(const FVector2D& Start, const FVector2D& End, float Thickness, int32 SectionCount)
+{
+    if (!WindowMesh)
+    {
+        UE_LOG(LogProceduralOffice, Warning, TEXT("Window mesh not assigned."));
+        return;
+    }
+
+    const FVector2D Direction2D = End - Start;
+    const float TotalLength = Direction2D.Size();
+    if (TotalLength <= KINDA_SMALL_NUMBER)
+    {
+        return;
+    }
+
+    const FVector2D UnitDirection = Direction2D / TotalLength;
+    const FVector2D PerpDirection(-UnitDirection.Y, UnitDirection.X);
+    const int32 ActualSectionCount = FMath::Max(1, SectionCount);
+    const float FrameThickness = WindowFrameThickness;
+    
+    // Account for end frames in total length calculation
+    const float TotalFrameLength = (ActualSectionCount + 1) * FrameThickness;
+    const float AvailableGlassLength = TotalLength - TotalFrameLength;
+    const float SectionLength = AvailableGlassLength / ActualSectionCount;
+
+    if (SectionLength <= KINDA_SMALL_NUMBER)
+    {
+        UE_LOG(LogProceduralOffice, Warning, TEXT("Window sections too small to fit frames."));
+        return;
+    }
+
+    const float WallHeight = FMath::Max(CeilingHeight - FloorHeight, 1.0f);
+    const float WindowHeight = WallHeight * FMath::Clamp(WindowHeightRatio, 0.0f, 1.0f) - 2.0f * FrameThickness;
+    const float DesiredThickness = Thickness > 0.0f ? Thickness : 20.0f;
+    const float Yaw = FMath::Atan2(Direction2D.Y, Direction2D.X) * (180.0f / PI);
+
+    const float WindowBottomZ = FloorHeight + (WallHeight - WindowHeight - 2.0f * FrameThickness) * 0.5f + FrameThickness;
+    const float WindowCenterZ = WindowBottomZ + WindowHeight * 0.5f;
+
+    // Glass sections
+    UInstancedStaticMeshComponent* GlassComponent = GetOrCreateISMC(WindowMesh.Get(), FName(TEXT("WindowGlass")), WindowMaterialOverride.Get());
+    if (GlassComponent)
+    {
+        const FVector GlassMeshSize = WindowMesh->GetBounds().BoxExtent * 2.0f;
+        const float GlassScaleZ = WindowHeight / FMath::Max(GlassMeshSize.Z, KINDA_SMALL_NUMBER);
+        const float GlassScaleY = DesiredThickness / FMath::Max(GlassMeshSize.Y, KINDA_SMALL_NUMBER);
+
+        float CurrentOffset = FrameThickness + SectionLength * 0.5f;
+        for (int32 i = 0; i < ActualSectionCount; ++i)
+        {
+            const FVector2D SectionCenter2D = Start + UnitDirection * CurrentOffset;
+            const FVector SectionLocation(SectionCenter2D.X, SectionCenter2D.Y, WindowCenterZ);
+            const float GlassScaleX = SectionLength / FMath::Max(GlassMeshSize.X, KINDA_SMALL_NUMBER);
+            const FTransform GlassTransform(FRotator(0.0f, Yaw, 0.0f), SectionLocation, FVector(GlassScaleX, GlassScaleY, GlassScaleZ));
+            GlassComponent->AddInstance(GlassTransform);
+
+            CurrentOffset += SectionLength + FrameThickness;
+        }
+    }
+
+    // Vertical frames (between sections, and at start/end)
+    if (WindowFrameMesh)
+    {
+        UInstancedStaticMeshComponent* VerticalFrameComponent = GetOrCreateISMC(WindowFrameMesh.Get(), FName(TEXT("WindowFrameVertical")), WindowFrameMaterialOverride.Get());
+        if (VerticalFrameComponent)
+        {
+            const FVector FrameMeshSize = WindowFrameMesh->GetBounds().BoxExtent * 2.0f;
+            const float FrameScaleX = FrameThickness / FMath::Max(FrameMeshSize.X, KINDA_SMALL_NUMBER);
+            const float FrameScaleY = WindowFrameDepth / FMath::Max(FrameMeshSize.Y, KINDA_SMALL_NUMBER);
+            const float FrameScaleZ = WindowHeight / FMath::Max(FrameMeshSize.Z, KINDA_SMALL_NUMBER);
+
+            // Start frame
+            {
+                const FVector2D FrameCenter2D = Start + UnitDirection * (FrameThickness * 0.5f);
+                const FVector FrameLocation(FrameCenter2D.X, FrameCenter2D.Y, WindowCenterZ);
+                const FTransform FrameTransform(FRotator(0.0f, Yaw, 0.0f), FrameLocation, FVector(FrameScaleX, FrameScaleY, FrameScaleZ));
+                VerticalFrameComponent->AddInstance(FrameTransform);
+            }
+
+            // Middle frames
+            float FrameOffset = FrameThickness + SectionLength + FrameThickness * 0.5f;
+            for (int32 i = 0; i < ActualSectionCount - 1; ++i)
+            {
+                const FVector2D FrameCenter2D = Start + UnitDirection * FrameOffset;
+                const FVector FrameLocation(FrameCenter2D.X, FrameCenter2D.Y, WindowCenterZ);
+                const FTransform FrameTransform(FRotator(0.0f, Yaw, 0.0f), FrameLocation, FVector(FrameScaleX, FrameScaleY, FrameScaleZ));
+                VerticalFrameComponent->AddInstance(FrameTransform);
+
+                FrameOffset += SectionLength + FrameThickness;
+            }
+
+            // End frame
+            {
+                const FVector2D FrameCenter2D = Start + UnitDirection * (TotalLength - FrameThickness * 0.5f);
+                const FVector FrameLocation(FrameCenter2D.X, FrameCenter2D.Y, WindowCenterZ);
+                const FTransform FrameTransform(FRotator(0.0f, Yaw, 0.0f), FrameLocation, FVector(FrameScaleX, FrameScaleY, FrameScaleZ));
+                VerticalFrameComponent->AddInstance(FrameTransform);
+            }
+        }
+
+        // Horizontal frames (top and bottom, full length)
+        UInstancedStaticMeshComponent* HorizontalFrameComponent = GetOrCreateISMC(WindowFrameMesh.Get(), FName(TEXT("WindowFrameHorizontal")), WindowFrameMaterialOverride.Get());
+        if (HorizontalFrameComponent)
+        {
+            const FVector FrameMeshSize = WindowFrameMesh->GetBounds().BoxExtent * 2.0f;
+            const float FrameScaleX = TotalLength / FMath::Max(FrameMeshSize.X, KINDA_SMALL_NUMBER);
+            const float FrameScaleY = WindowFrameDepth / FMath::Max(FrameMeshSize.Y, KINDA_SMALL_NUMBER);
+            const float FrameScaleZ = FrameThickness / FMath::Max(FrameMeshSize.Z, KINDA_SMALL_NUMBER);
+
+            const FVector2D MidPoint2D = (Start + End) * 0.5f;
+            const float BottomZ = WindowBottomZ - FrameThickness * 0.5f;
+            const float TopZ = WindowBottomZ + WindowHeight + FrameThickness * 0.5f;
+
+            // Bottom frame
+            {
+                const FVector FrameLocation(MidPoint2D.X, MidPoint2D.Y, BottomZ);
+                const FTransform FrameTransform(FRotator(0.0f, Yaw, 0.0f), FrameLocation, FVector(FrameScaleX, FrameScaleY, FrameScaleZ));
+                HorizontalFrameComponent->AddInstance(FrameTransform);
+            }
+
+            // Top frame
+            {
+                const FVector FrameLocation(MidPoint2D.X, MidPoint2D.Y, TopZ);
+                const FTransform FrameTransform(FRotator(0.0f, Yaw, 0.0f), FrameLocation, FVector(FrameScaleX, FrameScaleY, FrameScaleZ));
+                HorizontalFrameComponent->AddInstance(FrameTransform);
+            }
+        }
+    }
 }
 
 void AProceduralOfficeGenerator::PlaceSpawnPoint(const FVector2D& Location, float HeightOffset, float Yaw)

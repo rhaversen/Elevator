@@ -13,6 +13,7 @@ enum class EOfficeElementType : uint8
     Floor,
     Ceiling,
     Wall,
+    Window,
     SpawnPoint,
     Cubicle,
     CeilingLight
@@ -49,6 +50,9 @@ struct FOfficeElementDefinition
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
     FVector2D Padding = FVector2D::ZeroVector;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout", meta = (ClampMin = "1"))
+    int32 SectionCount = 1;
 };
 
 USTRUCT(BlueprintType)
@@ -91,6 +95,7 @@ protected:
     void BuildElement(const FOfficeElementDefinition& Element);
     void PlaceSurface(EOfficeElementType Type, const FVector2D& Start, const FVector2D& End);
     void PlaceWall(const FVector2D& Start, const FVector2D& End, float Thickness);
+    void PlaceWindow(const FVector2D& Start, const FVector2D& End, float Thickness, int32 SectionCount);
     void PlaceSpawnPoint(const FVector2D& Location, float HeightOffset, float Yaw);
     void PlaceCubicle(const FVector2D& Center, const FVector2D& Size, float Yaw);
     void PlaceCeilingLights(const FVector2D& Start, const FVector2D& End, const FVector2D& Spacing, const FVector2D& Padding);
@@ -136,6 +141,27 @@ protected:
 
     UPROPERTY(EditAnywhere, Category = "Modules")
     TObjectPtr<UMaterialInterface> WallMaterialOverride;
+
+    UPROPERTY(EditAnywhere, Category = "Modules")
+    TObjectPtr<UStaticMesh> WindowMesh;
+
+    UPROPERTY(EditAnywhere, Category = "Modules")
+    TObjectPtr<UMaterialInterface> WindowMaterialOverride;
+
+    UPROPERTY(EditAnywhere, Category = "Modules")
+    TObjectPtr<UStaticMesh> WindowFrameMesh;
+
+    UPROPERTY(EditAnywhere, Category = "Modules")
+    TObjectPtr<UMaterialInterface> WindowFrameMaterialOverride;
+
+    UPROPERTY(EditAnywhere, Category = "Modules", meta = (ClampMin = "1.0"))
+    float WindowFrameThickness = 10.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Modules", meta = (ClampMin = "1.0"))
+    float WindowFrameDepth = 20.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Modules", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float WindowHeightRatio = 0.8f;
 
     UPROPERTY(EditAnywhere, Category = "Cubicles")
     TObjectPtr<UStaticMesh> CubiclePartitionMesh;

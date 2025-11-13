@@ -54,9 +54,16 @@
       "Thickness": 25.0
     },
     {
-      "Type": "Wall",
+      "Type": "Window",
       "Start": { "X":  1600.0, "Y":  900.0 },
       "End":   { "X": -1600.0, "Y":  900.0 },
+      "Thickness": 1.0,
+      "SectionCount": 5
+    },
+    {
+      "Type": "Wall",
+      "Start": { "X": -1600.0, "Y":  900.0 },
+      "End":   { "X": -1600.0, "Y": -900.0 },
       "Thickness": 25.0
     }
   ]
