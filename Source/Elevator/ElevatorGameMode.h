@@ -30,6 +30,10 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Spawning", meta = (EditCondition = "bUseCustomSpawnTransform"))
     FTransform PlayerSpawnTransform;
 
+    UPROPERTY(EditAnywhere, Category = "Spawning")
+    FName PreferredPlayerStartTag;
+
 private:
     void SpawnPlayerAtConfiguredTransform();
+    AActor* FindPreferredPlayerStart(AController* PlayerController) const;
 };

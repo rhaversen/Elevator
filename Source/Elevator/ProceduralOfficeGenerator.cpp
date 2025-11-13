@@ -1,10 +1,13 @@
 #include "ProceduralOfficeGenerator.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/ChildActorComponent.h"
 #include "Engine/World.h"
+#include "GameFramework/PlayerStart.h"
 #include "JsonObjectConverter.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "UObject/Package.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogProceduralOffice, Log, All);
 
@@ -58,7 +61,8 @@ void AProceduralOfficeGenerator::PostEditChangeProperty(FPropertyChangedEvent& P
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WallMesh) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, FloorMaterialOverride) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingMaterialOverride) ||
-            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WallMaterialOverride))
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WallMaterialOverride) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, SpawnPointTag))
         {
             GenerateFromData();
         }
@@ -141,6 +145,9 @@ void AProceduralOfficeGenerator::BuildElement(const FOfficeElementDefinition& El
             break;
         case EOfficeElementType::Wall:
             PlaceWall(Element.Start, Element.End, Element.Thickness);
+            break;
+        case EOfficeElementType::SpawnPoint:
+            PlaceSpawnPoint(Element.Start, Element.HeightOffset, Element.Yaw);
             break;
         default:
             UE_LOG(LogProceduralOffice, Warning, TEXT("Unsupported element type encountered."));
@@ -225,6 +232,41 @@ void AProceduralOfficeGenerator::PlaceWall(const FVector2D& Start, const FVector
     Component->AddInstance(InstanceTransform);
 }
 
+void AProceduralOfficeGenerator::PlaceSpawnPoint(const FVector2D& Location, float HeightOffset, float Yaw)
+{
+    const FVector SpawnLocation(Location.X, Location.Y, FloorHeight + HeightOffset);
+    const FRotator SpawnRotation(0.0f, Yaw, 0.0f);
+
+    const FName ComponentName = MakeUniqueObjectName(this, UChildActorComponent::StaticClass(), FName(TEXT("ProceduralSpawnPoint")));
+    UChildActorComponent* SpawnComponent = NewObject<UChildActorComponent>(this, ComponentName);
+    if (!SpawnComponent)
+    {
+        return;
+    }
+
+    SpawnComponent->CreationMethod = EComponentCreationMethod::UserConstructionScript;
+    SpawnComponent->SetMobility(EComponentMobility::Static);
+    SpawnComponent->SetupAttachment(Root);
+    SpawnComponent->SetChildActorClass(APlayerStart::StaticClass());
+    SpawnComponent->RegisterComponent();
+    SpawnComponent->SetRelativeTransform(FTransform(SpawnRotation, SpawnLocation));
+    SpawnComponent->UpdateComponentToWorld();
+
+    const FTransform ComponentTransform = SpawnComponent->GetComponentTransform();
+
+    if (APlayerStart* PlayerStart = Cast<APlayerStart>(SpawnComponent->GetChildActor()))
+    {
+        PlayerStart->SetActorTransform(ComponentTransform);
+        if (!SpawnPointTag.IsNone())
+        {
+            PlayerStart->PlayerStartTag = SpawnPointTag;
+            PlayerStart->Tags.AddUnique(SpawnPointTag);
+        }
+    }
+
+    SpawnedChildActors.Add(SpawnComponent);
+}
+
 UInstancedStaticMeshComponent* AProceduralOfficeGenerator::GetOrCreateISMC(UStaticMesh* Mesh, const FName& ComponentName, UMaterialInterface* OverrideMaterial)
 {
     if (!Mesh)
@@ -271,4 +313,13 @@ void AProceduralOfficeGenerator::DestroySpawnedComponents()
     }
     SpawnedInstancedComponents.Empty();
     InstancedCache.Empty();
+
+    for (UChildActorComponent* ChildComponent : SpawnedChildActors)
+    {
+        if (ChildComponent)
+        {
+            ChildComponent->DestroyComponent();
+        }
+    }
+    SpawnedChildActors.Empty();
 }

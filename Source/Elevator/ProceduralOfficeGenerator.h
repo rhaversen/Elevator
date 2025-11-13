@@ -4,12 +4,15 @@
 #include "GameFramework/Actor.h"
 #include "ProceduralOfficeGenerator.generated.h"
 
+class UChildActorComponent;
+
 UENUM(BlueprintType)
 enum class EOfficeElementType : uint8
 {
     Floor,
     Ceiling,
-    Wall
+    Wall,
+    SpawnPoint
 };
 
 USTRUCT(BlueprintType)
@@ -28,6 +31,12 @@ struct FOfficeElementDefinition
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout", meta = (ClampMin = "0.1"))
     float Thickness = 20.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
+    float HeightOffset = 0.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
+    float Yaw = 0.0f;
 };
 
 USTRUCT(BlueprintType)
@@ -70,6 +79,7 @@ protected:
     void BuildElement(const FOfficeElementDefinition& Element);
     void PlaceSurface(EOfficeElementType Type, const FVector2D& Start, const FVector2D& End);
     void PlaceWall(const FVector2D& Start, const FVector2D& End, float Thickness);
+    void PlaceSpawnPoint(const FVector2D& Location, float HeightOffset, float Yaw);
 
     UInstancedStaticMeshComponent* GetOrCreateISMC(UStaticMesh* Mesh, const FName& ComponentName, UMaterialInterface* OverrideMaterial = nullptr);
     void DestroySpawnedComponents();
@@ -109,6 +119,12 @@ protected:
 
     UPROPERTY(Transient)
     TArray<TObjectPtr<UInstancedStaticMeshComponent>> SpawnedInstancedComponents;
+
+    UPROPERTY(EditAnywhere, Category = "Layout")
+    FName SpawnPointTag = FName(TEXT("ProceduralSpawn"));
+
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<class UChildActorComponent>> SpawnedChildActors;
 
 private:
     TMap<FName, UInstancedStaticMeshComponent*> InstancedCache;

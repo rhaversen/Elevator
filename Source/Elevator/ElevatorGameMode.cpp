@@ -2,6 +2,7 @@
 
 #include "FirstPersonCharacter.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerStart.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 
@@ -9,7 +10,8 @@ AElevatorGameMode::AElevatorGameMode()
 {
     DefaultPawnClass = AFirstPersonCharacter::StaticClass();
     PlayerSpawnTransform = FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::OneVector);
-    bUseCustomSpawnTransform = true;
+    bUseCustomSpawnTransform = false;
+    PreferredPlayerStartTag = FName(TEXT("ProceduralSpawn"));
 }
 
 void AElevatorGameMode::BeginPlay()
@@ -55,9 +57,23 @@ void AElevatorGameMode::SpawnPlayerAtConfiguredTransform()
         {
             SpawnTransform = PlayerSpawnTransform;
         }
-        else if (AActor* StartSpot = FindPlayerStart(PlayerController))
+        else
         {
-            SpawnTransform = StartSpot->GetActorTransform();
+            AActor* StartSpot = FindPreferredPlayerStart(PlayerController);
+            if (!StartSpot)
+            {
+                StartSpot = FindPlayerStart(PlayerController);
+            }
+
+            if (StartSpot)
+            {
+                SpawnTransform = StartSpot->GetActorTransform();
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("No PlayerStart found for controller %s. Falling back to configured spawn transform."), *PlayerController->GetName());
+                SpawnTransform = PlayerSpawnTransform;
+            }
         }
 
         FActorSpawnParameters SpawnParameters;
@@ -71,4 +87,27 @@ void AElevatorGameMode::SpawnPlayerAtConfiguredTransform()
             }
         }
     }
+}
+
+AActor* AElevatorGameMode::FindPreferredPlayerStart(AController* PlayerController) const
+{
+    if (PreferredPlayerStartTag.IsNone())
+    {
+        return nullptr;
+    }
+
+    TArray<AActor*> PlayerStarts;
+    UGameplayStatics::GetAllActorsOfClass(this, APlayerStart::StaticClass(), PlayerStarts);
+    for (AActor* Actor : PlayerStarts)
+    {
+        if (APlayerStart* PlayerStart = Cast<APlayerStart>(Actor))
+        {
+            if (PlayerStart->PlayerStartTag == PreferredPlayerStartTag)
+            {
+                return PlayerStart;
+            }
+        }
+    }
+
+    return nullptr;
 }
