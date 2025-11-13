@@ -12,7 +12,8 @@ enum class EOfficeElementType : uint8
     Floor,
     Ceiling,
     Wall,
-    SpawnPoint
+    SpawnPoint,
+    Cubicle
 };
 
 USTRUCT(BlueprintType)
@@ -37,6 +38,9 @@ struct FOfficeElementDefinition
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
     float Yaw = 0.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
+    FVector2D Dimensions = FVector2D(240.0f, 240.0f);
 };
 
 USTRUCT(BlueprintType)
@@ -80,6 +84,7 @@ protected:
     void PlaceSurface(EOfficeElementType Type, const FVector2D& Start, const FVector2D& End);
     void PlaceWall(const FVector2D& Start, const FVector2D& End, float Thickness);
     void PlaceSpawnPoint(const FVector2D& Location, float HeightOffset, float Yaw);
+    void PlaceCubicle(const FVector2D& Center, const FVector2D& Size, float Yaw);
 
     UInstancedStaticMeshComponent* GetOrCreateISMC(UStaticMesh* Mesh, const FName& ComponentName, UMaterialInterface* OverrideMaterial = nullptr);
     void DestroySpawnedComponents();
@@ -122,6 +127,33 @@ protected:
 
     UPROPERTY(EditAnywhere, Category = "Modules")
     TObjectPtr<UMaterialInterface> WallMaterialOverride;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles")
+    TObjectPtr<UStaticMesh> CubiclePartitionMesh;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles")
+    TObjectPtr<UMaterialInterface> CubiclePartitionMaterialOverride;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles")
+    TObjectPtr<UStaticMesh> CubicleDeskMesh;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles")
+    TObjectPtr<UMaterialInterface> CubicleDeskMaterialOverride;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles", meta = (ClampMin = "10.0"))
+    float CubiclePartitionHeight = 160.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles", meta = (ClampMin = "1.0"))
+    float CubiclePartitionThickness = 10.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles")
+    float CubicleDeskHeightOffset = 75.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles")
+    FVector CubicleDeskScale = FVector(1.0f, 1.0f, 1.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles", meta = (ClampMin = "0.0", ClampMax = "0.45"))
+    float CubicleDeskBackOffsetRatio = 0.25f;
 
     UPROPERTY(Transient)
     TArray<TObjectPtr<UInstancedStaticMeshComponent>> SpawnedInstancedComponents;

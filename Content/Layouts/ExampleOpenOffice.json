@@ -12,9 +12,27 @@
     },
     {
       "Type": "SpawnPoint",
-      "Start": { "X": 0.0, "Y": 0.0 },
+      "Start": { "X": 1000.0, "Y": 0.0 },
       "HeightOffset": 90.0,
       "Yaw": 180.0
+    },
+    {
+      "Type": "Cubicle",
+      "Start": { "X": 600.0, "Y": -300.0 },
+      "Dimensions": { "X": 300.0, "Y": 250.0 },
+      "Yaw": 0.0
+    },
+    {
+      "Type": "Cubicle",
+      "Start": { "X": 600.0, "Y": 250.0 },
+      "Dimensions": { "X": 300.0, "Y": 250.0 },
+      "Yaw": 0.0
+    },
+    {
+      "Type": "Cubicle",
+      "Start": { "X": 0.0, "Y": -300.0 },
+      "Dimensions": { "X": 300.0, "Y": 250.0 },
+      "Yaw": 90.0
     },
     {
       "Type": "Wall",
@@ -32,12 +50,6 @@
       "Type": "Wall",
       "Start": { "X":  1600.0, "Y":  900.0 },
       "End":   { "X": -1600.0, "Y":  900.0 },
-      "Thickness": 25.0
-    },
-    {
-      "Type": "Wall",
-      "Start": { "X": -1600.0, "Y":  900.0 },
-      "End":   { "X": -1600.0, "Y": -900.0 },
       "Thickness": 25.0
     }
   ]
