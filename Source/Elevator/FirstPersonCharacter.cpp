@@ -12,7 +12,7 @@ AFirstPersonCharacter::AFirstPersonCharacter()
     GetCapsuleComponent()->InitCapsuleSize(55.0f, 96.0f);
 
     bUseControllerRotationYaw = true;
-    bUseControllerRotationPitch = true;
+    bUseControllerRotationPitch = false;
     bUseControllerRotationRoll = false;
 
     if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
