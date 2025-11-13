@@ -2,6 +2,7 @@
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/ChildActorComponent.h"
+#include "Components/RectLightComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerStart.h"
 #include "JsonObjectConverter.h"
@@ -73,7 +74,20 @@ void AProceduralOfficeGenerator::PostEditChangeProperty(FPropertyChangedEvent& P
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubiclePartitionThickness) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleDeskHeightOffset) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleDeskScale) ||
-            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleDeskBackOffsetRatio))
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleDeskBackOffsetRatio) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingLightMesh) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingLightMaterialOverride) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingLightScale) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, bSpawnCeilingLightComponents) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingLightIntensity) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingLightAttenuationRadius) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingLightColor) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, bCeilingLightsCastShadows) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingLightVerticalOffset) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingRectLightSourceWidth) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingRectLightSourceHeight) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingRectLightBarnDoorAngle) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingRectLightBarnDoorLength))
         {
             GenerateFromData();
         }
@@ -162,6 +176,9 @@ void AProceduralOfficeGenerator::BuildElement(const FOfficeElementDefinition& El
             break;
         case EOfficeElementType::Cubicle:
             PlaceCubicle(Element.Start, Element.Dimensions, Element.Yaw);
+            break;
+        case EOfficeElementType::CeilingLight:
+            PlaceCeilingLights(Element.Start, Element.End, Element.Spacing, Element.Padding);
             break;
         default:
             UE_LOG(LogProceduralOffice, Warning, TEXT("Unsupported element type encountered."));
@@ -347,6 +364,102 @@ void AProceduralOfficeGenerator::PlaceCubicle(const FVector2D& Center, const FVe
     }
 }
 
+void AProceduralOfficeGenerator::PlaceCeilingLights(const FVector2D& Start, const FVector2D& End, const FVector2D& Spacing, const FVector2D& Padding)
+{
+    if (!CeilingLightMesh)
+    {
+        UE_LOG(LogProceduralOffice, Warning, TEXT("Ceiling light mesh not assigned."));
+        return;
+    }
+
+    const float MinX = FMath::Min(Start.X, End.X) + FMath::Max(0.0f, Padding.X);
+    const float MaxX = FMath::Max(Start.X, End.X) - FMath::Max(0.0f, Padding.X);
+    const float MinY = FMath::Min(Start.Y, End.Y) + FMath::Max(0.0f, Padding.Y);
+    const float MaxY = FMath::Max(Start.Y, End.Y) - FMath::Max(0.0f, Padding.Y);
+
+    const float SpacingX = FMath::Max(Spacing.X, 1.0f);
+    const float SpacingY = FMath::Max(Spacing.Y, 1.0f);
+
+    UInstancedStaticMeshComponent* Component = GetOrCreateISMC(CeilingLightMesh.Get(), FName(TEXT("CeilingLight")), CeilingLightMaterialOverride.Get());
+    if (!Component)
+    {
+        return;
+    }
+
+    const FBoxSphereBounds MeshBounds = CeilingLightMesh->GetBounds();
+    const FVector BoundsOrigin = MeshBounds.Origin;
+    const FVector ScaledOrigin = BoundsOrigin * CeilingLightScale;
+    const float TopOffset = (BoundsOrigin.Z + MeshBounds.BoxExtent.Z) * CeilingLightScale.Z;
+    const float LightZ = CeilingHeight - TopOffset;
+    const float MeshLength = MeshBounds.BoxExtent.X * 2.0f * CeilingLightScale.X;
+    const float MeshWidth = MeshBounds.BoxExtent.Y * 2.0f * CeilingLightScale.Y;
+
+    if (MinX > MaxX || MinY > MaxY)
+    {
+        return;
+    }
+
+    const float EffectiveVerticalOffset = FMath::Max(0.0f, CeilingLightVerticalOffset);
+    const bool bShouldSpawnLights = bSpawnCeilingLightComponents && CeilingLightIntensity > KINDA_SMALL_NUMBER;
+    const float SourceWidth = (CeilingRectLightSourceWidth > 0.0f) ? CeilingRectLightSourceWidth : MeshLength;
+    const float SourceHeight = (CeilingRectLightSourceHeight > 0.0f) ? CeilingRectLightSourceHeight : MeshWidth;
+    const float FinalSourceWidth = FMath::Max(1.0f, SourceWidth);
+    const float FinalSourceHeight = FMath::Max(1.0f, SourceHeight);
+    const float BarnDoorAngle = FMath::Clamp(CeilingRectLightBarnDoorAngle, 0.0f, 90.0f);
+    const float BarnDoorLength = FMath::Max(0.0f, CeilingRectLightBarnDoorLength);
+    const float SpacingMagnitude = FVector2D(SpacingX, SpacingY).Size();
+    const float AutoAttenuationRadius = (SpacingMagnitude > KINDA_SMALL_NUMBER) ? SpacingMagnitude * 1.5f : FMath::Max(MeshLength, MeshWidth) * 1.1f;
+    const float EffectiveAttenuationRadius = (CeilingLightAttenuationRadius > 0.0f) ? CeilingLightAttenuationRadius : AutoAttenuationRadius;
+
+    // Calculate how many lights fit and center the grid
+    const float AreaWidth = MaxX - MinX;
+    const float AreaHeight = MaxY - MinY;
+    const int32 CountX = FMath::Max(1, FMath::FloorToInt(AreaWidth / SpacingX) + 1);
+    const int32 CountY = FMath::Max(1, FMath::FloorToInt(AreaHeight / SpacingY) + 1);
+    const float TotalSpanX = (CountX - 1) * SpacingX;
+    const float TotalSpanY = (CountY - 1) * SpacingY;
+    const float StartX = MinX + (AreaWidth - TotalSpanX) * 0.5f;
+    const float StartY = MinY + (AreaHeight - TotalSpanY) * 0.5f;
+
+    for (int32 iX = 0; iX < CountX; ++iX)
+    {
+        const float X = StartX + iX * SpacingX;
+        const float AdjustedX = X - ScaledOrigin.X;
+        for (int32 iY = 0; iY < CountY; ++iY)
+        {
+            const float Y = StartY + iY * SpacingY;
+            const FVector MeshLocation(AdjustedX, Y - ScaledOrigin.Y, LightZ);
+            const FTransform LightTransform(FRotator::ZeroRotator, MeshLocation, CeilingLightScale);
+            Component->AddInstance(LightTransform);
+
+            if (bShouldSpawnLights)
+            {
+                URectLightComponent* NewLight = NewObject<URectLightComponent>(this);
+                if (!NewLight)
+                {
+                    continue;
+                }
+
+                NewLight->SetMobility(EComponentMobility::Stationary);
+                NewLight->SetIntensity(CeilingLightIntensity);
+                NewLight->SetAttenuationRadius(FMath::Max(1.0f, EffectiveAttenuationRadius));
+                NewLight->SetLightColor(CeilingLightColor);
+                NewLight->SetCastShadows(bCeilingLightsCastShadows);
+                NewLight->SetSourceWidth(FinalSourceWidth);
+                NewLight->SetSourceHeight(FinalSourceHeight);
+                NewLight->SetBarnDoorAngle(BarnDoorAngle);
+                NewLight->SetBarnDoorLength(BarnDoorLength);
+                NewLight->SetupAttachment(Root);
+                NewLight->RegisterComponent();
+                const FVector LightLocation(X, Y, CeilingHeight - EffectiveVerticalOffset);
+                NewLight->SetWorldLocation(LightLocation);
+                NewLight->SetWorldRotation(FRotator(-90.0f, 90.0f, 0.0f));
+                SpawnedCeilingLights.Add(NewLight);
+            }
+        }
+    }
+}
+
 UInstancedStaticMeshComponent* AProceduralOfficeGenerator::GetOrCreateISMC(UStaticMesh* Mesh, const FName& ComponentName, UMaterialInterface* OverrideMaterial)
 {
     if (!Mesh)
@@ -402,4 +515,13 @@ void AProceduralOfficeGenerator::DestroySpawnedComponents()
         }
     }
     SpawnedChildActors.Empty();
+
+    for (URectLightComponent* LightComponent : SpawnedCeilingLights)
+    {
+        if (LightComponent)
+        {
+            LightComponent->DestroyComponent();
+        }
+    }
+    SpawnedCeilingLights.Empty();
 }

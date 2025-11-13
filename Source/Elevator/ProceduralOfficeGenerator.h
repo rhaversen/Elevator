@@ -5,6 +5,7 @@
 #include "ProceduralOfficeGenerator.generated.h"
 
 class UChildActorComponent;
+class URectLightComponent;
 
 UENUM(BlueprintType)
 enum class EOfficeElementType : uint8
@@ -13,7 +14,8 @@ enum class EOfficeElementType : uint8
     Ceiling,
     Wall,
     SpawnPoint,
-    Cubicle
+    Cubicle,
+    CeilingLight
 };
 
 USTRUCT(BlueprintType)
@@ -41,6 +43,12 @@ struct FOfficeElementDefinition
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
     FVector2D Dimensions = FVector2D(240.0f, 240.0f);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
+    FVector2D Spacing = FVector2D(400.0f, 400.0f);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
+    FVector2D Padding = FVector2D::ZeroVector;
 };
 
 USTRUCT(BlueprintType)
@@ -85,6 +93,7 @@ protected:
     void PlaceWall(const FVector2D& Start, const FVector2D& End, float Thickness);
     void PlaceSpawnPoint(const FVector2D& Location, float HeightOffset, float Yaw);
     void PlaceCubicle(const FVector2D& Center, const FVector2D& Size, float Yaw);
+    void PlaceCeilingLights(const FVector2D& Start, const FVector2D& End, const FVector2D& Spacing, const FVector2D& Padding);
 
     UInstancedStaticMeshComponent* GetOrCreateISMC(UStaticMesh* Mesh, const FName& ComponentName, UMaterialInterface* OverrideMaterial = nullptr);
     void DestroySpawnedComponents();
@@ -155,6 +164,45 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Cubicles", meta = (ClampMin = "0.0", ClampMax = "0.45"))
     float CubicleDeskBackOffsetRatio = 0.25f;
 
+    UPROPERTY(EditAnywhere, Category = "Lighting")
+    TObjectPtr<UStaticMesh> CeilingLightMesh;
+
+    UPROPERTY(EditAnywhere, Category = "Lighting")
+    TObjectPtr<UMaterialInterface> CeilingLightMaterialOverride;
+
+    UPROPERTY(EditAnywhere, Category = "Lighting")
+    FVector CeilingLightScale = FVector(1.0f, 1.0f, 1.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Lighting")
+    bool bSpawnCeilingLightComponents = true;
+
+    UPROPERTY(EditAnywhere, Category = "Lighting", meta = (ClampMin = "0.0"))
+    float CeilingLightIntensity = 3000.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Lighting", meta = (ClampMin = "0.0"))
+    float CeilingLightAttenuationRadius = 0.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Lighting")
+    FLinearColor CeilingLightColor = FLinearColor::White;
+
+    UPROPERTY(EditAnywhere, Category = "Lighting")
+    bool bCeilingLightsCastShadows = true;
+
+    UPROPERTY(EditAnywhere, Category = "Lighting", meta = (ClampMin = "0.0"))
+    float CeilingLightVerticalOffset = 20.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Lighting", meta = (ClampMin = "0.0"))
+    float CeilingRectLightSourceWidth = 0.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Lighting", meta = (ClampMin = "0.0"))
+    float CeilingRectLightSourceHeight = 0.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Lighting", meta = (ClampMin = "0.0", ClampMax = "90.0"))
+    float CeilingRectLightBarnDoorAngle = 45.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Lighting", meta = (ClampMin = "0.0"))
+    float CeilingRectLightBarnDoorLength = 20.0f;
+
     UPROPERTY(Transient)
     TArray<TObjectPtr<UInstancedStaticMeshComponent>> SpawnedInstancedComponents;
 
@@ -163,6 +211,9 @@ protected:
 
     UPROPERTY(Transient)
     TArray<TObjectPtr<class UChildActorComponent>> SpawnedChildActors;
+
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<URectLightComponent>> SpawnedCeilingLights;
 
 private:
     TMap<FName, UInstancedStaticMeshComponent*> InstancedCache;
