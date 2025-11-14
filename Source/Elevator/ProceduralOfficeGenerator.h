@@ -53,6 +53,9 @@ struct FOfficeElementDefinition
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout", meta = (ClampMin = "1"))
     int32 SectionCount = 1;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout", meta = (ClampMin = "1.0"))
+    float Height = 200.0f;
 };
 
 USTRUCT(BlueprintType)
@@ -175,6 +178,12 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Cubicles")
     TObjectPtr<UMaterialInterface> CubicleDeskMaterialOverride;
 
+    UPROPERTY(EditAnywhere, Category = "Cubicles")
+    TObjectPtr<UStaticMesh> CubicleChairMesh;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles")
+    TObjectPtr<UMaterialInterface> CubicleChairMaterialOverride;
+
     UPROPERTY(EditAnywhere, Category = "Cubicles", meta = (ClampMin = "10.0"))
     float CubiclePartitionHeight = 160.0f;
 
@@ -189,6 +198,15 @@ protected:
 
     UPROPERTY(EditAnywhere, Category = "Cubicles", meta = (ClampMin = "0.0", ClampMax = "0.45"))
     float CubicleDeskBackOffsetRatio = 0.25f;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles")
+    FRotator CubicleChairRotation = FRotator::ZeroRotator;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles")
+    FVector CubicleChairScale = FVector(1.0f, 1.0f, 1.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles", meta = (ClampMin = "0.0", ClampMax = "0.45"))
+    float CubicleChairFrontOffsetRatio = 0.15f;
 
     UPROPERTY(EditAnywhere, Category = "Lighting")
     TObjectPtr<UStaticMesh> CeilingLightMesh;

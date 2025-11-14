@@ -77,11 +77,16 @@ void AProceduralOfficeGenerator::PostEditChangeProperty(FPropertyChangedEvent& P
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubiclePartitionMaterialOverride) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleDeskMesh) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleDeskMaterialOverride) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleChairMesh) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleChairMaterialOverride) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubiclePartitionHeight) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubiclePartitionThickness) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleDeskHeightOffset) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleDeskScale) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleDeskBackOffsetRatio) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleChairRotation) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleChairScale) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleChairFrontOffsetRatio) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingLightMesh) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingLightMaterialOverride) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingLightScale) ||
@@ -500,6 +505,21 @@ void AProceduralOfficeGenerator::PlaceCubicle(const FVector2D& Center, const FVe
             const FVector DeskLocation(Center.X + DeskOffset.X, Center.Y + DeskOffset.Y, FloorHeight + CubicleDeskHeightOffset);
             const FTransform DeskTransform(FRotator(0.0f, Yaw, 0.0f), DeskLocation, CubicleDeskScale);
             DeskComponent->AddInstance(DeskTransform);
+        }
+    }
+
+    if (CubicleChairMesh)
+    {
+        UInstancedStaticMeshComponent* ChairComponent = GetOrCreateISMC(CubicleChairMesh.Get(), FName(TEXT("CubicleChair")), CubicleChairMaterialOverride.Get());
+        if (ChairComponent)
+        {
+            const float ClampedRatio = FMath::Clamp(CubicleChairFrontOffsetRatio, 0.0f, 0.45f);
+            const FVector2D LocalChairOffset(0.0f, Depth * (0.5f - ClampedRatio));
+            const FVector2D ChairOffset = Rotate2D(LocalChairOffset);
+            const FVector ChairLocation(Center.X + ChairOffset.X, Center.Y + ChairOffset.Y, FloorHeight);
+            const FRotator ChairRotation = FRotator(CubicleChairRotation.Pitch, Yaw + CubicleChairRotation.Yaw, CubicleChairRotation.Roll);
+            const FTransform ChairTransform(ChairRotation, ChairLocation, CubicleChairScale);
+            ChairComponent->AddInstance(ChairTransform);
         }
     }
 }
