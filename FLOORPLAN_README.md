@@ -9,7 +9,7 @@ A visual editor for creating and editing floor plans with walls, doors, windows,
 - **Floor**: Defines the base area of the floor plan
 - **Wall**: Solid walls with configurable thickness
 - **Door**: Doors with visual indicator (dashed line with swing direction)
-- **Window**: Windows with section count visualization
+- **Window**: Windows with section count visualization (perpendicular lines show sections)
 - **Cubicle**: Rectangular office cubicles with:
   - Configurable dimensions (X, Y)
   - Rotation support (0°, 90°, 180°, 270°)
@@ -22,6 +22,7 @@ A visual editor for creating and editing floor plans with walls, doors, windows,
 - **SpawnPoint**: Player spawn locations with:
   - Position marker (green circle)
   - Direction indicator (arrow showing yaw)
+  - **Note**: Only one spawn point allowed; creating a new one removes the existing one
 
 ### Editing Features
 
@@ -47,6 +48,24 @@ A visual editor for creating and editing floor plans with walls, doors, windows,
 #### Delete
 - **Delete**: Press Delete or Backspace to remove selected objects
 - Works with multiple selected objects
+
+#### Undo/Redo
+- **Undo**: Press Ctrl+Z to undo last action
+- **Redo**: Press Ctrl+Y to redo previously undone action
+- Maintains history of up to 50 actions
+
+#### Properties Panel
+- **Location**: Right side of the window
+- **Edit Properties**: Select an object to view and edit its properties
+- **Real-time Updates**: Changes apply immediately to the canvas
+- **Supported Properties**:
+  - Position (Start X/Y, End X/Y)
+  - Dimensions (Width/Height for cubicles)
+  - Rotation (Yaw angle in degrees)
+  - Thickness (for walls/doors/windows)
+  - Section Count (for windows)
+  - Spacing and Padding (for ceiling lights)
+  - Height Offset (for spawn points)
 
 ### View Controls
 
@@ -105,6 +124,8 @@ python3 floorplan.py
 - **Copy**: Ctrl+C
 - **Paste**: Ctrl+V
 - **Select All**: Ctrl+A
+- **Undo**: Ctrl+Z
+- **Redo**: Ctrl+Y
 - **Delete**: Delete or Backspace
 - **Cancel**: Escape (cancel pending operations)
 
