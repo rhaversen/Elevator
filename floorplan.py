@@ -23,6 +23,11 @@ class FloorplanEditor:
         
         self.selected_objects = []  # list of selected objects for multi-select
         self.clipboard = []    # clipboard for copy/paste
+        
+        # Undo/Redo history
+        self.undo_stack = []
+        self.redo_stack = []
+        self.max_undo = 50
 
         # default world bbox if no Floor found
         self.world_bbox = (-1600.0, -900.0, 1600.0, 900.0)
@@ -120,7 +125,7 @@ class FloorplanEditor:
           status_frame = tk.Frame(self.root, relief=tk.SUNKEN, bd=1)
           status_frame.pack(side=tk.BOTTOM, fill=tk.X)
           self.status_label = tk.Label(status_frame, 
-                                       text="Pan: Right/Middle drag | Zoom: Wheel | Rotate: R/Shift+R | Multi-select: Ctrl+Click | Copy: Ctrl+C | Paste: Ctrl+V",
+                                       text="Pan: Right/Middle drag | Zoom: Wheel | Undo: Ctrl+Z | Redo: Ctrl+Y | Copy/Paste: Ctrl+C/V",
                                        anchor=tk.W)
           self.status_label.pack(side=tk.LEFT, padx=5)
 
@@ -150,6 +155,8 @@ class FloorplanEditor:
           self.root.bind("<Control-c>", self.on_copy)
           self.root.bind("<Control-v>", self.on_paste)
           self.root.bind("<Control-a>", self.on_select_all)
+          self.root.bind("<Control-z>", self.on_undo)
+          self.root.bind("<Control-y>", self.on_redo)
 
           menubar = tk.Menu(self.root)
           filemenu = tk.Menu(menubar, tearoff=0)
@@ -662,15 +669,22 @@ class FloorplanEditor:
                 if section_count > 1:
                     dx = x1 - x0
                     dy = y1 - y0
-                    for i in range(1, section_count):
-                        ratio = i / section_count
-                        sect_x = x0 + dx * ratio
-                        sect_y = y0 + dy * ratio
-                        # Draw section dividers
-                        sect_line = self.canvas.create_oval(sect_x - 3, sect_y - 3,
-                                                           sect_x + 3, sect_y + 3,
-                                                           fill=color, outline=color)
-                        canvas_ids.append(sect_line)
+                    length = math.hypot(dx, dy)
+                    if length > 1e-6:
+                        # Draw perpendicular lines for window sections
+                        for i in range(1, section_count):
+                            ratio = i / section_count
+                            sect_x = x0 + dx * ratio
+                            sect_y = y0 + dy * ratio
+                            # Perpendicular direction
+                            perp_x = -dy / length * 8
+                            perp_y = dx / length * 8
+                            # Draw section divider as perpendicular line
+                            sect_line = self.canvas.create_line(
+                                sect_x - perp_x, sect_y - perp_y,
+                                sect_x + perp_x, sect_y + perp_y,
+                                fill=color, width=max(1, width))
+                            canvas_ids.append(sect_line)
 
             if t == "Door":
                 dx = x1 - x0
@@ -725,27 +739,22 @@ class FloorplanEditor:
                                                fill="#dddddd")
             canvas_ids.append(cid)
             
-            # Add rotation indicator (small triangle in corner)
+            # Add rotation indicator (small triangle in corner) - using screen coordinates
             yaw_normalized = self.normalize_yaw(yaw)
             indicator_size = min(abs(x1 - x0), abs(y1 - y0)) * 0.15
             # Draw indicator in top-left corner pointing in rotation direction
             if yaw_normalized == 0.0:
                 # Pointing right
-                tri_coords = [x0, y0, x0 + indicator_size, y0, x0, y0 + indicator_size]
+                tri_screen = [x0, y0, x0 + indicator_size, y0, x0, y0 + indicator_size]
             elif yaw_normalized == 90.0:
                 # Pointing down
-                tri_coords = [x0, y0, x0 + indicator_size, y0, x0 + indicator_size, y0 + indicator_size]
+                tri_screen = [x0, y0, x0 + indicator_size, y0, x0 + indicator_size, y0 + indicator_size]
             elif yaw_normalized == 180.0:
                 # Pointing left
-                tri_coords = [x0 + indicator_size, y0, x0 + indicator_size, y0 + indicator_size, x0, y0 + indicator_size]
+                tri_screen = [x0 + indicator_size, y0, x0 + indicator_size, y0 + indicator_size, x0, y0 + indicator_size]
             else:  # 270.0
                 # Pointing up
-                tri_coords = [x0, y0 + indicator_size, x0 + indicator_size, y0 + indicator_size, x0, y0]
-            
-            tri_screen = []
-            for i in range(0, len(tri_coords), 2):
-                sx_tri, sy_tri = self.world_to_screen(tri_coords[i], tri_coords[i+1])
-                tri_screen.extend([sx_tri, sy_tri])
+                tri_screen = [x0, y0 + indicator_size, x0 + indicator_size, y0 + indicator_size, x0, y0]
             
             tri_id = self.canvas.create_polygon(tri_screen, fill="#888888", outline="black")
             canvas_ids.append(tri_id)
@@ -944,6 +953,8 @@ class FloorplanEditor:
         if not self.selected_objects:
             return
         
+        self.save_state()  # Save state for undo
+        
         # Rotate all selected objects
         any_rotated = False
         for obj in self.selected_objects:
@@ -1003,6 +1014,7 @@ class FloorplanEditor:
             ctrl_pressed = (event.state & 0x4) != 0  # Check if Ctrl is pressed
             self.set_selected(obj, multi=ctrl_pressed)
             if obj is not None:
+                self.save_state()  # Save state before dragging for undo
                 self.dragging = True
                 self.drag_start_sx = event.x
                 self.drag_start_sy = event.y
@@ -1072,6 +1084,9 @@ class FloorplanEditor:
         if not self.selected_objects:
             return
         
+        # Save state for undo
+        self.save_state()
+        
         # Delete all selected objects
         for obj in self.selected_objects:
             for cid in obj["canvas_ids"]:
@@ -1090,6 +1105,7 @@ class FloorplanEditor:
         self.selected_objects.clear()
 
     def add_cubicle_at(self, wx, wy):
+        self.save_state()  # Save state for undo
         wx, wy = self.snap_point(wx, wy)
         item = {
             "Type": "Cubicle",
@@ -1103,6 +1119,13 @@ class FloorplanEditor:
             self.set_selected(obj)
     
     def add_spawn_at(self, wx, wy):
+        self.save_state()  # Save state for undo
+        
+        # Remove any existing spawn points (only one allowed)
+        existing_spawns = [item for item in self.data if item.get("Type") == "SpawnPoint"]
+        for spawn in existing_spawns:
+            self.data.remove(spawn)
+        
         wx, wy = self.snap_point(wx, wy)
         item = {
             "Type": "SpawnPoint",
@@ -1111,9 +1134,15 @@ class FloorplanEditor:
             "Yaw": 0.0
         }
         self.data.append(item)
-        obj = self.draw_item(item)
-        if obj is not None:
-            self.set_selected(obj)
+        
+        # Rebuild canvas to remove old spawn visualization
+        self.rebuild_canvas(preserve_selection=False)
+        
+        # Find and select the new spawn
+        for obj in self.objects:
+            if obj["data"] is item:
+                self.set_selected(obj)
+                break
 
     def line_mode_color(self, mode):
         return {
@@ -1201,6 +1230,8 @@ class FloorplanEditor:
         if start_world == end_world:
             return
 
+        self.save_state()  # Save state for undo
+        
         start_x, start_y = self.snap_point(*start_world)
         end_x, end_y = self.snap_point(*end_world)
 
@@ -1276,13 +1307,15 @@ class FloorplanEditor:
             self.clipboard.append(item_copy)
         self.status_label.config(text=f"Copied {len(self.clipboard)} object(s)")
         self.root.after(2000, lambda: self.status_label.config(
-            text="Pan: Right/Middle drag | Zoom: Wheel | Rotate: R/Shift+R | Multi-select: Ctrl+Click | Copy: Ctrl+C | Paste: Ctrl+V"))
+            text="Pan: Right/Middle drag | Zoom: Wheel | Undo: Ctrl+Z | Redo: Ctrl+Y | Copy/Paste: Ctrl+C/V"))
         return "break"
     
     def on_paste(self, event=None):
         """Paste objects from clipboard with offset"""
         if not self.clipboard:
             return "break"
+        
+        self.save_state()  # Save state for undo
         
         # Calculate offset for paste (slightly to the right and down)
         offset_x = self.get_grid_size() if self.snap_to_grid.get() else 50.0
@@ -1320,7 +1353,7 @@ class FloorplanEditor:
         
         self.status_label.config(text=f"Pasted {len(new_objects)} object(s)")
         self.root.after(2000, lambda: self.status_label.config(
-            text="Pan: Right/Middle drag | Zoom: Wheel | Rotate: R/Shift+R | Multi-select: Ctrl+Click | Copy: Ctrl+C | Paste: Ctrl+V"))
+            text="Pan: Right/Middle drag | Zoom: Wheel | Undo: Ctrl+Z | Redo: Ctrl+Y | Copy/Paste: Ctrl+C/V"))
         return "break"
     
     def on_select_all(self, event=None):
@@ -1338,6 +1371,54 @@ class FloorplanEditor:
         if len(self.selected_objects) == 1:
             self.selected_obj = self.selected_objects[0]
         
+        return "break"
+    
+    # ---------- Undo/Redo ----------
+    
+    def save_state(self):
+        """Save current state to undo stack"""
+        # Deep copy current data
+        state = json.loads(json.dumps(self.data))
+        self.undo_stack.append(state)
+        if len(self.undo_stack) > self.max_undo:
+            self.undo_stack.pop(0)
+        # Clear redo stack on new action
+        self.redo_stack.clear()
+    
+    def on_undo(self, event=None):
+        """Undo last action"""
+        if not self.undo_stack:
+            return "break"
+        
+        # Save current state to redo stack
+        current_state = json.loads(json.dumps(self.data))
+        self.redo_stack.append(current_state)
+        
+        # Restore previous state
+        self.data = self.undo_stack.pop()
+        self.rebuild_canvas(preserve_selection=False)
+        
+        self.status_label.config(text="Undo")
+        self.root.after(2000, lambda: self.status_label.config(
+            text="Pan: Right/Middle drag | Zoom: Wheel | Undo: Ctrl+Z | Redo: Ctrl+Y | Copy/Paste: Ctrl+C/V"))
+        return "break"
+    
+    def on_redo(self, event=None):
+        """Redo last undone action"""
+        if not self.redo_stack:
+            return "break"
+        
+        # Save current state to undo stack
+        current_state = json.loads(json.dumps(self.data))
+        self.undo_stack.append(current_state)
+        
+        # Restore next state
+        self.data = self.redo_stack.pop()
+        self.rebuild_canvas(preserve_selection=False)
+        
+        self.status_label.config(text="Redo")
+        self.root.after(2000, lambda: self.status_label.config(
+            text="Pan: Right/Middle drag | Zoom: Wheel | Undo: Ctrl+Z | Redo: Ctrl+Y | Copy/Paste: Ctrl+C/V"))
         return "break"
 
 
