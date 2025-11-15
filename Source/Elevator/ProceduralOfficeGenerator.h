@@ -341,6 +341,9 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Elevator")
     float ElevatorTopWallPadding = 0.0f;
 
+    UPROPERTY(EditAnywhere, Category = "Elevator|Shaft")
+    bool bGenerateElevatorShaftCaps = true;
+
     UPROPERTY(EditAnywhere, Category = "Elevator|Doors")
     TObjectPtr<UStaticMesh> ElevatorDoorMeshLeft;
 

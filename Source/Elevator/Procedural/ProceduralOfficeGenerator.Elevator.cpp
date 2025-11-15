@@ -199,6 +199,8 @@ void AProceduralOfficeGenerator::PlaceElevator(const FOfficeElementDefinition &E
                 };
 
                 const float ShaftBaseZ = FloorHeight + Element.HeightOffset + ElevatorShaftVerticalOffset;
+                float ShaftTopZ = ShaftBaseZ + ShaftHeight;
+                float ShaftBottomZ = ShaftBaseZ;
                 AddShaftSegment(ShaftFrontLeft, ShaftBackLeft, ShaftHeight, ShaftBaseZ);
                 AddShaftSegment(ShaftFrontRight, ShaftBackRight, ShaftHeight, ShaftBaseZ);
                 AddShaftSegment(ShaftBackLeft, ShaftBackRight, ShaftHeight, ShaftBaseZ);
@@ -210,6 +212,7 @@ void AProceduralOfficeGenerator::PlaceElevator(const FOfficeElementDefinition &E
                     AddShaftSegment(ShaftFrontRight, ShaftBackRight, TopExtensionHeight, TopBaseZ);
                     AddShaftSegment(ShaftBackLeft, ShaftBackRight, TopExtensionHeight, TopBaseZ);
                     AddShaftSegment(ShaftFrontLeft, ShaftFrontRight, TopExtensionHeight, TopBaseZ);
+                    ShaftTopZ += TopExtensionHeight;
                 }
 
                 const float BottomExtensionHeight = ElevatorShaftBottomHeight;
@@ -220,6 +223,29 @@ void AProceduralOfficeGenerator::PlaceElevator(const FOfficeElementDefinition &E
                     AddShaftSegment(ShaftFrontRight, ShaftBackRight, BottomExtensionHeight, BottomBaseZ);
                     AddShaftSegment(ShaftBackLeft, ShaftBackRight, BottomExtensionHeight, BottomBaseZ);
                     AddShaftSegment(ShaftFrontLeft, ShaftFrontRight, BottomExtensionHeight, BottomBaseZ);
+                    ShaftBottomZ -= BottomExtensionHeight;
+                }
+
+                if (bGenerateElevatorShaftCaps && DesiredThickness > KINDA_SMALL_NUMBER)
+                {
+                    const float ShaftWidth = (ShaftFrontRight - ShaftFrontLeft).Size();
+                    const float ShaftDepthLength = (ShaftBackLeft - ShaftFrontLeft).Size();
+                    const float CapThickness = DesiredThickness;
+                    const float HalfThickness = CapThickness * 0.5f;
+                    const float ScaleX = ShaftWidth / FMath::Max(ShaftMeshSize.X, KINDA_SMALL_NUMBER);
+                    const float ScaleY = ShaftDepthLength / FMath::Max(ShaftMeshSize.Y, KINDA_SMALL_NUMBER);
+                    const float ScaleZ = CapThickness / FMath::Max(ShaftMeshSize.Z, KINDA_SMALL_NUMBER);
+                    const FVector2D ShaftCenter2D = (ShaftFrontLeft + ShaftBackRight) * 0.5f;
+                    const FRotator CapRotation(0.0f, YawDegrees, 0.0f);
+
+                    if (ShaftTopZ > ShaftBottomZ)
+                    {
+                        const FVector TopLocation(ShaftCenter2D.X, ShaftCenter2D.Y, ShaftTopZ - HalfThickness);
+                        ShaftComponent->AddInstance(FTransform(CapRotation, TopLocation, FVector(ScaleX, ScaleY, ScaleZ)));
+
+                        const FVector BottomLocation(ShaftCenter2D.X, ShaftCenter2D.Y, ShaftBottomZ + HalfThickness);
+                        ShaftComponent->AddInstance(FTransform(CapRotation, BottomLocation, FVector(ScaleX, ScaleY, ScaleZ)));
+                    }
                 }
             }
         }
@@ -244,11 +270,11 @@ void AProceduralOfficeGenerator::PlaceElevator(const FOfficeElementDefinition &E
         const FVector ClosedOffset = bUseLeftMesh ? ElevatorDoorLeftClosedOffset : ElevatorDoorRightClosedOffset;
         const FVector OpenOffset = bUseLeftMesh ? ElevatorDoorLeftOpenOffset : ElevatorDoorRightOpenOffset;
         const float ClampedRatio = FMath::Clamp(OpenRatio, 0.0f, 1.0f);
-            const FVector LocalOffset = FMath::Lerp(ClosedOffset, OpenOffset, ClampedRatio);
+        const FVector LocalOffset = FMath::Lerp(ClosedOffset, OpenOffset, ClampedRatio);
 
-            const FVector WorldPerp(PerpDirection2D.X, PerpDirection2D.Y, 0.0f);
-            const FVector BaseLocation = FVector(DoorCenter2D.X, DoorCenter2D.Y, FloorHeight + Element.HeightOffset) + ElevatorInsetOffset + WorldPerp * DepthOffset;
-            const FRotator DoorRotation(0.0f, YawDegrees, 0.0f);
+        const FVector WorldPerp(PerpDirection2D.X, PerpDirection2D.Y, 0.0f);
+        const FVector BaseLocation = FVector(DoorCenter2D.X, DoorCenter2D.Y, FloorHeight + Element.HeightOffset) + ElevatorInsetOffset + WorldPerp * DepthOffset;
+        const FRotator DoorRotation(0.0f, YawDegrees, 0.0f);
         const FVector DoorLocation = BaseLocation + DoorRotation.RotateVector(LocalOffset);
         const FTransform DoorTransform(DoorRotation, DoorLocation, ElevatorDoorScale);
         DoorComponent->AddInstance(DoorTransform);
