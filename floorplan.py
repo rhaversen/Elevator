@@ -53,6 +53,7 @@ class FloorplanEditor:
         self.dragging = False
         self.drag_start_sx = 0
         self.drag_start_sy = 0
+        self.drag_saved_state = False  # Track if state was saved for this drag
 
         self.mode = tk.StringVar(value="select")
         self.mode.trace_add("write", self.on_mode_changed)
@@ -120,6 +121,26 @@ class FloorplanEditor:
           tk.Checkbutton(display_frame, text="Lamps",
                      variable=self.show_lamps,
                      command=lambda: self.rebuild_canvas(preserve_selection=True)).pack(side=tk.LEFT)
+          
+          # Properties panel on the right
+          self.props_frame = tk.Frame(self.root, width=250, relief=tk.SUNKEN, bd=1)
+          self.props_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=2, pady=2)
+          self.props_frame.pack_propagate(False)
+          
+          props_title = tk.Label(self.props_frame, text="Properties", font=("Arial", 10, "bold"))
+          props_title.pack(pady=5)
+          
+          # Scrollable properties area
+          self.props_canvas = tk.Canvas(self.props_frame, highlightthickness=0)
+          props_scrollbar = tk.Scrollbar(self.props_frame, orient="vertical", command=self.props_canvas.yview)
+          self.props_inner = tk.Frame(self.props_canvas)
+          
+          self.props_canvas.configure(yscrollcommand=props_scrollbar.set)
+          props_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+          self.props_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+          
+          self.props_canvas_window = self.props_canvas.create_window((0, 0), window=self.props_inner, anchor="nw")
+          self.props_inner.bind("<Configure>", lambda e: self.props_canvas.configure(scrollregion=self.props_canvas.bbox("all")))
           
           # Status bar with help text
           status_frame = tk.Frame(self.root, relief=tk.SUNKEN, bd=1)
@@ -906,6 +927,157 @@ class FloorplanEditor:
             if obj is not None:
                 self.selected_objects = [obj]
                 self.style_object(obj, selected=True)
+        
+        # Update properties panel
+        self.update_properties_panel()
+    
+    def update_properties_panel(self):
+        """Update properties panel based on selection"""
+        # Clear existing properties
+        for widget in self.props_inner.winfo_children():
+            widget.destroy()
+        
+        if not self.selected_obj:
+            tk.Label(self.props_inner, text="No selection", fg="gray").pack(pady=20)
+            return
+        
+        if len(self.selected_objects) > 1:
+            tk.Label(self.props_inner, text=f"{len(self.selected_objects)} objects selected", 
+                    font=("Arial", 9, "bold")).pack(pady=5)
+            return
+        
+        item = self.selected_obj["data"]
+        item_type = item.get("Type", "Unknown")
+        
+        tk.Label(self.props_inner, text=f"Type: {item_type}", 
+                font=("Arial", 9, "bold")).pack(pady=5, anchor="w", padx=5)
+        
+        # Common properties
+        if "Start" in item:
+            self._add_property_section("Start Position", item["Start"], ["X", "Y"])
+        
+        if "End" in item:
+            self._add_property_section("End Position", item["End"], ["X", "Y"])
+        
+        # Type-specific properties
+        if item_type == "Cubicle":
+            if "Dimensions" in item:
+                self._add_property_section("Dimensions", item["Dimensions"], ["X", "Y"])
+            if "Yaw" in item:
+                self._add_yaw_property(item)
+        
+        elif item_type == "SpawnPoint":
+            if "HeightOffset" in item:
+                self._add_float_property("HeightOffset", item, "HeightOffset")
+            if "Yaw" in item:
+                self._add_yaw_property(item)
+        
+        elif item_type in ("Wall", "Door", "Window"):
+            if "Thickness" in item:
+                self._add_float_property("Thickness", item, "Thickness")
+            if item_type == "Window" and "SectionCount" in item:
+                self._add_int_property("SectionCount", item, "SectionCount")
+        
+        elif item_type == "CeilingLight":
+            if "Spacing" in item:
+                self._add_property_section("Spacing", item["Spacing"], ["X", "Y"])
+            if "Padding" in item:
+                self._add_property_section("Padding", item["Padding"], ["X", "Y"])
+    
+    def _add_property_section(self, title, data_dict, keys):
+        """Add a property section with multiple fields"""
+        frame = tk.LabelFrame(self.props_inner, text=title, padx=5, pady=5)
+        frame.pack(fill=tk.X, padx=5, pady=2)
+        
+        for key in keys:
+            row = tk.Frame(frame)
+            row.pack(fill=tk.X, pady=2)
+            tk.Label(row, text=f"{key}:", width=12, anchor="w").pack(side=tk.LEFT)
+            
+            var = tk.DoubleVar(value=float(data_dict.get(key, 0.0)))
+            entry = tk.Entry(row, textvariable=var, width=10)
+            entry.pack(side=tk.LEFT)
+            
+            def make_callback(d, k, v):
+                def callback(*args):
+                    try:
+                        self.save_state()
+                        d[k] = float(v.get())
+                        self.rebuild_canvas(preserve_selection=True)
+                    except (ValueError, tk.TclError):
+                        pass
+                return callback
+            
+            var.trace_add("write", make_callback(data_dict, key, var))
+    
+    def _add_float_property(self, label, item, key):
+        """Add a single float property"""
+        frame = tk.Frame(self.props_inner)
+        frame.pack(fill=tk.X, padx=5, pady=2)
+        tk.Label(frame, text=f"{label}:", width=12, anchor="w").pack(side=tk.LEFT)
+        
+        var = tk.DoubleVar(value=float(item.get(key, 0.0)))
+        entry = tk.Entry(frame, textvariable=var, width=10)
+        entry.pack(side=tk.LEFT)
+        
+        def callback(*args):
+            try:
+                self.save_state()
+                item[key] = float(var.get())
+                self.rebuild_canvas(preserve_selection=True)
+            except (ValueError, tk.TclError):
+                pass
+        
+        var.trace_add("write", callback)
+    
+    def _add_int_property(self, label, item, key):
+        """Add a single integer property"""
+        frame = tk.Frame(self.props_inner)
+        frame.pack(fill=tk.X, padx=5, pady=2)
+        tk.Label(frame, text=f"{label}:", width=12, anchor="w").pack(side=tk.LEFT)
+        
+        var = tk.IntVar(value=int(item.get(key, 1)))
+        entry = tk.Entry(frame, textvariable=var, width=10)
+        entry.pack(side=tk.LEFT)
+        
+        def callback(*args):
+            try:
+                self.save_state()
+                item[key] = int(var.get())
+                self.rebuild_canvas(preserve_selection=True)
+            except (ValueError, tk.TclError):
+                pass
+        
+        var.trace_add("write", callback)
+    
+    def _add_yaw_property(self, item):
+        """Add yaw property with rotation buttons"""
+        frame = tk.LabelFrame(self.props_inner, text="Rotation (Yaw)", padx=5, pady=5)
+        frame.pack(fill=tk.X, padx=5, pady=2)
+        
+        row = tk.Frame(frame)
+        row.pack(fill=tk.X, pady=2)
+        tk.Label(row, text="Degrees:", width=12, anchor="w").pack(side=tk.LEFT)
+        
+        var = tk.DoubleVar(value=float(item.get("Yaw", 0.0)))
+        entry = tk.Entry(row, textvariable=var, width=10)
+        entry.pack(side=tk.LEFT)
+        
+        def callback(*args):
+            try:
+                self.save_state()
+                item["Yaw"] = float(var.get())
+                self.rebuild_canvas(preserve_selection=True)
+            except (ValueError, tk.TclError):
+                pass
+        
+        var.trace_add("write", callback)
+        
+        # Rotation buttons
+        btn_row = tk.Frame(frame)
+        btn_row.pack(fill=tk.X, pady=2)
+        tk.Button(btn_row, text="⟳ 90°", command=lambda: self.rotate_selection(90)).pack(side=tk.LEFT, padx=2)
+        tk.Button(btn_row, text="⟲ 90°", command=lambda: self.rotate_selection(-90)).pack(side=tk.LEFT, padx=2)
 
     def style_object(self, obj, selected=False):
         item = obj["data"]
@@ -1014,10 +1186,10 @@ class FloorplanEditor:
             ctrl_pressed = (event.state & 0x4) != 0  # Check if Ctrl is pressed
             self.set_selected(obj, multi=ctrl_pressed)
             if obj is not None:
-                self.save_state()  # Save state before dragging for undo
                 self.dragging = True
                 self.drag_start_sx = event.x
                 self.drag_start_sy = event.y
+                self.drag_saved_state = False  # Haven't saved state yet
         elif mode == "add_cubicle":
             self.add_cubicle_at(wx, wy)
         elif mode == "add_spawn":
@@ -1032,6 +1204,12 @@ class FloorplanEditor:
 
         if not self.dragging or not self.selected_objects:
             return
+        
+        # Save state on first drag movement (not just click)
+        if not self.drag_saved_state:
+            self.save_state()
+            self.drag_saved_state = True
+        
         dx_pix = event.x - self.drag_start_sx
         dy_pix = event.y - self.drag_start_sy
 
