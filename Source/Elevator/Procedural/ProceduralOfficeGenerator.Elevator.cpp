@@ -128,6 +128,103 @@ void AProceduralOfficeGenerator::PlaceElevator(const FOfficeElementDefinition &E
         PlaceWall(AdjustedRightEdge, WallEnd2D);
     }
 
+    // Build an interior shaft using dedicated meshes so the cab sits cleanly behind the doorway.
+    const float ElevatorMeshDepth = ElevatorMeshPtr ? ElevatorMeshPtr->GetBounds().BoxExtent.Y * 2.0f : 0.0f;
+    float RequestedShaftDepth = Element.Dimensions.Y;
+    if (RequestedShaftDepth <= KINDA_SMALL_NUMBER)
+    {
+        RequestedShaftDepth = ElevatorMeshDepth;
+    }
+    if (RequestedShaftDepth <= KINDA_SMALL_NUMBER)
+    {
+        RequestedShaftDepth = 200.0f;
+    }
+
+    const float MeshHalfDepth = ElevatorMeshDepth * 0.5f;
+    const float InsetForDepth = FMath::Max(ElevatorWallInset, 0.0f);
+    const float MinimumDepth = InsetForDepth + MeshHalfDepth;
+    float ShaftDepth = FMath::Max(FMath::Max(RequestedShaftDepth, MinimumDepth), KINDA_SMALL_NUMBER);
+    ShaftDepth += FMath::Max(ElevatorShaftBackPadding, 0.0f);
+
+    if (ShaftDepth > KINDA_SMALL_NUMBER)
+    {
+        UStaticMesh *ElevatorShaftMeshPtr = ElevatorShaftMesh.Get();
+        if (!ElevatorShaftMeshPtr)
+        {
+            UE_LOG(LogProceduralOffice, Warning, TEXT("Elevator shaft mesh not assigned."));
+        }
+        else
+        {
+            UInstancedStaticMeshComponent *ShaftComponent = GetOrCreateISMC(ElevatorShaftMeshPtr, FName(TEXT("ElevatorShaft")), ElevatorShaftMaterialOverride.Get());
+            if (ShaftComponent)
+            {
+                const FVector ShaftMeshSize = ElevatorShaftMeshPtr->GetBounds().BoxExtent * 2.0f;
+                float ShaftHeight = ProceduralOffice::Utils::ComputeWallHeight(FloorHeight, CeilingHeight, 0.0f);
+                if (ElevatorShaftHeightOverride > KINDA_SMALL_NUMBER)
+                {
+                    ShaftHeight = ElevatorShaftHeightOverride;
+                }
+                ShaftHeight = FMath::Max(ShaftHeight, 1.0f);
+                const float DesiredThickness = ProceduralOffice::Utils::ClampPositive(ElevatorShaftThickness);
+                const float SidePadding = FMath::Max(ElevatorShaftSidePadding, 0.0f);
+                const float DoorInset = FMath::Max(ElevatorShaftDoorOffset, 0.0f);
+                const FVector2D ShaftDirection2D = -PerpDirection2D;
+                const FVector2D DoorOffsetVector = ShaftDirection2D * DoorInset;
+                const FVector2D SideOffset = UnitDirection2D * SidePadding;
+                const FVector2D ShaftFrontLeft = AdjustedLeftEdge - SideOffset + DoorOffsetVector;
+                const FVector2D ShaftFrontRight = AdjustedRightEdge + SideOffset + DoorOffsetVector;
+                const FVector2D ShaftDepthOffset = ShaftDirection2D * ShaftDepth;
+                const FVector2D ShaftBackLeft = ShaftFrontLeft + ShaftDepthOffset;
+                const FVector2D ShaftBackRight = ShaftFrontRight + ShaftDepthOffset;
+
+                auto AddShaftSegment = [&](const FVector2D &Start2D, const FVector2D &End2D, float SegmentHeight, float SegmentBaseZ)
+                {
+                    float SegmentLength = 0.0f;
+                    const FVector2D SegmentDirection = ProceduralOffice::Utils::CalculateUnitDirection(Start2D, End2D, SegmentLength);
+                    if (SegmentLength <= KINDA_SMALL_NUMBER)
+                    {
+                        return;
+                    }
+
+                    const FVector2D Midpoint2D = (Start2D + End2D) * 0.5f;
+                    const float EffectiveHeight = FMath::Max(SegmentHeight, 1.0f);
+                    const FVector Location3D(Midpoint2D.X, Midpoint2D.Y, SegmentBaseZ + EffectiveHeight * 0.5f);
+                    const float SegmentYaw = ProceduralOffice::Utils::DirectionToYawDegrees(SegmentDirection);
+                    const float ScaleX = SegmentLength / FMath::Max(ShaftMeshSize.X, KINDA_SMALL_NUMBER);
+                    const float ScaleY = DesiredThickness / FMath::Max(ShaftMeshSize.Y, KINDA_SMALL_NUMBER);
+                    const float ScaleZ = EffectiveHeight / FMath::Max(ShaftMeshSize.Z, KINDA_SMALL_NUMBER);
+
+                    const FTransform SegmentTransform(FRotator(0.0f, SegmentYaw, 0.0f), Location3D, FVector(ScaleX, ScaleY, ScaleZ));
+                    ShaftComponent->AddInstance(SegmentTransform);
+                };
+
+                const float ShaftBaseZ = FloorHeight + Element.HeightOffset + ElevatorShaftVerticalOffset;
+                AddShaftSegment(ShaftFrontLeft, ShaftBackLeft, ShaftHeight, ShaftBaseZ);
+                AddShaftSegment(ShaftFrontRight, ShaftBackRight, ShaftHeight, ShaftBaseZ);
+                AddShaftSegment(ShaftBackLeft, ShaftBackRight, ShaftHeight, ShaftBaseZ);
+                const float TopExtensionHeight = ElevatorShaftTopHeight;
+                if (TopExtensionHeight > KINDA_SMALL_NUMBER)
+                {
+                    const float TopBaseZ = ShaftBaseZ + ShaftHeight;
+                    AddShaftSegment(ShaftFrontLeft, ShaftBackLeft, TopExtensionHeight, TopBaseZ);
+                    AddShaftSegment(ShaftFrontRight, ShaftBackRight, TopExtensionHeight, TopBaseZ);
+                    AddShaftSegment(ShaftBackLeft, ShaftBackRight, TopExtensionHeight, TopBaseZ);
+                    AddShaftSegment(ShaftFrontLeft, ShaftFrontRight, TopExtensionHeight, TopBaseZ);
+                }
+
+                const float BottomExtensionHeight = ElevatorShaftBottomHeight;
+                if (BottomExtensionHeight > KINDA_SMALL_NUMBER)
+                {
+                    const float BottomBaseZ = ShaftBaseZ - BottomExtensionHeight;
+                    AddShaftSegment(ShaftFrontLeft, ShaftBackLeft, BottomExtensionHeight, BottomBaseZ);
+                    AddShaftSegment(ShaftFrontRight, ShaftBackRight, BottomExtensionHeight, BottomBaseZ);
+                    AddShaftSegment(ShaftBackLeft, ShaftBackRight, BottomExtensionHeight, BottomBaseZ);
+                    AddShaftSegment(ShaftFrontLeft, ShaftFrontRight, BottomExtensionHeight, BottomBaseZ);
+                }
+            }
+        }
+    }
+
     const float WallHeight = ProceduralOffice::Utils::ComputeWallHeight(FloorHeight, CeilingHeight, 0.0f);
     float RequestedElevatorHeight = Element.Height;
     float ElevatorMeshHeight = 0.0f;

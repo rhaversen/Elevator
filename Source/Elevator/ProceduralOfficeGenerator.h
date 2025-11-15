@@ -308,6 +308,36 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Elevator", meta = (ClampMin = "0.0"))
     float ElevatorRectLightBarnDoorLength = 20.0f;
 
+    UPROPERTY(EditAnywhere, Category = "Elevator")
+    TObjectPtr<UStaticMesh> ElevatorShaftMesh;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator")
+    TObjectPtr<UMaterialInterface> ElevatorShaftMaterialOverride;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator", meta = (ClampMin = "0.1"))
+    float ElevatorShaftThickness = 25.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator", meta = (ClampMin = "0.0"))
+    float ElevatorShaftSidePadding = 30.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator", meta = (ClampMin = "0.0"))
+    float ElevatorShaftDoorOffset = 20.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator", meta = (ClampMin = "0.0"))
+    float ElevatorShaftBackPadding = 30.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator", meta = (ClampMin = "0.0"))
+    float ElevatorShaftHeightOverride = 0.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator")
+    float ElevatorShaftVerticalOffset = 0.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator", meta = (ClampMin = "0.0"))
+    float ElevatorShaftTopHeight = 0.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator", meta = (ClampMin = "0.0"))
+    float ElevatorShaftBottomHeight = 0.0f;
+
     UPROPERTY(Transient)
     TArray<TObjectPtr<UInstancedStaticMeshComponent>> SpawnedInstancedComponents;
 
