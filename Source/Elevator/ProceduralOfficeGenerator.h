@@ -16,7 +16,8 @@ enum class EOfficeElementType : uint8
     Window,
     SpawnPoint,
     Cubicle,
-    CeilingLight
+    CeilingLight,
+    Door
 };
 
 USTRUCT(BlueprintType)
@@ -97,11 +98,12 @@ protected:
     void BuildFromLayout(const FOfficeLayout& Layout);
     void BuildElement(const FOfficeElementDefinition& Element);
     void PlaceSurface(EOfficeElementType Type, const FVector2D& Start, const FVector2D& End);
-    void PlaceWall(const FVector2D& Start, const FVector2D& End, float Thickness);
+    void PlaceWall(const FVector2D& Start, const FVector2D& End);
     void PlaceWindow(const FVector2D& Start, const FVector2D& End, float Thickness, int32 SectionCount);
     void PlaceSpawnPoint(const FVector2D& Location, float HeightOffset, float Yaw);
     void PlaceCubicle(const FVector2D& Center, const FVector2D& Size, float Yaw);
     void PlaceCeilingLights(const FVector2D& Start, const FVector2D& End, const FVector2D& Spacing, const FVector2D& Padding);
+    void PlaceDoor(const FOfficeElementDefinition& Element);
 
     UInstancedStaticMeshComponent* GetOrCreateISMC(UStaticMesh* Mesh, const FName& ComponentName, UMaterialInterface* OverrideMaterial = nullptr);
     void DestroySpawnedComponents();
@@ -144,6 +146,9 @@ protected:
 
     UPROPERTY(EditAnywhere, Category = "Modules")
     TObjectPtr<UMaterialInterface> WallMaterialOverride;
+
+    UPROPERTY(EditAnywhere, Category = "Modules", meta = (ClampMin = "0.1"))
+    float WallThickness = 25.0f;
 
     UPROPERTY(EditAnywhere, Category = "Modules")
     TObjectPtr<UStaticMesh> WindowMesh;
@@ -246,6 +251,18 @@ protected:
 
     UPROPERTY(EditAnywhere, Category = "Lighting", meta = (ClampMin = "0.0"))
     float CeilingRectLightBarnDoorLength = 20.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Door")
+    TSubclassOf<AActor> DoorActorClass;
+
+    UPROPERTY(EditAnywhere, Category = "Door")
+    FTransform DoorActorOffset = FTransform::Identity;
+
+    UPROPERTY(EditAnywhere, Category = "Door")
+    FVector DoorActorScale = FVector(1.0f, 1.0f, 1.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Door", meta = (ClampMin = "0.0"))
+    float DoorWallPadding = 50.0f;
 
     UPROPERTY(Transient)
     TArray<TObjectPtr<UInstancedStaticMeshComponent>> SpawnedInstancedComponents;

@@ -65,6 +65,7 @@ void AProceduralOfficeGenerator::PostEditChangeProperty(FPropertyChangedEvent& P
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, FloorMaterialOverride) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingMaterialOverride) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WallMaterialOverride) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WallThickness) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WindowMesh) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WindowMaterialOverride) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WindowFrameMesh) ||
@@ -99,7 +100,11 @@ void AProceduralOfficeGenerator::PostEditChangeProperty(FPropertyChangedEvent& P
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingRectLightSourceWidth) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingRectLightSourceHeight) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingRectLightBarnDoorAngle) ||
-            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingRectLightBarnDoorLength))
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingRectLightBarnDoorLength) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, DoorActorClass) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, DoorActorOffset) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, DoorActorScale) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, DoorWallPadding))
         {
             GenerateFromData();
         }
@@ -181,7 +186,7 @@ void AProceduralOfficeGenerator::BuildElement(const FOfficeElementDefinition& El
             PlaceSurface(EOfficeElementType::Ceiling, Element.Start, Element.End);
             break;
         case EOfficeElementType::Wall:
-            PlaceWall(Element.Start, Element.End, Element.Thickness);
+            PlaceWall(Element.Start, Element.End);
             break;
         case EOfficeElementType::Window:
             PlaceWindow(Element.Start, Element.End, Element.Thickness, Element.SectionCount);
@@ -194,6 +199,9 @@ void AProceduralOfficeGenerator::BuildElement(const FOfficeElementDefinition& El
             break;
         case EOfficeElementType::CeilingLight:
             PlaceCeilingLights(Element.Start, Element.End, Element.Spacing, Element.Padding);
+            break;
+        case EOfficeElementType::Door:
+            PlaceDoor(Element);
             break;
         default:
             UE_LOG(LogProceduralOffice, Warning, TEXT("Unsupported element type encountered."));
@@ -245,7 +253,7 @@ void AProceduralOfficeGenerator::PlaceSurface(EOfficeElementType Type, const FVe
     Component->AddInstance(InstanceTransform);
 }
 
-void AProceduralOfficeGenerator::PlaceWall(const FVector2D& Start, const FVector2D& End, float Thickness)
+void AProceduralOfficeGenerator::PlaceWall(const FVector2D& Start, const FVector2D& End)
 {
     if (!WallMesh)
     {
@@ -270,7 +278,7 @@ void AProceduralOfficeGenerator::PlaceWall(const FVector2D& Start, const FVector
     const FVector MeshSize = WallMesh->GetBounds().BoxExtent * 2.0f;
     const float ScaleX = Length / FMath::Max(MeshSize.X, KINDA_SMALL_NUMBER);
     const float ScaleZ = WallHeight / FMath::Max(MeshSize.Z, KINDA_SMALL_NUMBER);
-    const float DesiredThickness = Thickness > 0.0f ? Thickness : MeshSize.Y;
+    const float DesiredThickness = FMath::Max(WallThickness, KINDA_SMALL_NUMBER);
     const float ScaleY = DesiredThickness / FMath::Max(MeshSize.Y, KINDA_SMALL_NUMBER);
 
     const FVector2D Midpoint2D = (Start + End) * 0.5f;
@@ -616,6 +624,122 @@ void AProceduralOfficeGenerator::PlaceCeilingLights(const FVector2D& Start, cons
                 NewLight->SetWorldRotation(FRotator(-90.0f, 90.0f, 0.0f));
                 SpawnedCeilingLights.Add(NewLight);
             }
+        }
+    }
+}
+
+void AProceduralOfficeGenerator::PlaceDoor(const FOfficeElementDefinition& Element)
+{
+    const FVector2D Direction2D = Element.End - Element.Start;
+    const float TotalSpan = Direction2D.Size();
+    if (TotalSpan <= KINDA_SMALL_NUMBER)
+    {
+        UE_LOG(LogProceduralOffice, Warning, TEXT("Door element requires unique start and end points."));
+        return;
+    }
+
+    const FVector2D UnitDirection2D = Direction2D / TotalSpan;
+    const FVector2D PerpDirection2D(-UnitDirection2D.Y, UnitDirection2D.X);
+    const FVector2D Center2D = (Element.Start + Element.End) * 0.5f;
+    const float BaseYaw = FMath::Atan2(Direction2D.Y, Direction2D.X) * (180.0f / PI);
+
+    const FRotator BaseRotation(0.0f, BaseYaw + 90.0f, 0.0f);
+    const FVector Forward = BaseRotation.RotateVector(FVector::ForwardVector);
+    const FVector Right = BaseRotation.RotateVector(FVector::RightVector);
+    const FVector BaseLocation(Center2D.X, Center2D.Y, FloorHeight + Element.HeightOffset);
+
+    auto MakeWorldLocation = [&](const FVector& LocalOffset) -> FVector
+    {
+        return BaseLocation + Forward * LocalOffset.X + Right * LocalOffset.Y + FVector::UpVector * LocalOffset.Z;
+    };
+
+    if (DoorActorClass)
+    {
+        const FVector LocalDoorLocation = DoorActorOffset.GetTranslation();
+        const FVector DoorLocation = MakeWorldLocation(LocalDoorLocation);
+        const FRotator DoorRotation = (BaseRotation + DoorActorOffset.GetRotation().Rotator()).GetNormalized();
+        const FVector DoorScale = DoorActorOffset.GetScale3D() * DoorActorScale;
+
+        const FName ComponentName = MakeUniqueObjectName(this, UChildActorComponent::StaticClass(), FName(TEXT("ProceduralDoor")));
+        if (UChildActorComponent* DoorComponent = NewObject<UChildActorComponent>(this, ComponentName))
+        {
+            DoorComponent->CreationMethod = EComponentCreationMethod::UserConstructionScript;
+            DoorComponent->SetMobility(EComponentMobility::Static);
+            DoorComponent->SetupAttachment(Root);
+            DoorComponent->SetChildActorClass(DoorActorClass);
+            DoorComponent->RegisterComponent();
+            DoorComponent->SetWorldTransform(FTransform(DoorRotation, DoorLocation, DoorScale));
+            DoorComponent->UpdateComponentToWorld();
+
+            if (AActor* DoorActor = DoorComponent->GetChildActor())
+            {
+                DoorActor->SetActorTransform(DoorComponent->GetComponentTransform());
+            }
+
+            SpawnedChildActors.Add(DoorComponent);
+        }
+    }
+
+    if (!WallMesh)
+    {
+        return;
+    }
+
+    const float RequestedDoorWidth = Element.Dimensions.X;
+    float EffectiveDoorWidth = RequestedDoorWidth > KINDA_SMALL_NUMBER ? RequestedDoorWidth : TotalSpan * 0.5f;
+    EffectiveDoorWidth = FMath::Clamp(EffectiveDoorWidth, KINDA_SMALL_NUMBER, TotalSpan);
+
+    const FVector2D HalfDoorOffset2D = UnitDirection2D * (EffectiveDoorWidth * 0.5f);
+    const FVector2D LeftEdge2D = Center2D - HalfDoorOffset2D;
+    const FVector2D RightEdge2D = Center2D + HalfDoorOffset2D;
+
+    const float RequestedPadding = FMath::Max(DoorWallPadding, 0.0f);
+    const float MaxAllowedPadding = EffectiveDoorWidth * 0.49f;
+    const float AppliedPadding = FMath::Clamp(RequestedPadding, 0.0f, MaxAllowedPadding);
+    const FVector2D PaddingOffset2D = UnitDirection2D * AppliedPadding;
+
+    const FVector2D AdjustedLeftEdge2D = LeftEdge2D + PaddingOffset2D;
+    const FVector2D AdjustedRightEdge2D = RightEdge2D - PaddingOffset2D;
+    const float AdjustedDoorWidth = FMath::Max((AdjustedRightEdge2D - AdjustedLeftEdge2D).Size(), KINDA_SMALL_NUMBER);
+
+    const float DoorWidthScale = FMath::Max(DoorActorScale.Y, KINDA_SMALL_NUMBER);
+    const float FinalDoorOpeningWidth = FMath::Clamp(AdjustedDoorWidth * DoorWidthScale, KINDA_SMALL_NUMBER, TotalSpan);
+    const FVector2D HalfFinalOffset2D = UnitDirection2D * (FinalDoorOpeningWidth * 0.5f);
+    const FVector2D ClearLeftEdge2D = Center2D - HalfFinalOffset2D;
+    const FVector2D ClearRightEdge2D = Center2D + HalfFinalOffset2D;
+
+    if ((ClearLeftEdge2D - Element.Start).Size() > KINDA_SMALL_NUMBER)
+    {
+        PlaceWall(Element.Start, ClearLeftEdge2D);
+    }
+
+    if ((Element.End - ClearRightEdge2D).Size() > KINDA_SMALL_NUMBER)
+    {
+        PlaceWall(ClearRightEdge2D, Element.End);
+    }
+
+    const float WallHeight = FMath::Max(CeilingHeight - FloorHeight, 0.0f);
+    const float RequestedDoorHeight = Element.Height;
+    const float BaseDoorHeight = RequestedDoorHeight > KINDA_SMALL_NUMBER ? FMath::Min(RequestedDoorHeight, WallHeight) : FMath::Min(WallHeight * 0.75f, WallHeight);
+    const float DoorHeightScale = FMath::Max(DoorActorScale.Z, KINDA_SMALL_NUMBER);
+    const float FinalDoorHeight = FMath::Min(BaseDoorHeight * DoorHeightScale, WallHeight);
+    const float FillHeight = WallHeight - FinalDoorHeight;
+
+    if (FillHeight > KINDA_SMALL_NUMBER)
+    {
+        UInstancedStaticMeshComponent* FillComponent = GetOrCreateISMC(WallMesh.Get(), FName(TEXT("DoorTopFill")), WallMaterialOverride.Get());
+        if (FillComponent)
+        {
+            const FVector MeshSize = WallMesh->GetBounds().BoxExtent * 2.0f;
+            const float DesiredThickness = FMath::Max(WallThickness, KINDA_SMALL_NUMBER);
+            const float ScaleX = FinalDoorOpeningWidth / FMath::Max(MeshSize.X, KINDA_SMALL_NUMBER);
+            const float ScaleY = DesiredThickness / FMath::Max(MeshSize.Y, KINDA_SMALL_NUMBER);
+            const float ScaleZ = FillHeight / FMath::Max(MeshSize.Z, KINDA_SMALL_NUMBER);
+
+            const FVector FillLocation = MakeWorldLocation(FVector(0.0f, 0.0f, FinalDoorHeight + FillHeight * 0.5f));
+            const FRotator WallFillRotation(0.0f, BaseYaw, 0.0f);
+            const FTransform FillTransform(WallFillRotation, FillLocation, FVector(ScaleX, ScaleY, ScaleZ));
+            FillComponent->AddInstance(FillTransform);
         }
     }
 }
