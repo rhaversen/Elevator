@@ -44,3 +44,9 @@
 # Miscellaneous Generated Files #
 #################################
 # ADD AS NEED BE
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
