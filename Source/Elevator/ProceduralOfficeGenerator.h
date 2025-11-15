@@ -17,7 +17,8 @@ enum class EOfficeElementType : uint8
     SpawnPoint,
     Cubicle,
     CeilingLight,
-    Door
+    Door,
+    Elevator
 };
 
 USTRUCT(BlueprintType)
@@ -104,6 +105,7 @@ protected:
     void PlaceCubicle(const FVector2D& Center, const FVector2D& Size, float Yaw);
     void PlaceCeilingLights(const FVector2D& Start, const FVector2D& End, const FVector2D& Spacing, const FVector2D& Padding);
     void PlaceDoor(const FOfficeElementDefinition& Element);
+    void PlaceElevator(const FOfficeElementDefinition& Element);
 
     UInstancedStaticMeshComponent* GetOrCreateISMC(UStaticMesh* Mesh, const FName& ComponentName, UMaterialInterface* OverrideMaterial = nullptr);
     void DestroySpawnedComponents();
@@ -264,6 +266,48 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Door", meta = (ClampMin = "0.0"))
     float DoorWallPadding = 50.0f;
 
+    UPROPERTY(EditAnywhere, Category = "Elevator")
+    TObjectPtr<UStaticMesh> ElevatorMesh;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator")
+    TObjectPtr<UMaterialInterface> ElevatorMaterialOverride;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator", meta = (ClampMin = "0.0"))
+    float ElevatorWallPadding = 50.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator")
+    float ElevatorWallInset = 0.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator")
+    bool bSpawnElevatorLightComponents = true;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator", meta = (ClampMin = "0.0"))
+    float ElevatorLightIntensity = 3000.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator", meta = (ClampMin = "0.0"))
+    float ElevatorLightAttenuationRadius = 500.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator")
+    FLinearColor ElevatorLightColor = FLinearColor::White;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator")
+    bool bElevatorLightsCastShadows = true;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator", meta = (ClampMin = "0.0"))
+    float ElevatorLightVerticalOffset = 20.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator", meta = (ClampMin = "0.0"))
+    float ElevatorRectLightSourceWidth = 130.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator", meta = (ClampMin = "0.0"))
+    float ElevatorRectLightSourceHeight = 130.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator", meta = (ClampMin = "0.0", ClampMax = "90.0"))
+    float ElevatorRectLightBarnDoorAngle = 45.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator", meta = (ClampMin = "0.0"))
+    float ElevatorRectLightBarnDoorLength = 20.0f;
+
     UPROPERTY(Transient)
     TArray<TObjectPtr<UInstancedStaticMeshComponent>> SpawnedInstancedComponents;
 
@@ -275,6 +319,9 @@ protected:
 
     UPROPERTY(Transient)
     TArray<TObjectPtr<URectLightComponent>> SpawnedCeilingLights;
+
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<URectLightComponent>> SpawnedElevatorLights;
 
 private:
     TMap<FName, UInstancedStaticMeshComponent*> InstancedCache;
