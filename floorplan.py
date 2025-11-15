@@ -61,79 +61,91 @@ class FloorplanEditor:
         self._build_ui()
 
     def _build_ui(self):
-          # Main toolbar
-          toolbar = tk.Frame(self.root)
-          toolbar.pack(side=tk.TOP, fill=tk.X)
+          # Modern color scheme
+          bg_color = "#f5f5f5"
+          toolbar_bg = "#ffffff"
+          accent_color = "#0078d7"
+          
+          self.root.configure(bg=bg_color)
+          
+          # Main toolbar with modern styling
+          toolbar = tk.Frame(self.root, bg=toolbar_bg, relief=tk.FLAT, bd=1)
+          toolbar.pack(side=tk.TOP, fill=tk.X, padx=2, pady=2)
 
           # Mode selection frame
-          mode_frame = tk.LabelFrame(toolbar, text="Mode", padx=5, pady=2)
-          mode_frame.pack(side=tk.LEFT, padx=5, pady=2)
+          mode_frame = tk.LabelFrame(toolbar, text="Mode", padx=8, pady=4, bg=toolbar_bg, 
+                                     relief=tk.GROOVE, bd=1)
+          mode_frame.pack(side=tk.LEFT, padx=5, pady=4)
           
-          tk.Radiobutton(mode_frame, text="Select", variable=self.mode,
-                     value="select").pack(side=tk.LEFT)
-          tk.Radiobutton(mode_frame, text="Cubicle", variable=self.mode,
-                     value="add_cubicle").pack(side=tk.LEFT)
-          tk.Radiobutton(mode_frame, text="Wall", variable=self.mode,
-                     value="add_wall").pack(side=tk.LEFT)
-          tk.Radiobutton(mode_frame, text="Door", variable=self.mode,
-                     value="add_door").pack(side=tk.LEFT)
-          tk.Radiobutton(mode_frame, text="Window", variable=self.mode,
-                     value="add_window").pack(side=tk.LEFT)
-          tk.Radiobutton(mode_frame, text="Spawn", variable=self.mode,
-                     value="add_spawn").pack(side=tk.LEFT)
+          for text, value in [("Select", "select"), ("Cubicle", "add_cubicle"), 
+                             ("Wall", "add_wall"), ("Door", "add_door"), 
+                             ("Window", "add_window"), ("Spawn", "add_spawn")]:
+              tk.Radiobutton(mode_frame, text=text, variable=self.mode,
+                         value=value, bg=toolbar_bg, activebackground=toolbar_bg,
+                         selectcolor=accent_color).pack(side=tk.LEFT, padx=2)
           
           # View controls frame
-          view_frame = tk.LabelFrame(toolbar, text="View", padx=5, pady=2)
-          view_frame.pack(side=tk.LEFT, padx=5, pady=2)
+          view_frame = tk.LabelFrame(toolbar, text="View", padx=8, pady=4, bg=toolbar_bg,
+                                     relief=tk.GROOVE, bd=1)
+          view_frame.pack(side=tk.LEFT, padx=5, pady=4)
           
-          tk.Button(view_frame, text="Reset",
-                command=self.reset_view).pack(side=tk.LEFT)
-          tk.Button(view_frame, text="Zoom+",
-                command=self.zoom_in).pack(side=tk.LEFT)
-          tk.Button(view_frame, text="Zoom−",
-                command=self.zoom_out).pack(side=tk.LEFT)
+          for text, cmd in [("Reset", self.reset_view), ("Zoom +", self.zoom_in), 
+                           ("Zoom −", self.zoom_out)]:
+              tk.Button(view_frame, text=text, command=cmd, bg=toolbar_bg,
+                       activebackground=accent_color, relief=tk.RAISED, bd=1,
+                       padx=8, pady=2).pack(side=tk.LEFT, padx=2)
           
           # Rotation controls frame
-          rotate_frame = tk.LabelFrame(toolbar, text="Rotate", padx=5, pady=2)
-          rotate_frame.pack(side=tk.LEFT, padx=5, pady=2)
+          rotate_frame = tk.LabelFrame(toolbar, text="Rotate", padx=8, pady=4, bg=toolbar_bg,
+                                       relief=tk.GROOVE, bd=1)
+          rotate_frame.pack(side=tk.LEFT, padx=5, pady=4)
           
-          tk.Button(rotate_frame, text="⟳ 90°",
-                command=lambda: self.rotate_selection(90)).pack(side=tk.LEFT)
-          tk.Button(rotate_frame, text="⟲ 90°",
-                command=lambda: self.rotate_selection(-90)).pack(side=tk.LEFT)
+          for text, deg in [("⟳ 90°", 90), ("⟲ 90°", -90)]:
+              tk.Button(rotate_frame, text=text, command=lambda d=deg: self.rotate_selection(d),
+                       bg=toolbar_bg, activebackground=accent_color, relief=tk.RAISED, bd=1,
+                       padx=8, pady=2).pack(side=tk.LEFT, padx=2)
 
           # Grid controls frame
-          grid_frame = tk.LabelFrame(toolbar, text="Grid", padx=5, pady=2)
-          grid_frame.pack(side=tk.LEFT, padx=5, pady=2)
+          grid_frame = tk.LabelFrame(toolbar, text="Grid", padx=8, pady=4, bg=toolbar_bg,
+                                     relief=tk.GROOVE, bd=1)
+          grid_frame.pack(side=tk.LEFT, padx=5, pady=4)
           
-          tk.Checkbutton(grid_frame, text="Snap", variable=self.snap_to_grid).pack(side=tk.LEFT)
-          tk.Label(grid_frame, text="Size:").pack(side=tk.LEFT, padx=(5, 0))
+          tk.Checkbutton(grid_frame, text="Snap", variable=self.snap_to_grid,
+                        bg=toolbar_bg, activebackground=toolbar_bg,
+                        selectcolor=accent_color).pack(side=tk.LEFT, padx=2)
+          tk.Label(grid_frame, text="Size:", bg=toolbar_bg).pack(side=tk.LEFT, padx=(5, 2))
           tk.Spinbox(grid_frame, from_=10, to=2000, increment=10,
-                 width=5, textvariable=self.grid_size,
-                 command=self.on_grid_setting_changed).pack(side=tk.LEFT)
-          tk.Checkbutton(grid_frame, text="Show",
-                     variable=self.show_grid).pack(side=tk.LEFT, padx=(5, 0))
+                 width=6, textvariable=self.grid_size,
+                 command=self.on_grid_setting_changed).pack(side=tk.LEFT, padx=2)
+          tk.Checkbutton(grid_frame, text="Show", variable=self.show_grid,
+                        bg=toolbar_bg, activebackground=toolbar_bg,
+                        selectcolor=accent_color).pack(side=tk.LEFT, padx=(5, 2))
           
           # Display options frame
-          display_frame = tk.LabelFrame(toolbar, text="Display", padx=5, pady=2)
-          display_frame.pack(side=tk.LEFT, padx=5, pady=2)
+          display_frame = tk.LabelFrame(toolbar, text="Display", padx=8, pady=4, bg=toolbar_bg,
+                                        relief=tk.GROOVE, bd=1)
+          display_frame.pack(side=tk.LEFT, padx=5, pady=4)
           
-          tk.Checkbutton(display_frame, text="Lamps",
-                     variable=self.show_lamps,
-                     command=lambda: self.rebuild_canvas(preserve_selection=True)).pack(side=tk.LEFT)
+          tk.Checkbutton(display_frame, text="Lamps", variable=self.show_lamps,
+                     command=lambda: self.rebuild_canvas(preserve_selection=True),
+                     bg=toolbar_bg, activebackground=toolbar_bg,
+                     selectcolor=accent_color).pack(side=tk.LEFT, padx=2)
           
-          # Properties panel on the right
-          self.props_frame = tk.Frame(self.root, width=250, relief=tk.SUNKEN, bd=1)
-          self.props_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=2, pady=2)
+          # Properties panel on the right with modern styling
+          self.props_frame = tk.Frame(self.root, width=280, relief=tk.FLAT, bd=1, bg="#fafafa")
+          self.props_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=0, pady=0)
           self.props_frame.pack_propagate(False)
           
-          props_title = tk.Label(self.props_frame, text="Properties", font=("Arial", 10, "bold"))
-          props_title.pack(pady=5)
+          props_header = tk.Frame(self.props_frame, bg="#0078d7", height=35)
+          props_header.pack(fill=tk.X)
+          props_title = tk.Label(props_header, text="Properties", font=("Segoe UI", 11, "bold"),
+                                bg="#0078d7", fg="white")
+          props_title.pack(pady=8)
           
           # Scrollable properties area
-          self.props_canvas = tk.Canvas(self.props_frame, highlightthickness=0)
+          self.props_canvas = tk.Canvas(self.props_frame, highlightthickness=0, bg="#fafafa")
           props_scrollbar = tk.Scrollbar(self.props_frame, orient="vertical", command=self.props_canvas.yview)
-          self.props_inner = tk.Frame(self.props_canvas)
+          self.props_inner = tk.Frame(self.props_canvas, bg="#fafafa")
           
           self.props_canvas.configure(yscrollcommand=props_scrollbar.set)
           props_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -142,17 +154,17 @@ class FloorplanEditor:
           self.props_canvas_window = self.props_canvas.create_window((0, 0), window=self.props_inner, anchor="nw")
           self.props_inner.bind("<Configure>", lambda e: self.props_canvas.configure(scrollregion=self.props_canvas.bbox("all")))
           
-          # Status bar with help text
-          status_frame = tk.Frame(self.root, relief=tk.SUNKEN, bd=1)
+          # Status bar with modern styling
+          status_frame = tk.Frame(self.root, relief=tk.FLAT, bd=1, bg="#e1e1e1", height=28)
           status_frame.pack(side=tk.BOTTOM, fill=tk.X)
           self.status_label = tk.Label(status_frame, 
                                        text="Pan: Right/Middle drag | Zoom: Wheel | Undo: Ctrl+Z | Redo: Ctrl+Y | Copy/Paste: Ctrl+C/V",
-                                       anchor=tk.W)
-          self.status_label.pack(side=tk.LEFT, padx=5)
+                                       anchor=tk.W, bg="#e1e1e1", fg="#333333", font=("Segoe UI", 9))
+          self.status_label.pack(side=tk.LEFT, padx=8, pady=4)
 
           self.canvas = tk.Canvas(self.root, width=self.canvas_width,
-                          height=self.canvas_height, bg="white")
-          self.canvas.pack(fill=tk.BOTH, expand=True)
+                          height=self.canvas_height, bg="#ffffff", highlightthickness=0)
+          self.canvas.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
 
           self.canvas.bind("<Button-1>", self.on_left_click)
           self.canvas.bind("<B1-Motion>", self.on_drag)
@@ -760,25 +772,29 @@ class FloorplanEditor:
                                                fill="#dddddd")
             canvas_ids.append(cid)
             
-            # Add rotation indicator (small triangle in corner) - using screen coordinates
+            # Add rotation indicator (small triangle showing front/orientation)
             yaw_normalized = self.normalize_yaw(yaw)
-            indicator_size = min(abs(x1 - x0), abs(y1 - y0)) * 0.15
-            # Draw indicator in top-left corner pointing in rotation direction
-            if yaw_normalized == 0.0:
-                # Pointing right
-                tri_screen = [x0, y0, x0 + indicator_size, y0, x0, y0 + indicator_size]
-            elif yaw_normalized == 90.0:
-                # Pointing down
-                tri_screen = [x0, y0, x0 + indicator_size, y0, x0 + indicator_size, y0 + indicator_size]
-            elif yaw_normalized == 180.0:
-                # Pointing left
-                tri_screen = [x0 + indicator_size, y0, x0 + indicator_size, y0 + indicator_size, x0, y0 + indicator_size]
-            else:  # 270.0
-                # Pointing up
-                tri_screen = [x0, y0 + indicator_size, x0 + indicator_size, y0 + indicator_size, x0, y0]
+            indicator_size = min(abs(x1 - x0), abs(y1 - y0)) * 0.12
             
-            tri_id = self.canvas.create_polygon(tri_screen, fill="#888888", outline="black")
-            canvas_ids.append(tri_id)
+            # Calculate center for rotation indicator
+            cx = (x0 + x1) / 2
+            cy = (y0 + y1) / 2
+            
+            # Create arrow pointing in the direction of yaw
+            # Yaw 0 = right, 90 = down, 180 = left, 270 = up (in screen coords)
+            import math
+            angle_rad = math.radians(-yaw_normalized)  # Negative for screen coords
+            arrow_len = indicator_size * 2
+            
+            # Arrow points from center outward
+            end_x = cx + arrow_len * math.cos(angle_rad)
+            end_y = cy + arrow_len * math.sin(angle_rad)
+            
+            # Draw arrow
+            arrow_id = self.canvas.create_line(cx, cy, end_x, end_y,
+                                               fill="#ff6600", width=3,
+                                               arrow=tk.LAST, arrowshape=(10, 12, 5))
+            canvas_ids.append(arrow_id)
 
             corners = [
                 (x0_world, y0_world),
@@ -938,19 +954,22 @@ class FloorplanEditor:
             widget.destroy()
         
         if not self.selected_obj:
-            tk.Label(self.props_inner, text="No selection", fg="gray").pack(pady=20)
+            tk.Label(self.props_inner, text="No selection", fg="#999999", bg="#fafafa",
+                    font=("Segoe UI", 10)).pack(pady=30)
             return
         
         if len(self.selected_objects) > 1:
             tk.Label(self.props_inner, text=f"{len(self.selected_objects)} objects selected", 
-                    font=("Arial", 9, "bold")).pack(pady=5)
+                    font=("Segoe UI", 10, "bold"), bg="#fafafa").pack(pady=10, padx=10)
             return
         
         item = self.selected_obj["data"]
         item_type = item.get("Type", "Unknown")
         
-        tk.Label(self.props_inner, text=f"Type: {item_type}", 
-                font=("Arial", 9, "bold")).pack(pady=5, anchor="w", padx=5)
+        type_frame = tk.Frame(self.props_inner, bg="#e3f2fd", relief=tk.FLAT, bd=1)
+        type_frame.pack(fill=tk.X, padx=8, pady=8)
+        tk.Label(type_frame, text=f"Type: {item_type}", 
+                font=("Segoe UI", 10, "bold"), bg="#e3f2fd", fg="#0078d7").pack(pady=6, padx=8)
         
         # Common properties
         if "Start" in item:
@@ -986,98 +1005,171 @@ class FloorplanEditor:
     
     def _add_property_section(self, title, data_dict, keys):
         """Add a property section with multiple fields"""
-        frame = tk.LabelFrame(self.props_inner, text=title, padx=5, pady=5)
-        frame.pack(fill=tk.X, padx=5, pady=2)
+        frame = tk.LabelFrame(self.props_inner, text=title, padx=8, pady=6, bg="#fafafa",
+                             font=("Segoe UI", 9, "bold"), relief=tk.GROOVE, bd=1)
+        frame.pack(fill=tk.X, padx=8, pady=4)
         
         for key in keys:
-            row = tk.Frame(frame)
-            row.pack(fill=tk.X, pady=2)
-            tk.Label(row, text=f"{key}:", width=12, anchor="w").pack(side=tk.LEFT)
+            row = tk.Frame(frame, bg="#fafafa")
+            row.pack(fill=tk.X, pady=3)
+            tk.Label(row, text=f"{key}:", width=10, anchor="w", bg="#fafafa",
+                    font=("Segoe UI", 9)).pack(side=tk.LEFT)
             
+            # Use Spinbox instead of Entry for better UX
             var = tk.DoubleVar(value=float(data_dict.get(key, 0.0)))
-            entry = tk.Entry(row, textvariable=var, width=10)
-            entry.pack(side=tk.LEFT)
+            spinbox = tk.Spinbox(row, textvariable=var, width=10, from_=-10000, to=10000, increment=10)
+            spinbox.pack(side=tk.LEFT)
             
-            def make_callback(d, k, v):
+            # Debounce to avoid excessive saves
+            timer_id = [None]
+            
+            def make_callback(d, k, v, tid):
                 def callback(*args):
-                    try:
-                        self.save_state()
-                        d[k] = float(v.get())
-                        self.rebuild_canvas(preserve_selection=True)
-                    except (ValueError, tk.TclError):
-                        pass
+                    # Cancel previous timer
+                    if tid[0] is not None:
+                        self.root.after_cancel(tid[0])
+                    
+                    # Set new timer for 300ms delay
+                    def apply_change():
+                        try:
+                            old_val = d.get(k, 0.0)
+                            new_val = float(v.get())
+                            if abs(old_val - new_val) > 0.001:  # Only if actually changed
+                                self.save_state()
+                                d[k] = new_val
+                                self.rebuild_canvas(preserve_selection=True)
+                        except (ValueError, tk.TclError):
+                            pass
+                        tid[0] = None
+                    
+                    tid[0] = self.root.after(300, apply_change)
                 return callback
             
-            var.trace_add("write", make_callback(data_dict, key, var))
+            var.trace_add("write", make_callback(data_dict, key, var, timer_id))
     
     def _add_float_property(self, label, item, key):
         """Add a single float property"""
-        frame = tk.Frame(self.props_inner)
-        frame.pack(fill=tk.X, padx=5, pady=2)
-        tk.Label(frame, text=f"{label}:", width=12, anchor="w").pack(side=tk.LEFT)
+        frame = tk.Frame(self.props_inner, bg="#fafafa")
+        frame.pack(fill=tk.X, padx=8, pady=3)
+        tk.Label(frame, text=f"{label}:", width=10, anchor="w", bg="#fafafa",
+                font=("Segoe UI", 9)).pack(side=tk.LEFT)
         
         var = tk.DoubleVar(value=float(item.get(key, 0.0)))
-        entry = tk.Entry(frame, textvariable=var, width=10)
-        entry.pack(side=tk.LEFT)
+        spinbox = tk.Spinbox(frame, textvariable=var, width=10, from_=-10000, to=10000, increment=10)
+        spinbox.pack(side=tk.LEFT)
+        
+        # Debounce to avoid excessive saves
+        timer_id = [None]
         
         def callback(*args):
-            try:
-                self.save_state()
-                item[key] = float(var.get())
-                self.rebuild_canvas(preserve_selection=True)
-            except (ValueError, tk.TclError):
-                pass
+            # Cancel previous timer
+            if timer_id[0] is not None:
+                self.root.after_cancel(timer_id[0])
+            
+            # Set new timer for 300ms delay
+            def apply_change():
+                try:
+                    old_val = item.get(key, 0.0)
+                    new_val = float(var.get())
+                    if abs(old_val - new_val) > 0.001:  # Only if actually changed
+                        self.save_state()
+                        item[key] = new_val
+                        self.rebuild_canvas(preserve_selection=True)
+                except (ValueError, tk.TclError):
+                    pass
+                timer_id[0] = None
+            
+            timer_id[0] = self.root.after(300, apply_change)
         
         var.trace_add("write", callback)
     
     def _add_int_property(self, label, item, key):
         """Add a single integer property"""
-        frame = tk.Frame(self.props_inner)
-        frame.pack(fill=tk.X, padx=5, pady=2)
-        tk.Label(frame, text=f"{label}:", width=12, anchor="w").pack(side=tk.LEFT)
+        frame = tk.Frame(self.props_inner, bg="#fafafa")
+        frame.pack(fill=tk.X, padx=8, pady=3)
+        tk.Label(frame, text=f"{label}:", width=10, anchor="w", bg="#fafafa",
+                font=("Segoe UI", 9)).pack(side=tk.LEFT)
         
         var = tk.IntVar(value=int(item.get(key, 1)))
-        entry = tk.Entry(frame, textvariable=var, width=10)
-        entry.pack(side=tk.LEFT)
+        spinbox = tk.Spinbox(frame, textvariable=var, width=10, from_=1, to=100, increment=1)
+        spinbox.pack(side=tk.LEFT)
+        
+        # Debounce to avoid excessive saves
+        timer_id = [None]
         
         def callback(*args):
-            try:
-                self.save_state()
-                item[key] = int(var.get())
-                self.rebuild_canvas(preserve_selection=True)
-            except (ValueError, tk.TclError):
-                pass
+            # Cancel previous timer
+            if timer_id[0] is not None:
+                self.root.after_cancel(timer_id[0])
+            
+            # Set new timer for 300ms delay
+            def apply_change():
+                try:
+                    old_val = item.get(key, 1)
+                    new_val = int(var.get())
+                    if old_val != new_val:  # Only if actually changed
+                        self.save_state()
+                        item[key] = new_val
+                        self.rebuild_canvas(preserve_selection=True)
+                except (ValueError, tk.TclError):
+                    pass
+                timer_id[0] = None
+            
+            timer_id[0] = self.root.after(300, apply_change)
         
         var.trace_add("write", callback)
     
     def _add_yaw_property(self, item):
         """Add yaw property with rotation buttons"""
-        frame = tk.LabelFrame(self.props_inner, text="Rotation (Yaw)", padx=5, pady=5)
-        frame.pack(fill=tk.X, padx=5, pady=2)
+        frame = tk.LabelFrame(self.props_inner, text="Rotation (Yaw)", padx=8, pady=6, bg="#fafafa",
+                             font=("Segoe UI", 9, "bold"), relief=tk.GROOVE, bd=1)
+        frame.pack(fill=tk.X, padx=8, pady=4)
         
-        row = tk.Frame(frame)
-        row.pack(fill=tk.X, pady=2)
-        tk.Label(row, text="Degrees:", width=12, anchor="w").pack(side=tk.LEFT)
+        row = tk.Frame(frame, bg="#fafafa")
+        row.pack(fill=tk.X, pady=3)
+        tk.Label(row, text="Degrees:", width=10, anchor="w", bg="#fafafa",
+                font=("Segoe UI", 9)).pack(side=tk.LEFT)
         
         var = tk.DoubleVar(value=float(item.get("Yaw", 0.0)))
-        entry = tk.Entry(row, textvariable=var, width=10)
-        entry.pack(side=tk.LEFT)
+        spinbox = tk.Spinbox(row, textvariable=var, width=10, from_=0, to=360, increment=15)
+        spinbox.pack(side=tk.LEFT)
+        
+        # Debounce to avoid excessive saves
+        timer_id = [None]
         
         def callback(*args):
-            try:
-                self.save_state()
-                item["Yaw"] = float(var.get())
-                self.rebuild_canvas(preserve_selection=True)
-            except (ValueError, tk.TclError):
-                pass
+            # Cancel previous timer
+            if timer_id[0] is not None:
+                self.root.after_cancel(timer_id[0])
+            
+            # Set new timer for 300ms delay
+            def apply_change():
+                try:
+                    old_val = item.get("Yaw", 0.0)
+                    new_val = float(var.get())
+                    if abs(old_val - new_val) > 0.001:  # Only if actually changed
+                        self.save_state()
+                        item["Yaw"] = new_val
+                        self.rebuild_canvas(preserve_selection=True)
+                except (ValueError, tk.TclError):
+                    pass
+                timer_id[0] = None
+            
+            timer_id[0] = self.root.after(300, apply_change)
         
         var.trace_add("write", callback)
         
         # Rotation buttons
-        btn_row = tk.Frame(frame)
-        btn_row.pack(fill=tk.X, pady=2)
-        tk.Button(btn_row, text="⟳ 90°", command=lambda: self.rotate_selection(90)).pack(side=tk.LEFT, padx=2)
-        tk.Button(btn_row, text="⟲ 90°", command=lambda: self.rotate_selection(-90)).pack(side=tk.LEFT, padx=2)
+        btn_row = tk.Frame(frame, bg="#fafafa")
+        btn_row.pack(fill=tk.X, pady=4)
+        tk.Button(btn_row, text="⟳ 90°", command=lambda: self.rotate_selection(90),
+                 bg="#0078d7", fg="white", activebackground="#005a9e",
+                 relief=tk.RAISED, bd=1, padx=10, pady=3,
+                 font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=2)
+        tk.Button(btn_row, text="⟲ 90°", command=lambda: self.rotate_selection(-90),
+                 bg="#0078d7", fg="white", activebackground="#005a9e",
+                 relief=tk.RAISED, bd=1, padx=10, pady=3,
+                 font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=2)
 
     def style_object(self, obj, selected=False):
         item = obj["data"]
