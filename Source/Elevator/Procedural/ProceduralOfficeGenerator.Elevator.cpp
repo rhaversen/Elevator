@@ -280,7 +280,8 @@ void AProceduralOfficeGenerator::PlaceElevator(const FOfficeElementDefinition &E
         RequestedElevatorHeight = FMath::Max(RequestedElevatorHeight, ElevatorMeshHeight);
     }
     const float FinalElevatorHeight = FMath::Min(FMath::Max(RequestedElevatorHeight, KINDA_SMALL_NUMBER), WallHeight);
-    const float FillHeight = WallHeight - FinalElevatorHeight;
+    const float TopPadding = ElevatorTopWallPadding;
+    const float FillHeight = WallHeight - FinalElevatorHeight - TopPadding;
 
     if (FillHeight > KINDA_SMALL_NUMBER)
     {
@@ -294,7 +295,8 @@ void AProceduralOfficeGenerator::PlaceElevator(const FOfficeElementDefinition &E
             const float ScaleZ = FillHeight / FMath::Max(MeshSize.Z, KINDA_SMALL_NUMBER);
 
             const FVector2D FillCenter2D = (AdjustedLeftEdge + AdjustedRightEdge) * 0.5f;
-            const FVector FillLocation(FillCenter2D.X, FillCenter2D.Y, FloorHeight + Element.HeightOffset + FinalElevatorHeight + FillHeight * 0.5f);
+            const float FillBaseZ = FloorHeight + Element.HeightOffset + FinalElevatorHeight + TopPadding;
+            const FVector FillLocation(FillCenter2D.X, FillCenter2D.Y, FillBaseZ + FillHeight * 0.5f);
             const FRotator FillRotation(0.0f, YawDegrees, 0.0f);
             const FTransform FillTransform(FillRotation, FillLocation, FVector(ScaleX, ScaleY, ScaleZ));
             FillComponent->AddInstance(FillTransform);

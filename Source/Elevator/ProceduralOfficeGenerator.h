@@ -338,6 +338,9 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Elevator", meta = (ClampMin = "0.0"))
     float ElevatorShaftBottomHeight = 0.0f;
 
+    UPROPERTY(EditAnywhere, Category = "Elevator")
+    float ElevatorTopWallPadding = 0.0f;
+
     UPROPERTY(EditAnywhere, Category = "Elevator|Doors")
     TObjectPtr<UStaticMesh> ElevatorDoorMeshLeft;
 
