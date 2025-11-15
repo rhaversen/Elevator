@@ -225,6 +225,45 @@ void AProceduralOfficeGenerator::PlaceElevator(const FOfficeElementDefinition &E
         }
     }
 
+    const auto SpawnElevatorDoor = [&](bool bUseLeftMesh, const FVector2D& DoorCenter2D, float DepthOffset, float OpenRatio)
+    {
+        UStaticMesh *DoorMesh = bUseLeftMesh ? ElevatorDoorMeshLeft.Get() : ElevatorDoorMeshRight.Get();
+        if (!DoorMesh)
+        {
+            return;
+        }
+
+        UMaterialInterface *DoorMaterialOverride = bUseLeftMesh ? ElevatorDoorMaterialOverrideLeft.Get() : ElevatorDoorMaterialOverrideRight.Get();
+        const FName ComponentName = bUseLeftMesh ? FName(TEXT("ElevatorDoorLeft")) : FName(TEXT("ElevatorDoorRight"));
+        UInstancedStaticMeshComponent *DoorComponent = GetOrCreateISMC(DoorMesh, ComponentName, DoorMaterialOverride);
+        if (!DoorComponent)
+        {
+            return;
+        }
+
+        const FVector ClosedOffset = bUseLeftMesh ? ElevatorDoorLeftClosedOffset : ElevatorDoorRightClosedOffset;
+        const FVector OpenOffset = bUseLeftMesh ? ElevatorDoorLeftOpenOffset : ElevatorDoorRightOpenOffset;
+        const float ClampedRatio = FMath::Clamp(OpenRatio, 0.0f, 1.0f);
+            const FVector LocalOffset = FMath::Lerp(ClosedOffset, OpenOffset, ClampedRatio);
+
+            const FVector WorldPerp(PerpDirection2D.X, PerpDirection2D.Y, 0.0f);
+            const FVector BaseLocation = FVector(DoorCenter2D.X, DoorCenter2D.Y, FloorHeight + Element.HeightOffset) + ElevatorInsetOffset + WorldPerp * DepthOffset;
+            const FRotator DoorRotation(0.0f, YawDegrees, 0.0f);
+        const FVector DoorLocation = BaseLocation + DoorRotation.RotateVector(LocalOffset);
+        const FTransform DoorTransform(DoorRotation, DoorLocation, ElevatorDoorScale);
+        DoorComponent->AddInstance(DoorTransform);
+    };
+
+    const FVector2D OpeningCenter2D = (AdjustedLeftEdge + AdjustedRightEdge) * 0.5f;
+    const FVector2D DoorHalfOffset = UnitDirection2D * (FinalOpeningWidth * 0.25f);
+    const FVector2D LeftDoorCenter2D = OpeningCenter2D - DoorHalfOffset;
+    const FVector2D RightDoorCenter2D = OpeningCenter2D + DoorHalfOffset;
+
+    SpawnElevatorDoor(true, LeftDoorCenter2D, ElevatorDoorOuterOffset, ElevatorDoorOuterOpenRatio);
+    SpawnElevatorDoor(false, RightDoorCenter2D, ElevatorDoorOuterOffset, ElevatorDoorOuterOpenRatio);
+    SpawnElevatorDoor(true, LeftDoorCenter2D, ElevatorDoorInnerOffset, ElevatorDoorInnerOpenRatio);
+    SpawnElevatorDoor(false, RightDoorCenter2D, ElevatorDoorInnerOffset, ElevatorDoorInnerOpenRatio);
+
     const float WallHeight = ProceduralOffice::Utils::ComputeWallHeight(FloorHeight, CeilingHeight, 0.0f);
     float RequestedElevatorHeight = Element.Height;
     float ElevatorMeshHeight = 0.0f;

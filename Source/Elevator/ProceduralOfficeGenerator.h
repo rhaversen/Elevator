@@ -338,6 +338,45 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Elevator", meta = (ClampMin = "0.0"))
     float ElevatorShaftBottomHeight = 0.0f;
 
+    UPROPERTY(EditAnywhere, Category = "Elevator|Doors")
+    TObjectPtr<UStaticMesh> ElevatorDoorMeshLeft;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator|Doors")
+    TObjectPtr<UStaticMesh> ElevatorDoorMeshRight;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator|Doors")
+    TObjectPtr<UMaterialInterface> ElevatorDoorMaterialOverrideLeft;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator|Doors")
+    TObjectPtr<UMaterialInterface> ElevatorDoorMaterialOverrideRight;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator|Doors", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float ElevatorDoorOuterOpenRatio = 0.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator|Doors", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float ElevatorDoorInnerOpenRatio = 0.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator|Doors")
+    float ElevatorDoorOuterOffset = 0.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator|Doors")
+    float ElevatorDoorInnerOffset = 0.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator|Doors")
+    FVector ElevatorDoorLeftClosedOffset = FVector::ZeroVector;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator|Doors")
+    FVector ElevatorDoorLeftOpenOffset = FVector::ZeroVector;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator|Doors")
+    FVector ElevatorDoorRightClosedOffset = FVector::ZeroVector;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator|Doors")
+    FVector ElevatorDoorRightOpenOffset = FVector::ZeroVector;
+
+    UPROPERTY(EditAnywhere, Category = "Elevator|Doors")
+    FVector ElevatorDoorScale = FVector(1.0f);
+
     UPROPERTY(Transient)
     TArray<TObjectPtr<UInstancedStaticMeshComponent>> SpawnedInstancedComponents;
 
