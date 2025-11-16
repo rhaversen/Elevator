@@ -1,4 +1,4 @@
-#include "ProceduralOfficeGenerator.Helpers.h"
+#include "Procedural/ProceduralOfficeGenerator.Helpers.h"
 
 namespace ProceduralOffice
 {

@@ -1,4 +1,4 @@
-#include "../ProceduralOfficeGenerator.h"
+#include "Procedural/ProceduralOfficeGenerator.h"
 
 #include "Components/ChildActorComponent.h"
 #include "GameFramework/PlayerStart.h"

@@ -1,5 +1,5 @@
-#include "../ProceduralOfficeGenerator.h"
-#include "ProceduralOfficeGenerator.Log.h"
+#include "Procedural/ProceduralOfficeGenerator.h"
+#include "Procedural/ProceduralOfficeGenerator.Log.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
 

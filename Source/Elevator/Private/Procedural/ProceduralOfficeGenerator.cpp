@@ -1,4 +1,4 @@
-#include "ProceduralOfficeGenerator.h"
+#include "Procedural/ProceduralOfficeGenerator.h"
 #include "Procedural/ProceduralOfficeGenerator.Helpers.h"
 #include "Procedural/ProceduralOfficeGenerator.Log.h"
 

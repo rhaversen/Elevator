@@ -1,6 +1,6 @@
-#include "../ProceduralOfficeGenerator.h"
-#include "ProceduralOfficeGenerator.Helpers.h"
-#include "ProceduralOfficeGenerator.Log.h"
+#include "Procedural/ProceduralOfficeGenerator.h"
+#include "Procedural/ProceduralOfficeGenerator.Helpers.h"
+#include "Procedural/ProceduralOfficeGenerator.Log.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/RectLightComponent.h"
