@@ -20,6 +20,14 @@ class FloorplanEditor:
 
         self.objects = []      # list of { "data": dict, "canvas_ids": [int, ...] }
         self.id_to_obj = {}    # canvas_id -> object
+        
+        self.selected_objects = []  # list of selected objects for multi-select
+        self.clipboard = []    # clipboard for copy/paste
+        
+        # Undo/Redo history
+        self.undo_stack = []
+        self.redo_stack = []
+        self.max_undo = 50
 
         # default world bbox if no Floor found
         self.world_bbox = (-1600.0, -900.0, 1600.0, 900.0)
@@ -33,6 +41,7 @@ class FloorplanEditor:
         self.show_grid = tk.BooleanVar(value=True)
         self.snap_to_grid = tk.BooleanVar(value=True)
         self.grid_size = tk.DoubleVar(value=100.0)
+        self.show_lamps = tk.BooleanVar(value=True)  # for CeilingLight visualization
         self.grid_size.trace_add("write", self.on_grid_setting_changed)
         self.show_grid.trace_add("write", self.on_grid_setting_changed)
         self.canvas_grid_ids = []
@@ -44,6 +53,7 @@ class FloorplanEditor:
         self.dragging = False
         self.drag_start_sx = 0
         self.drag_start_sy = 0
+        self.drag_saved_state = False  # Track if state was saved for this drag
 
         self.mode = tk.StringVar(value="select")
         self.mode.trace_add("write", self.on_mode_changed)
@@ -51,45 +61,110 @@ class FloorplanEditor:
         self._build_ui()
 
     def _build_ui(self):
-          toolbar = tk.Frame(self.root)
-          toolbar.pack(side=tk.TOP, fill=tk.X)
+          # Modern color scheme
+          bg_color = "#f5f5f5"
+          toolbar_bg = "#ffffff"
+          accent_color = "#0078d7"
+          
+          self.root.configure(bg=bg_color)
+          
+          # Main toolbar with modern styling
+          toolbar = tk.Frame(self.root, bg=toolbar_bg, relief=tk.FLAT, bd=1)
+          toolbar.pack(side=tk.TOP, fill=tk.X, padx=2, pady=2)
 
-          tk.Radiobutton(toolbar, text="Select", variable=self.mode,
-                     value="select").pack(side=tk.LEFT)
-          tk.Radiobutton(toolbar, text="Add Cubicle", variable=self.mode,
-                     value="add_cubicle").pack(side=tk.LEFT)
-          tk.Radiobutton(toolbar, text="Add Wall", variable=self.mode,
-                     value="add_wall").pack(side=tk.LEFT)
-          tk.Radiobutton(toolbar, text="Add Door", variable=self.mode,
-                     value="add_door").pack(side=tk.LEFT)
-          tk.Radiobutton(toolbar, text="Add Window", variable=self.mode,
-                     value="add_window").pack(side=tk.LEFT)
-          tk.Button(toolbar, text="Reset View",
-                command=self.reset_view).pack(side=tk.LEFT, padx=(10, 0))
-          tk.Button(toolbar, text="Zoom In",
-                command=self.zoom_in).pack(side=tk.LEFT)
-          tk.Button(toolbar, text="Zoom Out",
-                command=self.zoom_out).pack(side=tk.LEFT)
-          tk.Button(toolbar, text="Rotate ⟳",
-                command=lambda: self.rotate_selection(90)).pack(side=tk.LEFT, padx=(10, 0))
-          tk.Button(toolbar, text="Rotate ⟲",
-                command=lambda: self.rotate_selection(-90)).pack(side=tk.LEFT)
+          # Mode selection frame
+          mode_frame = tk.LabelFrame(toolbar, text="Mode", padx=8, pady=4, bg=toolbar_bg, 
+                                     relief=tk.GROOVE, bd=1)
+          mode_frame.pack(side=tk.LEFT, padx=5, pady=4)
+          
+          for text, value in [("Select", "select"), ("Cubicle", "add_cubicle"), 
+                             ("Wall", "add_wall"), ("Door", "add_door"), 
+                             ("Window", "add_window"), ("Spawn", "add_spawn")]:
+              tk.Radiobutton(mode_frame, text=text, variable=self.mode,
+                         value=value, bg=toolbar_bg, activebackground=toolbar_bg,
+                         selectcolor=accent_color).pack(side=tk.LEFT, padx=2)
+          
+          # View controls frame
+          view_frame = tk.LabelFrame(toolbar, text="View", padx=8, pady=4, bg=toolbar_bg,
+                                     relief=tk.GROOVE, bd=1)
+          view_frame.pack(side=tk.LEFT, padx=5, pady=4)
+          
+          for text, cmd in [("Reset", self.reset_view), ("Zoom +", self.zoom_in), 
+                           ("Zoom −", self.zoom_out)]:
+              tk.Button(view_frame, text=text, command=cmd, bg=toolbar_bg,
+                       activebackground=accent_color, relief=tk.RAISED, bd=1,
+                       padx=8, pady=2).pack(side=tk.LEFT, padx=2)
+          
+          # Rotation controls frame
+          rotate_frame = tk.LabelFrame(toolbar, text="Rotate", padx=8, pady=4, bg=toolbar_bg,
+                                       relief=tk.GROOVE, bd=1)
+          rotate_frame.pack(side=tk.LEFT, padx=5, pady=4)
+          
+          for text, deg in [("⟳ 90°", 90), ("⟲ 90°", -90)]:
+              tk.Button(rotate_frame, text=text, command=lambda d=deg: self.rotate_selection(d),
+                       bg=toolbar_bg, activebackground=accent_color, relief=tk.RAISED, bd=1,
+                       padx=8, pady=2).pack(side=tk.LEFT, padx=2)
 
-          snap_frame = tk.Frame(toolbar)
-          snap_frame.pack(side=tk.LEFT, padx=(15, 0))
-          tk.Checkbutton(snap_frame, text="Snap", variable=self.snap_to_grid).pack(side=tk.LEFT)
-          tk.Label(snap_frame, text="Grid").pack(side=tk.LEFT)
-          tk.Spinbox(snap_frame, from_=10, to=2000, increment=10,
+          # Grid controls frame
+          grid_frame = tk.LabelFrame(toolbar, text="Grid", padx=8, pady=4, bg=toolbar_bg,
+                                     relief=tk.GROOVE, bd=1)
+          grid_frame.pack(side=tk.LEFT, padx=5, pady=4)
+          
+          tk.Checkbutton(grid_frame, text="Snap", variable=self.snap_to_grid,
+                        bg=toolbar_bg, activebackground=toolbar_bg,
+                        selectcolor=accent_color).pack(side=tk.LEFT, padx=2)
+          tk.Label(grid_frame, text="Size:", bg=toolbar_bg).pack(side=tk.LEFT, padx=(5, 2))
+          tk.Spinbox(grid_frame, from_=10, to=2000, increment=10,
                  width=6, textvariable=self.grid_size,
-                 command=self.on_grid_setting_changed).pack(side=tk.LEFT)
-          tk.Checkbutton(snap_frame, text="Show Grid",
-                     variable=self.show_grid).pack(side=tk.LEFT, padx=(5, 0))
-
-          tk.Label(toolbar, text="Pan: Right/Middle drag | Zoom: Wheel | Rotate: R / Shift+R").pack(side=tk.LEFT, padx=10)
+                 command=self.on_grid_setting_changed).pack(side=tk.LEFT, padx=2)
+          tk.Checkbutton(grid_frame, text="Show", variable=self.show_grid,
+                        bg=toolbar_bg, activebackground=toolbar_bg,
+                        selectcolor=accent_color).pack(side=tk.LEFT, padx=(5, 2))
+          
+          # Display options frame
+          display_frame = tk.LabelFrame(toolbar, text="Display", padx=8, pady=4, bg=toolbar_bg,
+                                        relief=tk.GROOVE, bd=1)
+          display_frame.pack(side=tk.LEFT, padx=5, pady=4)
+          
+          tk.Checkbutton(display_frame, text="Lamps", variable=self.show_lamps,
+                     command=lambda: self.rebuild_canvas(preserve_selection=True),
+                     bg=toolbar_bg, activebackground=toolbar_bg,
+                     selectcolor=accent_color).pack(side=tk.LEFT, padx=2)
+          
+          # Properties panel on the right with modern styling
+          self.props_frame = tk.Frame(self.root, width=280, relief=tk.FLAT, bd=1, bg="#fafafa")
+          self.props_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=0, pady=0)
+          self.props_frame.pack_propagate(False)
+          
+          props_header = tk.Frame(self.props_frame, bg="#0078d7", height=35)
+          props_header.pack(fill=tk.X)
+          props_title = tk.Label(props_header, text="Properties", font=("Segoe UI", 11, "bold"),
+                                bg="#0078d7", fg="white")
+          props_title.pack(pady=8)
+          
+          # Scrollable properties area
+          self.props_canvas = tk.Canvas(self.props_frame, highlightthickness=0, bg="#fafafa")
+          props_scrollbar = tk.Scrollbar(self.props_frame, orient="vertical", command=self.props_canvas.yview)
+          self.props_inner = tk.Frame(self.props_canvas, bg="#fafafa")
+          
+          self.props_canvas.configure(yscrollcommand=props_scrollbar.set)
+          props_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+          self.props_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+          
+          self.props_canvas_window = self.props_canvas.create_window((0, 0), window=self.props_inner, anchor="nw")
+          self.props_inner.bind("<Configure>", lambda e: self.props_canvas.configure(scrollregion=self.props_canvas.bbox("all")))
+          
+          # Status bar with modern styling
+          status_frame = tk.Frame(self.root, relief=tk.FLAT, bd=1, bg="#e1e1e1", height=28)
+          status_frame.pack(side=tk.BOTTOM, fill=tk.X)
+          self.status_label = tk.Label(status_frame, 
+                                       text="Pan: Right/Middle drag | Zoom: Wheel | Undo: Ctrl+Z | Redo: Ctrl+Y | Copy/Paste: Ctrl+C/V",
+                                       anchor=tk.W, bg="#e1e1e1", fg="#333333", font=("Segoe UI", 9))
+          self.status_label.pack(side=tk.LEFT, padx=8, pady=4)
 
           self.canvas = tk.Canvas(self.root, width=self.canvas_width,
-                          height=self.canvas_height, bg="white")
-          self.canvas.pack(fill=tk.BOTH, expand=True)
+                          height=self.canvas_height, bg="#ffffff", highlightthickness=0)
+          self.canvas.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
 
           self.canvas.bind("<Button-1>", self.on_left_click)
           self.canvas.bind("<B1-Motion>", self.on_drag)
@@ -110,6 +185,11 @@ class FloorplanEditor:
           self.root.bind("<Escape>", lambda e: self.cancel_transient_actions())
           self.root.bind("<r>", lambda e: self.rotate_selection(90))
           self.root.bind("<R>", lambda e: self.rotate_selection(-90))
+          self.root.bind("<Control-c>", self.on_copy)
+          self.root.bind("<Control-v>", self.on_paste)
+          self.root.bind("<Control-a>", self.on_select_all)
+          self.root.bind("<Control-z>", self.on_undo)
+          self.root.bind("<Control-y>", self.on_redo)
 
           menubar = tk.Menu(self.root)
           filemenu = tk.Menu(menubar, tearoff=0)
@@ -539,10 +619,13 @@ class FloorplanEditor:
 
     def rebuild_canvas(self, preserve_selection=False):
         self.clear_pending_line()
-        selected_data = self.selected_obj["data"] if preserve_selection and self.selected_obj else None
+        selected_data_list = [obj["data"] for obj in self.selected_objects] if preserve_selection and self.selected_objects else []
         if self.selected_obj is not None:
             self.style_object(self.selected_obj, selected=False)
+        for obj in self.selected_objects:
+            self.style_object(obj, selected=False)
         self.selected_obj = None
+        self.selected_objects.clear()
 
         self.canvas.delete("all")
         self.canvas_grid_ids.clear()
@@ -551,14 +634,18 @@ class FloorplanEditor:
 
         self.draw_background_grid()
 
-        to_select = None
+        to_select = []
         for item in self.data:
             obj = self.draw_item(item)
-            if selected_data is item and obj is not None:
-                to_select = obj
+            if obj is not None and item in selected_data_list:
+                to_select.append(obj)
 
-        if to_select is not None:
-            self.set_selected(to_select)
+        if to_select:
+            self.selected_objects = to_select
+            for obj in to_select:
+                self.style_object(obj, selected=True)
+            if len(to_select) == 1:
+                self.selected_obj = to_select[0]
 
     def draw_item(self, item):
         t = item.get("Type")
@@ -608,6 +695,29 @@ class FloorplanEditor:
                                                 width=width,
                                                 capstyle=tk.ROUND)
             canvas_ids.append(main_line)
+            
+            # Draw window sections if applicable
+            if t == "Window":
+                section_count = int(item.get("SectionCount", 1))
+                if section_count > 1:
+                    dx = x1 - x0
+                    dy = y1 - y0
+                    length = math.hypot(dx, dy)
+                    if length > 1e-6:
+                        # Draw perpendicular lines for window sections
+                        for i in range(1, section_count):
+                            ratio = i / section_count
+                            sect_x = x0 + dx * ratio
+                            sect_y = y0 + dy * ratio
+                            # Perpendicular direction
+                            perp_x = -dy / length * 8
+                            perp_y = dx / length * 8
+                            # Draw section divider as perpendicular line
+                            sect_line = self.canvas.create_line(
+                                sect_x - perp_x, sect_y - perp_y,
+                                sect_x + perp_x, sect_y + perp_y,
+                                fill=color, width=max(1, width))
+                            canvas_ids.append(sect_line)
 
             if t == "Door":
                 dx = x1 - x0
@@ -661,6 +771,30 @@ class FloorplanEditor:
                                                outline="black",
                                                fill="#dddddd")
             canvas_ids.append(cid)
+            
+            # Add rotation indicator (small triangle showing front/orientation)
+            yaw_normalized = self.normalize_yaw(yaw)
+            indicator_size = min(abs(x1 - x0), abs(y1 - y0)) * 0.12
+            
+            # Calculate center for rotation indicator
+            cx = (x0 + x1) / 2
+            cy = (y0 + y1) / 2
+            
+            # Create arrow pointing in the direction of yaw
+            # Yaw 0 = right, 90 = down, 180 = left, 270 = up (in screen coords)
+            import math
+            angle_rad = math.radians(-yaw_normalized)  # Negative for screen coords
+            arrow_len = indicator_size * 2
+            
+            # Arrow points from center outward
+            end_x = cx + arrow_len * math.cos(angle_rad)
+            end_y = cy + arrow_len * math.sin(angle_rad)
+            
+            # Draw arrow
+            arrow_id = self.canvas.create_line(cx, cy, end_x, end_y,
+                                               fill="#ff6600", width=3,
+                                               arrow=tk.LAST, arrowshape=(10, 12, 5))
+            canvas_ids.append(arrow_id)
 
             corners = [
                 (x0_world, y0_world),
@@ -673,10 +807,160 @@ class FloorplanEditor:
                 anchor_id = self.create_anchor_marker(wx, wy, color=color)
                 anchors.append(anchor_id)
                 canvas_ids.append(anchor_id)
+            
+            # Add dimension text label (always visible)
+            center_x = (x0_world + x1_world) / 2
+            center_y = (y0_world + y1_world) / 2
+            cx, cy = self.world_to_screen(center_x, center_y)
+            dim_x = float(dim.get("X", 0.0))
+            dim_y = float(dim.get("Y", 0.0))
+            dim_text = f"{dim_x:.0f}×{dim_y:.0f}"
+            text_id = self.canvas.create_text(cx, cy, text=dim_text,
+                                             fill="#555555", font=("Arial", 9))
+            canvas_ids.append(text_id)
 
         elif t in ("Ceiling", "CeilingLight"):
-            # not visualized in detail here
-            pass
+            # Visualize CeilingLight with optional lamp markers
+            if t == "CeilingLight":
+                s = item.get("Start", {})
+                e = item.get("End", {})
+                spacing = item.get("Spacing", {})
+                padding = item.get("Padding", {})
+                yaw = float(item.get("Yaw", 0.0))  # Rotation angle for line generation
+                
+                x0_world = float(s.get("X", 0.0))
+                y0_world = float(s.get("Y", 0.0))
+                x1_world = float(e.get("X", 0.0))
+                y1_world = float(e.get("Y", 0.0))
+                
+                # Draw bounding box for the CeilingLight area
+                sx0, sy0 = self.world_to_screen(x0_world, y0_world)
+                sx1, sy1 = self.world_to_screen(x1_world, y1_world)
+                cid = self.canvas.create_rectangle(sx0, sy0, sx1, sy1,
+                                                   outline="#ffa500", dash=(4, 4),
+                                                   fill="", width=1)
+                canvas_ids.append(cid)
+                
+                # Draw lamp positions if enabled - now in lines along rotated axis
+                if self.show_lamps.get():
+                    import math
+                    
+                    space_along_line = float(spacing.get("X", 300.0))  # Spacing between lights on a line
+                    space_between_lines = float(spacing.get("Y", 300.0))  # Spacing between parallel lines
+                    pad_x = float(padding.get("X", 0.0))
+                    pad_y = float(padding.get("Y", 0.0))
+                    
+                    # Calculate the bounding box with padding
+                    min_x = min(x0_world, x1_world)
+                    max_x = max(x0_world, x1_world)
+                    min_y = min(y0_world, y1_world)
+                    max_y = max(y0_world, y1_world)
+                    
+                    width = max_x - min_x
+                    height = max_y - min_y
+                    
+                    # Convert yaw to radians (yaw 0 = along X axis, positive is counter-clockwise)
+                    yaw_rad = math.radians(yaw)
+                    
+                    # Direction vectors for the line axis (along which lights are placed)
+                    line_dir_x = math.cos(yaw_rad)
+                    line_dir_y = math.sin(yaw_rad)
+                    
+                    # Perpendicular direction (for spacing between lines)
+                    perp_dir_x = -math.sin(yaw_rad)
+                    perp_dir_y = math.cos(yaw_rad)
+                    
+                    # Calculate effective area after padding in the rotated coordinate system
+                    # Apply padding in the direction of the axes
+                    center_x = (min_x + max_x) / 2
+                    center_y = (min_y + max_y) / 2
+                    
+                    # Calculate the corners of the padded area
+                    # Start from center and work outward with padding adjustments
+                    half_w = width / 2 - pad_x
+                    half_h = height / 2 - pad_y
+                    
+                    if half_w <= 0 or half_h <= 0 or space_along_line <= 0 or space_between_lines <= 0:
+                        # Skip if invalid dimensions
+                        pass
+                    else:
+                        # Project the padded box onto the line axis to get the length along which we place lights
+                        # For simplicity, we'll generate lines across the width perpendicular to yaw
+                        # and lights along the yaw direction
+                        
+                        # Number of lines perpendicular to the yaw direction
+                        num_lines = int(2 * half_h / space_between_lines) + 1
+                        
+                        # Draw lines and lamps
+                        for line_idx in range(num_lines):
+                            # Position along perpendicular axis (centered)
+                            perp_offset = -half_h + line_idx * space_between_lines
+                            
+                            # Starting point of this line
+                            line_start_x = center_x - half_w * line_dir_x + perp_offset * perp_dir_x
+                            line_start_y = center_y - half_w * line_dir_y + perp_offset * perp_dir_y
+                            
+                            line_end_x = center_x + half_w * line_dir_x + perp_offset * perp_dir_x
+                            line_end_y = center_y + half_w * line_dir_y + perp_offset * perp_dir_y
+                            
+                            # Draw the line to show structure
+                            ls_x, ls_y = self.world_to_screen(line_start_x, line_start_y)
+                            le_x, le_y = self.world_to_screen(line_end_x, line_end_y)
+                            line_id = self.canvas.create_line(ls_x, ls_y, le_x, le_y,
+                                                              fill="#ffa500", width=1, dash=(2, 2))
+                            canvas_ids.append(line_id)
+                            
+                            # Place lamps along this line
+                            line_length = 2 * half_w
+                            num_lamps = int(line_length / space_along_line) + 1
+                            
+                            for lamp_idx in range(num_lamps):
+                                along_offset = -half_w + lamp_idx * space_along_line
+                                
+                                lamp_x = center_x + along_offset * line_dir_x + perp_offset * perp_dir_x
+                                lamp_y = center_y + along_offset * line_dir_y + perp_offset * perp_dir_y
+                                
+                                sx, sy = self.world_to_screen(lamp_x, lamp_y)
+                                lamp_id = self.canvas.create_oval(sx - 3, sy - 3, sx + 3, sy + 3,
+                                                                  fill="#ffff00", outline="#ffa500")
+                                canvas_ids.append(lamp_id)
+                
+                # Add corner anchors
+                anchor_start = self.create_anchor_marker(x0_world, y0_world, color="#ffa500")
+                anchor_end = self.create_anchor_marker(x1_world, y1_world, color="#ffa500")
+                anchors.extend([anchor_start, anchor_end])
+                canvas_ids.extend([anchor_start, anchor_end])
+        
+        elif t == "SpawnPoint":
+            # Draw spawn point as a circle with direction indicator
+            start = item.get("Start", {})
+            yaw = float(item.get("Yaw", 0.0))
+            x_world = float(start.get("X", 0.0))
+            y_world = float(start.get("Y", 0.0))
+            
+            sx, sy = self.world_to_screen(x_world, y_world)
+            
+            # Draw spawn circle
+            radius = 8
+            spawn_circle = self.canvas.create_oval(sx - radius, sy - radius,
+                                                   sx + radius, sy + radius,
+                                                   fill="#00ff00", outline="#008800", width=2)
+            canvas_ids.append(spawn_circle)
+            
+            # Draw direction arrow
+            angle_rad = math.radians(yaw)
+            arrow_len = 15
+            end_x = sx + arrow_len * math.cos(angle_rad)
+            end_y = sy - arrow_len * math.sin(angle_rad)
+            arrow_line = self.canvas.create_line(sx, sy, end_x, end_y,
+                                                 fill="#008800", width=2,
+                                                 arrow=tk.LAST, arrowshape=(8, 10, 4))
+            canvas_ids.append(arrow_line)
+            
+            # Add anchor
+            anchor_id = self.create_anchor_marker(x_world, y_world, color="#00ff00")
+            anchors.append(anchor_id)
+            canvas_ids.append(anchor_id)
 
         if canvas_ids:
             obj = {"data": item, "canvas_ids": canvas_ids, "anchors": anchors}
@@ -688,14 +972,270 @@ class FloorplanEditor:
 
     # ---------- Selection & styling ----------
 
-    def set_selected(self, obj):
-        if self.selected_obj is obj:
+    def set_selected(self, obj, multi=False):
+        if multi:
+            # Multi-select mode (Ctrl+Click)
+            if obj is None:
+                return
+            if obj in self.selected_objects:
+                # Deselect if already selected
+                self.selected_objects.remove(obj)
+                self.style_object(obj, selected=False)
+                if self.selected_obj is obj:
+                    self.selected_obj = self.selected_objects[0] if self.selected_objects else None
+            else:
+                # Add to selection
+                self.selected_objects.append(obj)
+                self.style_object(obj, selected=True)
+                self.selected_obj = obj
+        else:
+            # Single select mode
+            if self.selected_obj is obj and not self.selected_objects:
+                return
+            # Clear previous selection
+            if self.selected_obj is not None:
+                self.style_object(self.selected_obj, selected=False)
+            for sobj in self.selected_objects:
+                self.style_object(sobj, selected=False)
+            self.selected_objects.clear()
+            
+            self.selected_obj = obj
+            if obj is not None:
+                self.selected_objects = [obj]
+                self.style_object(obj, selected=True)
+        
+        # Update properties panel
+        self.update_properties_panel()
+    
+    def update_properties_panel(self):
+        """Update properties panel based on selection"""
+        # Clear existing properties
+        for widget in self.props_inner.winfo_children():
+            widget.destroy()
+        
+        if not self.selected_obj:
+            tk.Label(self.props_inner, text="No selection", fg="#999999", bg="#fafafa",
+                    font=("Segoe UI", 10)).pack(pady=30)
             return
-        if self.selected_obj is not None:
-            self.style_object(self.selected_obj, selected=False)
-        self.selected_obj = obj
-        if obj is not None:
-            self.style_object(obj, selected=True)
+        
+        if len(self.selected_objects) > 1:
+            tk.Label(self.props_inner, text=f"{len(self.selected_objects)} objects selected", 
+                    font=("Segoe UI", 10, "bold"), bg="#fafafa").pack(pady=10, padx=10)
+            return
+        
+        item = self.selected_obj["data"]
+        item_type = item.get("Type", "Unknown")
+        
+        type_frame = tk.Frame(self.props_inner, bg="#e3f2fd", relief=tk.FLAT, bd=1)
+        type_frame.pack(fill=tk.X, padx=8, pady=8)
+        tk.Label(type_frame, text=f"Type: {item_type}", 
+                font=("Segoe UI", 10, "bold"), bg="#e3f2fd", fg="#0078d7").pack(pady=6, padx=8)
+        
+        # Common properties
+        if "Start" in item:
+            self._add_property_section("Start Position", item["Start"], ["X", "Y"])
+        
+        if "End" in item:
+            self._add_property_section("End Position", item["End"], ["X", "Y"])
+        
+        # Type-specific properties
+        if item_type == "Cubicle":
+            if "Dimensions" in item:
+                self._add_property_section("Dimensions", item["Dimensions"], ["X", "Y"])
+            if "Yaw" in item:
+                self._add_yaw_property(item)
+        
+        elif item_type == "SpawnPoint":
+            if "HeightOffset" in item:
+                self._add_float_property("HeightOffset", item, "HeightOffset")
+            if "Yaw" in item:
+                self._add_yaw_property(item)
+        
+        elif item_type in ("Wall", "Door", "Window"):
+            if "Thickness" in item:
+                self._add_float_property("Thickness", item, "Thickness")
+            if item_type == "Window" and "SectionCount" in item:
+                self._add_int_property("SectionCount", item, "SectionCount")
+        
+        elif item_type == "CeilingLight":
+            if "Spacing" in item:
+                self._add_property_section("Spacing", item["Spacing"], ["X", "Y"])
+            if "Padding" in item:
+                self._add_property_section("Padding", item["Padding"], ["X", "Y"])
+            if "Yaw" in item:
+                self._add_yaw_property(item)
+            elif item.get("Yaw") is None:
+                # Add Yaw if it doesn't exist (default to 0)
+                item["Yaw"] = 0.0
+                self._add_yaw_property(item)
+    
+    def _add_property_section(self, title, data_dict, keys):
+        """Add a property section with multiple fields"""
+        frame = tk.LabelFrame(self.props_inner, text=title, padx=8, pady=6, bg="#fafafa",
+                             font=("Segoe UI", 9, "bold"), relief=tk.GROOVE, bd=1)
+        frame.pack(fill=tk.X, padx=8, pady=4)
+        
+        for key in keys:
+            row = tk.Frame(frame, bg="#fafafa")
+            row.pack(fill=tk.X, pady=3)
+            tk.Label(row, text=f"{key}:", width=10, anchor="w", bg="#fafafa",
+                    font=("Segoe UI", 9)).pack(side=tk.LEFT)
+            
+            # Use Spinbox instead of Entry for better UX
+            var = tk.DoubleVar(value=float(data_dict.get(key, 0.0)))
+            spinbox = tk.Spinbox(row, textvariable=var, width=10, from_=-10000, to=10000, increment=10)
+            spinbox.pack(side=tk.LEFT)
+            
+            # Debounce to avoid excessive saves
+            timer_id = [None]
+            
+            def make_callback(d, k, v, tid):
+                def callback(*args):
+                    # Cancel previous timer
+                    if tid[0] is not None:
+                        self.root.after_cancel(tid[0])
+                    
+                    # Set new timer for 300ms delay
+                    def apply_change():
+                        try:
+                            old_val = d.get(k, 0.0)
+                            new_val = float(v.get())
+                            if abs(old_val - new_val) > 0.001:  # Only if actually changed
+                                self.save_state()
+                                d[k] = new_val
+                                self.rebuild_canvas(preserve_selection=True)
+                        except (ValueError, tk.TclError):
+                            pass
+                        tid[0] = None
+                    
+                    tid[0] = self.root.after(300, apply_change)
+                return callback
+            
+            var.trace_add("write", make_callback(data_dict, key, var, timer_id))
+    
+    def _add_float_property(self, label, item, key):
+        """Add a single float property"""
+        frame = tk.Frame(self.props_inner, bg="#fafafa")
+        frame.pack(fill=tk.X, padx=8, pady=3)
+        tk.Label(frame, text=f"{label}:", width=10, anchor="w", bg="#fafafa",
+                font=("Segoe UI", 9)).pack(side=tk.LEFT)
+        
+        var = tk.DoubleVar(value=float(item.get(key, 0.0)))
+        spinbox = tk.Spinbox(frame, textvariable=var, width=10, from_=-10000, to=10000, increment=10)
+        spinbox.pack(side=tk.LEFT)
+        
+        # Debounce to avoid excessive saves
+        timer_id = [None]
+        
+        def callback(*args):
+            # Cancel previous timer
+            if timer_id[0] is not None:
+                self.root.after_cancel(timer_id[0])
+            
+            # Set new timer for 300ms delay
+            def apply_change():
+                try:
+                    old_val = item.get(key, 0.0)
+                    new_val = float(var.get())
+                    if abs(old_val - new_val) > 0.001:  # Only if actually changed
+                        self.save_state()
+                        item[key] = new_val
+                        self.rebuild_canvas(preserve_selection=True)
+                except (ValueError, tk.TclError):
+                    pass
+                timer_id[0] = None
+            
+            timer_id[0] = self.root.after(300, apply_change)
+        
+        var.trace_add("write", callback)
+    
+    def _add_int_property(self, label, item, key):
+        """Add a single integer property"""
+        frame = tk.Frame(self.props_inner, bg="#fafafa")
+        frame.pack(fill=tk.X, padx=8, pady=3)
+        tk.Label(frame, text=f"{label}:", width=10, anchor="w", bg="#fafafa",
+                font=("Segoe UI", 9)).pack(side=tk.LEFT)
+        
+        var = tk.IntVar(value=int(item.get(key, 1)))
+        spinbox = tk.Spinbox(frame, textvariable=var, width=10, from_=1, to=100, increment=1)
+        spinbox.pack(side=tk.LEFT)
+        
+        # Debounce to avoid excessive saves
+        timer_id = [None]
+        
+        def callback(*args):
+            # Cancel previous timer
+            if timer_id[0] is not None:
+                self.root.after_cancel(timer_id[0])
+            
+            # Set new timer for 300ms delay
+            def apply_change():
+                try:
+                    old_val = item.get(key, 1)
+                    new_val = int(var.get())
+                    if old_val != new_val:  # Only if actually changed
+                        self.save_state()
+                        item[key] = new_val
+                        self.rebuild_canvas(preserve_selection=True)
+                except (ValueError, tk.TclError):
+                    pass
+                timer_id[0] = None
+            
+            timer_id[0] = self.root.after(300, apply_change)
+        
+        var.trace_add("write", callback)
+    
+    def _add_yaw_property(self, item):
+        """Add yaw property with rotation buttons"""
+        frame = tk.LabelFrame(self.props_inner, text="Rotation (Yaw)", padx=8, pady=6, bg="#fafafa",
+                             font=("Segoe UI", 9, "bold"), relief=tk.GROOVE, bd=1)
+        frame.pack(fill=tk.X, padx=8, pady=4)
+        
+        row = tk.Frame(frame, bg="#fafafa")
+        row.pack(fill=tk.X, pady=3)
+        tk.Label(row, text="Degrees:", width=10, anchor="w", bg="#fafafa",
+                font=("Segoe UI", 9)).pack(side=tk.LEFT)
+        
+        var = tk.DoubleVar(value=float(item.get("Yaw", 0.0)))
+        spinbox = tk.Spinbox(row, textvariable=var, width=10, from_=0, to=360, increment=15)
+        spinbox.pack(side=tk.LEFT)
+        
+        # Debounce to avoid excessive saves
+        timer_id = [None]
+        
+        def callback(*args):
+            # Cancel previous timer
+            if timer_id[0] is not None:
+                self.root.after_cancel(timer_id[0])
+            
+            # Set new timer for 300ms delay
+            def apply_change():
+                try:
+                    old_val = item.get("Yaw", 0.0)
+                    new_val = float(var.get())
+                    if abs(old_val - new_val) > 0.001:  # Only if actually changed
+                        self.save_state()
+                        item["Yaw"] = new_val
+                        self.rebuild_canvas(preserve_selection=True)
+                except (ValueError, tk.TclError):
+                    pass
+                timer_id[0] = None
+            
+            timer_id[0] = self.root.after(300, apply_change)
+        
+        var.trace_add("write", callback)
+        
+        # Rotation buttons
+        btn_row = tk.Frame(frame, bg="#fafafa")
+        btn_row.pack(fill=tk.X, pady=4)
+        tk.Button(btn_row, text="⟳ 90°", command=lambda: self.rotate_selection(90),
+                 bg="#0078d7", fg="white", activebackground="#005a9e",
+                 relief=tk.RAISED, bd=1, padx=10, pady=3,
+                 font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=2)
+        tk.Button(btn_row, text="⟲ 90°", command=lambda: self.rotate_selection(-90),
+                 bg="#0078d7", fg="white", activebackground="#005a9e",
+                 relief=tk.RAISED, bd=1, padx=10, pady=3,
+                 font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=2)
 
     def style_object(self, obj, selected=False):
         item = obj["data"]
@@ -722,22 +1262,43 @@ class FloorplanEditor:
             elif t == "Floor":
                 outline = "#ffaaaa" if selected else "#cccccc"
                 self.canvas.itemconfig(cid, outline=outline)
+            elif t == "SpawnPoint":
+                outline = "red" if selected else "#008800"
+                fill = "#ffff00" if selected else "#00ff00"
+                try:
+                    self.canvas.itemconfig(cid, outline=outline, fill=fill)
+                except tk.TclError:
+                    pass  # Some canvas items might not support these config options
+            elif t == "CeilingLight":
+                outline = "red" if selected else "#ffa500"
+                try:
+                    self.canvas.itemconfig(cid, outline=outline)
+                except tk.TclError:
+                    pass
 
     def can_rotate(self, item):
         return "Yaw" in item
 
     def rotate_selection(self, delta_deg=90):
-        if self.selected_obj is None:
+        if not self.selected_objects:
             return
-        item = self.selected_obj["data"]
-        if not self.can_rotate(item):
-            if hasattr(self.root, "bell"):
-                self.root.bell()
-            return
-        self.apply_rotation(item, delta_deg)
-        if self.snap_to_grid.get():
-            self.snap_object(item)
-        self.rebuild_canvas(preserve_selection=True)
+        
+        self.save_state()  # Save state for undo
+        
+        # Rotate all selected objects
+        any_rotated = False
+        for obj in self.selected_objects:
+            item = obj["data"]
+            if self.can_rotate(item):
+                self.apply_rotation(item, delta_deg)
+                if self.snap_to_grid.get():
+                    self.snap_object(item)
+                any_rotated = True
+        
+        if any_rotated:
+            self.rebuild_canvas(preserve_selection=True)
+        elif hasattr(self.root, "bell"):
+            self.root.bell()
 
     def apply_rotation(self, item, delta_deg):
         yaw_old = self.normalize_yaw(item.get("Yaw", 0.0))
@@ -767,7 +1328,7 @@ class FloorplanEditor:
             obj = self.id_to_obj.get(cid)
             if obj is not None:
                 t = obj["data"].get("Type")
-                if t in ("Wall", "Door", "Window", "Cubicle", "Floor"):
+                if t in ("Wall", "Door", "Window", "Cubicle", "Floor", "SpawnPoint", "CeilingLight"):
                     return obj
         return None
 
@@ -780,13 +1341,17 @@ class FloorplanEditor:
 
         if mode == "select":
             obj = self.find_object_at(event.x, event.y)
-            self.set_selected(obj)
+            ctrl_pressed = (event.state & 0x4) != 0  # Check if Ctrl is pressed
+            self.set_selected(obj, multi=ctrl_pressed)
             if obj is not None:
                 self.dragging = True
                 self.drag_start_sx = event.x
                 self.drag_start_sy = event.y
+                self.drag_saved_state = False  # Haven't saved state yet
         elif mode == "add_cubicle":
             self.add_cubicle_at(wx, wy)
+        elif mode == "add_spawn":
+            self.add_spawn_at(wx, wy)
         elif mode in ("add_wall", "add_door", "add_window"):
             self.handle_line_press(mode, event)
 
@@ -795,8 +1360,14 @@ class FloorplanEditor:
             self.update_pending_line(event)
             return
 
-        if not self.dragging or self.selected_obj is None:
+        if not self.dragging or not self.selected_objects:
             return
+        
+        # Save state on first drag movement (not just click)
+        if not self.drag_saved_state:
+            self.save_state()
+            self.drag_saved_state = True
+        
         dx_pix = event.x - self.drag_start_sx
         dy_pix = event.y - self.drag_start_sy
 
@@ -808,20 +1379,22 @@ class FloorplanEditor:
         self.drag_start_sx = event.x
         self.drag_start_sy = event.y
 
-        item = self.selected_obj["data"]
+        # Move all selected objects
+        for obj in self.selected_objects:
+            item = obj["data"]
 
-        if "Start" in item:
-            s = item["Start"]
-            s["X"] = float(s.get("X", 0.0)) + dx_world
-            s["Y"] = float(s.get("Y", 0.0)) + dy_world
+            if "Start" in item:
+                s = item["Start"]
+                s["X"] = float(s.get("X", 0.0)) + dx_world
+                s["Y"] = float(s.get("Y", 0.0)) + dy_world
 
-        if "End" in item:
-            e = item["End"]
-            e["X"] = float(e.get("X", 0.0)) + dx_world
-            e["Y"] = float(e.get("Y", 0.0)) + dy_world
+            if "End" in item:
+                e = item["End"]
+                e["X"] = float(e.get("X", 0.0)) + dx_world
+                e["Y"] = float(e.get("Y", 0.0)) + dy_world
 
-        for cid in self.selected_obj["canvas_ids"]:
-            self.canvas.move(cid, dx_pix, dy_pix)
+            for cid in obj["canvas_ids"]:
+                self.canvas.move(cid, dx_pix, dy_pix)
 
     def on_release(self, event):
         if self.pending_line:
@@ -832,31 +1405,43 @@ class FloorplanEditor:
             self.dragging = False
             return
 
-        if self.dragging and self.selected_obj is not None:
-            if self.snap_object(self.selected_obj["data"]):
+        if self.dragging and self.selected_objects:
+            any_snapped = False
+            for obj in self.selected_objects:
+                if self.snap_object(obj["data"]):
+                    any_snapped = True
+            if any_snapped:
                 self.rebuild_canvas(preserve_selection=True)
         self.dragging = False
 
     # ---------- Add / Delete ----------
 
     def on_delete(self, event=None):
-        if self.selected_obj is None:
+        if not self.selected_objects:
             return
-        obj = self.selected_obj
-        self.set_selected(None)
-        for cid in obj["canvas_ids"]:
-            self.canvas.delete(cid)
-            self.id_to_obj.pop(cid, None)
-        try:
-            self.data.remove(obj["data"])
-        except ValueError:
-            pass
-        try:
-            self.objects.remove(obj)
-        except ValueError:
-            pass
+        
+        # Save state for undo
+        self.save_state()
+        
+        # Delete all selected objects
+        for obj in self.selected_objects:
+            for cid in obj["canvas_ids"]:
+                self.canvas.delete(cid)
+                self.id_to_obj.pop(cid, None)
+            try:
+                self.data.remove(obj["data"])
+            except ValueError:
+                pass
+            try:
+                self.objects.remove(obj)
+            except ValueError:
+                pass
+        
+        self.selected_obj = None
+        self.selected_objects.clear()
 
     def add_cubicle_at(self, wx, wy):
+        self.save_state()  # Save state for undo
         wx, wy = self.snap_point(wx, wy)
         item = {
             "Type": "Cubicle",
@@ -868,6 +1453,32 @@ class FloorplanEditor:
         obj = self.draw_item(item)
         if obj is not None:
             self.set_selected(obj)
+    
+    def add_spawn_at(self, wx, wy):
+        self.save_state()  # Save state for undo
+        
+        # Remove any existing spawn points (only one allowed)
+        existing_spawns = [item for item in self.data if item.get("Type") == "SpawnPoint"]
+        for spawn in existing_spawns:
+            self.data.remove(spawn)
+        
+        wx, wy = self.snap_point(wx, wy)
+        item = {
+            "Type": "SpawnPoint",
+            "Start": {"X": wx, "Y": wy},
+            "HeightOffset": 100.0,
+            "Yaw": 0.0
+        }
+        self.data.append(item)
+        
+        # Rebuild canvas to remove old spawn visualization
+        self.rebuild_canvas(preserve_selection=False)
+        
+        # Find and select the new spawn
+        for obj in self.objects:
+            if obj["data"] is item:
+                self.set_selected(obj)
+                break
 
     def line_mode_color(self, mode):
         return {
@@ -955,6 +1566,8 @@ class FloorplanEditor:
         if start_world == end_world:
             return
 
+        self.save_state()  # Save state for undo
+        
         start_x, start_y = self.snap_point(*start_world)
         end_x, end_y = self.snap_point(*end_world)
 
@@ -1016,6 +1629,133 @@ class FloorplanEditor:
                 changed = True
 
         return changed
+    
+    # ---------- Copy/Paste ----------
+    
+    def on_copy(self, event=None):
+        """Copy selected objects to clipboard"""
+        if not self.selected_objects:
+            return
+        self.clipboard.clear()
+        for obj in self.selected_objects:
+            # Deep copy the data
+            item_copy = json.loads(json.dumps(obj["data"]))
+            self.clipboard.append(item_copy)
+        self.status_label.config(text=f"Copied {len(self.clipboard)} object(s)")
+        self.root.after(2000, lambda: self.status_label.config(
+            text="Pan: Right/Middle drag | Zoom: Wheel | Undo: Ctrl+Z | Redo: Ctrl+Y | Copy/Paste: Ctrl+C/V"))
+        return "break"
+    
+    def on_paste(self, event=None):
+        """Paste objects from clipboard with offset"""
+        if not self.clipboard:
+            return "break"
+        
+        self.save_state()  # Save state for undo
+        
+        # Calculate offset for paste (slightly to the right and down)
+        offset_x = self.get_grid_size() if self.snap_to_grid.get() else 50.0
+        offset_y = self.get_grid_size() if self.snap_to_grid.get() else 50.0
+        
+        # Clear current selection
+        self.set_selected(None)
+        new_objects = []
+        
+        for item_data in self.clipboard:
+            # Deep copy and offset
+            item = json.loads(json.dumps(item_data))
+            
+            # Apply offset to position
+            if "Start" in item:
+                s = item["Start"]
+                s["X"] = float(s.get("X", 0.0)) + offset_x
+                s["Y"] = float(s.get("Y", 0.0)) + offset_y
+            if "End" in item:
+                e = item["End"]
+                e["X"] = float(e.get("X", 0.0)) + offset_x
+                e["Y"] = float(e.get("Y", 0.0)) + offset_y
+            
+            self.data.append(item)
+            obj = self.draw_item(item)
+            if obj is not None:
+                new_objects.append(obj)
+        
+        # Select the pasted objects
+        if new_objects:
+            self.selected_objects = new_objects
+            self.selected_obj = new_objects[0] if len(new_objects) == 1 else None
+            for obj in new_objects:
+                self.style_object(obj, selected=True)
+        
+        self.status_label.config(text=f"Pasted {len(new_objects)} object(s)")
+        self.root.after(2000, lambda: self.status_label.config(
+            text="Pan: Right/Middle drag | Zoom: Wheel | Undo: Ctrl+Z | Redo: Ctrl+Y | Copy/Paste: Ctrl+C/V"))
+        return "break"
+    
+    def on_select_all(self, event=None):
+        """Select all objects"""
+        self.selected_objects.clear()
+        self.selected_obj = None
+        
+        for obj in self.objects:
+            item_type = obj["data"].get("Type")
+            # Only select editable objects
+            if item_type in ("Wall", "Door", "Window", "Cubicle", "SpawnPoint", "CeilingLight"):
+                self.selected_objects.append(obj)
+                self.style_object(obj, selected=True)
+        
+        if len(self.selected_objects) == 1:
+            self.selected_obj = self.selected_objects[0]
+        
+        return "break"
+    
+    # ---------- Undo/Redo ----------
+    
+    def save_state(self):
+        """Save current state to undo stack"""
+        # Deep copy current data
+        state = json.loads(json.dumps(self.data))
+        self.undo_stack.append(state)
+        if len(self.undo_stack) > self.max_undo:
+            self.undo_stack.pop(0)
+        # Clear redo stack on new action
+        self.redo_stack.clear()
+    
+    def on_undo(self, event=None):
+        """Undo last action"""
+        if not self.undo_stack:
+            return "break"
+        
+        # Save current state to redo stack
+        current_state = json.loads(json.dumps(self.data))
+        self.redo_stack.append(current_state)
+        
+        # Restore previous state
+        self.data = self.undo_stack.pop()
+        self.rebuild_canvas(preserve_selection=False)
+        
+        self.status_label.config(text="Undo")
+        self.root.after(2000, lambda: self.status_label.config(
+            text="Pan: Right/Middle drag | Zoom: Wheel | Undo: Ctrl+Z | Redo: Ctrl+Y | Copy/Paste: Ctrl+C/V"))
+        return "break"
+    
+    def on_redo(self, event=None):
+        """Redo last undone action"""
+        if not self.redo_stack:
+            return "break"
+        
+        # Save current state to undo stack
+        current_state = json.loads(json.dumps(self.data))
+        self.undo_stack.append(current_state)
+        
+        # Restore next state
+        self.data = self.redo_stack.pop()
+        self.rebuild_canvas(preserve_selection=False)
+        
+        self.status_label.config(text="Redo")
+        self.root.after(2000, lambda: self.status_label.config(
+            text="Pan: Right/Middle drag | Zoom: Wheel | Undo: Ctrl+Z | Redo: Ctrl+Y | Copy/Paste: Ctrl+C/V"))
+        return "break"
 
 
 def main():

@@ -1,0 +1,155 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║            FLOORPLAN EDITOR - BUG FIXES & ENHANCEMENTS                     ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+🐛 BUG FIXES IMPLEMENTED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. ✅ CUBICLE SELECTION BUG
+   Issue: Clicking cubicles caused interface to become unresponsive
+   Fix:   Moved undo state saving from click to actual drag motion
+   Result: Smooth selection and clicking without lag
+   Commit: bd1003b
+
+2. ✅ CUBICLE ORIENTATION MARKERS MISPLACED
+   Issue: Rotation triangles appeared far from cubicles
+   Fix:   Use screen coordinates directly instead of double transformation
+   Result: Triangles now correctly positioned in top-left corner
+   
+   Before:            After:
+   ┌────────┐        ┌▶───────┐
+   │        │        │        │
+   │   △    │   →    │        │
+   │        │        │        │
+   └────────┘        └────────┘
+   (far away)        (in corner)
+   
+   Commit: bd1003b
+
+3. ✅ WINDOW SECTION DOTS AMBIGUOUS
+   Issue: Dots didn't clearly show window vs pillars
+   Fix:   Changed to perpendicular lines crossing the window line
+   Result: Clear visual distinction of window sections
+   
+   Before: ●────●────●────●  (unclear - dots)
+   After:  |────┼────┼────|  (clear - section dividers)
+   
+   Commit: bd1003b
+
+4. ✅ NO UNDO FUNCTIONALITY
+   Issue: No way to undo mistakes
+   Fix:   Implemented full undo/redo system with Ctrl+Z/Ctrl+Y
+   Result: Complete history tracking (50 actions)
+   Features:
+   • Undo any action (create, delete, move, rotate, edit)
+   • Redo undone actions
+   • Status bar feedback
+   • Automatic state saving before all operations
+   
+   Commit: bd1003b
+
+5. ✅ NO PROPERTY EDITING UI
+   Issue: Couldn't edit object properties (Spacing, Padding, Dimensions, etc.)
+   Fix:   Added comprehensive properties panel on right side
+   Result: Full control over all object properties
+   
+   ┌────────────────────┬──────────────────┐
+   │                    │   Properties     │
+   │                    │ ───────────────  │
+   │    Main Canvas     │ Type: Cubicle    │
+   │                    │                  │
+   │                    │ Start Position   │
+   │                    │ X: [ 600.0 ]     │
+   │                    │ Y: [-300.0 ]     │
+   │                    │                  │
+   │                    │ Dimensions       │
+   │                    │ X: [ 300.0 ]     │
+   │                    │ Y: [ 250.0 ]     │
+   │                    │                  │
+   │                    │ Rotation (Yaw)   │
+   │                    │ Degrees: [0.0]   │
+   │                    │ [⟳ 90°] [⟲ 90°] │
+   └────────────────────┴──────────────────┘
+   
+   Commit: 2b6ca81
+
+6. ✅ MULTIPLE SPAWN POINTS ALLOWED
+   Issue: Could create multiple spawn points (should be only one)
+   Fix:   Automatically remove existing spawn when creating new one
+   Result: Only one spawn point exists at any time
+   
+   Commit: bd1003b
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🆕 NEW FEATURES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+UNDO/REDO SYSTEM
+┌─────────────────────────────────────────────────────────┐
+│ • Ctrl+Z: Undo last action                              │
+│ • Ctrl+Y: Redo previously undone action                 │
+│ • History: Up to 50 actions                             │
+│ • Works with: Create, Delete, Move, Rotate, Edit        │
+│ • Status bar shows "Undo" or "Redo" feedback            │
+└─────────────────────────────────────────────────────────┘
+
+PROPERTIES PANEL
+┌─────────────────────────────────────────────────────────┐
+│ Location: Right side of window                          │
+│ Features:                                               │
+│   • Edit all object properties in real-time             │
+│   • Organized by property type                          │
+│   • Automatic canvas updates                            │
+│   • Undo support for property changes                   │
+│                                                         │
+│ Supported Properties:                                   │
+│   • Position (Start X/Y, End X/Y)                       │
+│   • Dimensions (Width, Height)                          │
+│   • Rotation (Yaw angle)                                │
+│   • Thickness (Walls, Doors, Windows)                   │
+│   • SectionCount (Windows)                              │
+│   • Spacing & Padding (CeilingLights)                   │
+│   • HeightOffset (SpawnPoints)                          │
+└─────────────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⌨️  UPDATED KEYBOARD SHORTCUTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Navigation              Selection & Editing          Undo/Redo
+───────────            ────────────────────         ─────────
+• Pan: Right/Middle    • Select: Left click         • Undo: Ctrl+Z
+• Zoom: Mouse wheel    • Multi-select: Ctrl+Click   • Redo: Ctrl+Y
+• Reset: Reset btn     • Select all: Ctrl+A
+                       • Copy: Ctrl+C
+Rotation               • Paste: Ctrl+V
+────────               • Delete: Del/Backspace
+• Clockwise: R         • Cancel: Escape
+• Counter: Shift+R
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 QUALITY METRICS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Security:       0 vulnerabilities (CodeQL verified)
+✅ Tests:          All passing
+✅ Code Quality:   Clean, maintainable implementation
+✅ Documentation:  Complete and up-to-date
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 COMMITS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+bd1003b  Fix cubicle rotation, window sections, add undo/redo, single spawn
+2b6ca81  Add properties panel and fix selection state saving
+f9d7a7f  Update documentation with new features and fixes
+69b448b  Add bug fix summary documentation
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+All user-reported issues have been addressed! 🎉
+
