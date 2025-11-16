@@ -103,7 +103,7 @@ protected:
     void PlaceWindow(const FVector2D& Start, const FVector2D& End, float Thickness, int32 SectionCount);
     void PlaceSpawnPoint(const FVector2D& Location, float HeightOffset, float Yaw);
     void PlaceCubicle(const FVector2D& Center, const FVector2D& Size, float Yaw);
-    void PlaceCeilingLights(const FVector2D& Start, const FVector2D& End, const FVector2D& Spacing, const FVector2D& Padding);
+    void PlaceCeilingLights(const FVector2D& Start, const FVector2D& End, const FVector2D& Spacing, const FVector2D& Padding, float DirectionYawDegrees);
     void PlaceDoor(const FOfficeElementDefinition& Element);
     void PlaceElevator(const FOfficeElementDefinition& Element);
 
@@ -241,12 +241,6 @@ protected:
 
     UPROPERTY(EditAnywhere, Category = "Lighting", meta = (ClampMin = "0.0"))
     float CeilingLightVerticalOffset = 20.0f;
-
-    UPROPERTY(EditAnywhere, Category = "Lighting", meta = (ClampMin = "0.0"))
-    float CeilingRectLightSourceWidth = 0.0f;
-
-    UPROPERTY(EditAnywhere, Category = "Lighting", meta = (ClampMin = "0.0"))
-    float CeilingRectLightSourceHeight = 0.0f;
 
     UPROPERTY(EditAnywhere, Category = "Lighting", meta = (ClampMin = "0.0", ClampMax = "90.0"))
     float CeilingRectLightBarnDoorAngle = 45.0f;

@@ -99,8 +99,6 @@ void AProceduralOfficeGenerator::PostEditChangeProperty(FPropertyChangedEvent &P
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingLightColor) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, bCeilingLightsCastShadows) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingLightVerticalOffset) ||
-            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingRectLightSourceWidth) ||
-            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingRectLightSourceHeight) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingRectLightBarnDoorAngle) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingRectLightBarnDoorLength) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, DoorActorClass) ||
@@ -212,7 +210,7 @@ void AProceduralOfficeGenerator::BuildElement(const FOfficeElementDefinition &El
             PlaceCubicle(Element.Start, Element.Dimensions, Element.Yaw);
             break;
         case EOfficeElementType::CeilingLight:
-            PlaceCeilingLights(Element.Start, Element.End, Element.Spacing, Element.Padding);
+            PlaceCeilingLights(Element.Start, Element.End, Element.Spacing, Element.Padding, Element.Yaw);
             break;
         case EOfficeElementType::Door:
             PlaceDoor(Element);
