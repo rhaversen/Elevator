@@ -826,6 +826,7 @@ class FloorplanEditor:
                 e = item.get("End", {})
                 spacing = item.get("Spacing", {})
                 padding = item.get("Padding", {})
+                yaw = float(item.get("Yaw", 0.0))  # Rotation angle for line generation
                 
                 x0_world = float(s.get("X", 0.0))
                 y0_world = float(s.get("Y", 0.0))
@@ -840,30 +841,89 @@ class FloorplanEditor:
                                                    fill="", width=1)
                 canvas_ids.append(cid)
                 
-                # Draw lamp positions if enabled
+                # Draw lamp positions if enabled - now in lines along rotated axis
                 if self.show_lamps.get():
-                    space_x = float(spacing.get("X", 400.0))
-                    space_y = float(spacing.get("Y", 400.0))
+                    import math
+                    
+                    space_along_line = float(spacing.get("X", 300.0))  # Spacing between lights on a line
+                    space_between_lines = float(spacing.get("Y", 300.0))  # Spacing between parallel lines
                     pad_x = float(padding.get("X", 0.0))
                     pad_y = float(padding.get("Y", 0.0))
                     
-                    # Calculate lamp positions with padding and spacing
-                    min_x = min(x0_world, x1_world) + pad_x
-                    max_x = max(x0_world, x1_world) - pad_x
-                    min_y = min(y0_world, y1_world) + pad_y
-                    max_y = max(y0_world, y1_world) - pad_y
+                    # Calculate the bounding box with padding
+                    min_x = min(x0_world, x1_world)
+                    max_x = max(x0_world, x1_world)
+                    min_y = min(y0_world, y1_world)
+                    max_y = max(y0_world, y1_world)
                     
-                    if space_x > 0 and space_y > 0:
-                        lamp_x = min_x
-                        while lamp_x <= max_x:
-                            lamp_y = min_y
-                            while lamp_y <= max_y:
+                    width = max_x - min_x
+                    height = max_y - min_y
+                    
+                    # Convert yaw to radians (yaw 0 = along X axis, positive is counter-clockwise)
+                    yaw_rad = math.radians(yaw)
+                    
+                    # Direction vectors for the line axis (along which lights are placed)
+                    line_dir_x = math.cos(yaw_rad)
+                    line_dir_y = math.sin(yaw_rad)
+                    
+                    # Perpendicular direction (for spacing between lines)
+                    perp_dir_x = -math.sin(yaw_rad)
+                    perp_dir_y = math.cos(yaw_rad)
+                    
+                    # Calculate effective area after padding in the rotated coordinate system
+                    # Apply padding in the direction of the axes
+                    center_x = (min_x + max_x) / 2
+                    center_y = (min_y + max_y) / 2
+                    
+                    # Calculate the corners of the padded area
+                    # Start from center and work outward with padding adjustments
+                    half_w = width / 2 - pad_x
+                    half_h = height / 2 - pad_y
+                    
+                    if half_w <= 0 or half_h <= 0 or space_along_line <= 0 or space_between_lines <= 0:
+                        # Skip if invalid dimensions
+                        pass
+                    else:
+                        # Project the padded box onto the line axis to get the length along which we place lights
+                        # For simplicity, we'll generate lines across the width perpendicular to yaw
+                        # and lights along the yaw direction
+                        
+                        # Number of lines perpendicular to the yaw direction
+                        num_lines = int(2 * half_h / space_between_lines) + 1
+                        
+                        # Draw lines and lamps
+                        for line_idx in range(num_lines):
+                            # Position along perpendicular axis (centered)
+                            perp_offset = -half_h + line_idx * space_between_lines
+                            
+                            # Starting point of this line
+                            line_start_x = center_x - half_w * line_dir_x + perp_offset * perp_dir_x
+                            line_start_y = center_y - half_w * line_dir_y + perp_offset * perp_dir_y
+                            
+                            line_end_x = center_x + half_w * line_dir_x + perp_offset * perp_dir_x
+                            line_end_y = center_y + half_w * line_dir_y + perp_offset * perp_dir_y
+                            
+                            # Draw the line to show structure
+                            ls_x, ls_y = self.world_to_screen(line_start_x, line_start_y)
+                            le_x, le_y = self.world_to_screen(line_end_x, line_end_y)
+                            line_id = self.canvas.create_line(ls_x, ls_y, le_x, le_y,
+                                                              fill="#ffa500", width=1, dash=(2, 2))
+                            canvas_ids.append(line_id)
+                            
+                            # Place lamps along this line
+                            line_length = 2 * half_w
+                            num_lamps = int(line_length / space_along_line) + 1
+                            
+                            for lamp_idx in range(num_lamps):
+                                along_offset = -half_w + lamp_idx * space_along_line
+                                
+                                lamp_x = center_x + along_offset * line_dir_x + perp_offset * perp_dir_x
+                                lamp_y = center_y + along_offset * line_dir_y + perp_offset * perp_dir_y
+                                
                                 sx, sy = self.world_to_screen(lamp_x, lamp_y)
                                 lamp_id = self.canvas.create_oval(sx - 3, sy - 3, sx + 3, sy + 3,
                                                                   fill="#ffff00", outline="#ffa500")
                                 canvas_ids.append(lamp_id)
-                                lamp_y += space_y
-                            lamp_x += space_x
                 
                 # Add corner anchors
                 anchor_start = self.create_anchor_marker(x0_world, y0_world, color="#ffa500")
@@ -1002,6 +1062,12 @@ class FloorplanEditor:
                 self._add_property_section("Spacing", item["Spacing"], ["X", "Y"])
             if "Padding" in item:
                 self._add_property_section("Padding", item["Padding"], ["X", "Y"])
+            if "Yaw" in item:
+                self._add_yaw_property(item)
+            elif item.get("Yaw") is None:
+                # Add Yaw if it doesn't exist (default to 0)
+                item["Yaw"] = 0.0
+                self._add_yaw_property(item)
     
     def _add_property_section(self, title, data_dict, keys):
         """Add a property section with multiple fields"""
