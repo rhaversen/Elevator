@@ -39,6 +39,8 @@
 **/.history
 # VSCode Workspace Files
 *.code-workspace
+# VSConfig Files
+.vsconfig
 
 #################################
 # Miscellaneous Generated Files #
