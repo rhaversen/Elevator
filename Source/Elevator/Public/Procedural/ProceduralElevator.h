@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Templates/UniquePtr.h"
+#include "Interactable.h"
 #include "Procedural/ProceduralElevatorDoorController.h"
 #include "ProceduralElevator.generated.h"
 
@@ -26,7 +27,7 @@ enum class EProceduralElevatorDoorSlot : uint8
  * Minimal actor that owns moving elevator pieces so each elevator can be controlled independently.
  */
 UCLASS()
-class ELEVATOR_API AProceduralElevator : public AActor
+class ELEVATOR_API AProceduralElevator : public AActor, public IInteractable
 {
     GENERATED_BODY()
 
@@ -60,12 +61,22 @@ public:
     UFUNCTION(BlueprintPure, Category = "Elevator")
     float GetDoorFraction(EProceduralElevatorDoorSlot Slot) const;
 
+    /** Helper to check if a component is one of our interactive buttons */
+    UFUNCTION(BlueprintPure, Category = "Interaction")
+    bool IsInteractiveButton(UPrimitiveComponent* Component) const;
+
+    /** Finds the closest interactive button to a point if it falls within the provided radius. */
+    UFUNCTION(BlueprintPure, Category = "Interaction")
+    UPrimitiveComponent* FindClosestButtonWithinRadius(const FVector& Point, float Radius) const;
+
+    // IInteractable interface
+    virtual bool CanInteract_Implementation(APawn* PlayerPawn) const override;
+    virtual void OnInteract_Implementation(APawn* PlayerPawn) override;
+    virtual FText GetInteractionPrompt_Implementation() const override;
+
 protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     USceneComponent *Root;
-
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    UStaticMeshComponent *CabMesh;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     USceneComponent *FrontDoorsRoot;
@@ -73,26 +84,66 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     USceneComponent *BackDoorsRoot;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    UStaticMeshComponent *FrontLeftDoorMesh;
+    /** Root component for the elevator base mesh */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Base")
+    UStaticMeshComponent *BaseMesh;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    UStaticMeshComponent *FrontRightDoorMesh;
+    /** Door mesh component - assign static mesh here, used for all four doors */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Doors")
+    UStaticMeshComponent *DoorMesh;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    UStaticMeshComponent *BackLeftDoorMesh;
+    /** Individual button meshes - assign in blueprint */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Buttons")
+    UStaticMeshComponent *Button0;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    UStaticMeshComponent *BackRightDoorMesh;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Buttons")
+    UStaticMeshComponent *Button1;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    USceneComponent *ButtonRoot;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Buttons")
+    UStaticMeshComponent *Button2;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    UStaticMeshComponent *ButtonMesh;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Buttons")
+    UStaticMeshComponent *Button3;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    UBoxComponent *ButtonTrigger;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Buttons")
+    UStaticMeshComponent *Button4;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Buttons")
+    UStaticMeshComponent *Button5;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Buttons")
+    UStaticMeshComponent *Button6;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Buttons")
+    UStaticMeshComponent *Button7;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Buttons")
+    UStaticMeshComponent *Button8;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Buttons")
+    UStaticMeshComponent *Button9;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Buttons")
+    UStaticMeshComponent *ButtonAlarm;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Buttons")
+    UStaticMeshComponent *ButtonCallDown;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Buttons")
+    UStaticMeshComponent *ButtonCallUp;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Buttons")
+    UStaticMeshComponent *ButtonDoorClose;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Buttons")
+    UStaticMeshComponent *ButtonDoorOpen;
+
+    /** Indicator meshes - not used for interaction */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Indicators")
+    UStaticMeshComponent *IndicatorUp;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components|Indicators")
+    UStaticMeshComponent *IndicatorDown;
 
     /** Allows moving the front door pair as a unit without touching every mesh. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door|Front", meta = (ClampMin = "-1000.0", ClampMax = "1000.0"))
@@ -130,21 +181,13 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door|Back")
     bool bInheritFrontRootOffsetForBackPair = true;
 
-    /** Enables the built-in interaction button inside the elevator cab. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door|Button")
-    bool bEnableDoorButton = true;
+    /** Maximum distance from which the player can interact with buttons. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction", meta = (ClampMin = "0.0"))
+    float InteractionRange = 200.0f;
 
-    /** Relative location for the interaction button, in cab local space. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door|Button")
-    FVector ButtonRelativeLocation = FVector(10.0f, -90.0f, 110.0f);
-
-    /** Relative rotation for the interaction button. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door|Button")
-    FRotator ButtonRelativeRotation = FRotator::ZeroRotator;
-
-    /** Box trigger extents for the interaction button overlap volume. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door|Button", meta = (ClampMin = "0.0"))
-    FVector ButtonTriggerExtents = FVector(20.0f, 20.0f, 30.0f);
+    /** Text prompt displayed when player looks at a button. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
+    FText InteractionPrompt = FText::FromString(TEXT("Press E to toggle doors"));
 
 private:
     friend class FProceduralElevatorDoorController;
@@ -153,11 +196,15 @@ private:
     void ApplyDoorOffset(EProceduralElevatorDoorSlot Slot);
     UStaticMeshComponent *GetDoorMesh(EProceduralElevatorDoorSlot Slot) const;
     void UpdateDoorRootOffsets();
-    void UpdateButtonConfiguration();
+    void SetupButtonComponents();
+    void SyncDoorMeshes();
     FProceduralElevatorDoorControllerParameters MakeDoorControllerParameters() const;
+    void ToggleDoors();
 
-    UFUNCTION()
-    void HandleButtonOverlap(UPrimitiveComponent *OverlappedComponent, AActor *OtherActor, UPrimitiveComponent *OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult &SweepResult);
+    UStaticMeshComponent *FrontLeftDoorMesh;
+    UStaticMeshComponent *FrontRightDoorMesh;
+    UStaticMeshComponent *BackLeftDoorMesh;
+    UStaticMeshComponent *BackRightDoorMesh;
 
     TUniquePtr<FProceduralElevatorDoorController> DoorController;
 };

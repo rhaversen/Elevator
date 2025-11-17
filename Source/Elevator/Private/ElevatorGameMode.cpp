@@ -1,5 +1,6 @@
 #include "ElevatorGameMode.h"
 
+#include "ElevatorHUD.h"
 #include "FirstPersonCharacter.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerStart.h"
@@ -9,6 +10,7 @@
 AElevatorGameMode::AElevatorGameMode()
 {
     DefaultPawnClass = AFirstPersonCharacter::StaticClass();
+    HUDClass = AElevatorHUD::StaticClass();
     PlayerSpawnTransform = FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::OneVector);
     bUseCustomSpawnTransform = false;
     PreferredPlayerStartTag = FName(TEXT("ProceduralSpawn"));

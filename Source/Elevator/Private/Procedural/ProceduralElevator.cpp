@@ -3,7 +3,6 @@
 #include "Procedural/ProceduralElevatorDoorController.h"
 #include "Procedural/DoorInterpolationFunctions.h"
 
-#include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/EngineTypes.h"
@@ -46,9 +45,17 @@ AProceduralElevator::AProceduralElevator()
     RootComponent = Root;
     Root->SetMobility(EComponentMobility::Movable);
 
-    CabMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Cab"));
-    CabMesh->SetupAttachment(RootComponent);
-    CabMesh->SetMobility(EComponentMobility::Movable);
+    BaseMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BaseMesh"));
+    BaseMesh->SetupAttachment(RootComponent);
+    BaseMesh->SetMobility(EComponentMobility::Movable);
+
+    // Create the visible door mesh component that user assigns the mesh to
+    DoorMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DoorMesh"));
+    DoorMesh->SetupAttachment(RootComponent);
+    DoorMesh->SetMobility(EComponentMobility::Movable);
+    DoorMesh->SetVisibility(false); // Hidden, only used as template
+    DoorMesh->SetHiddenInGame(true);
+    DoorMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
     FrontDoorsRoot = CreateDefaultSubobject<USceneComponent>(TEXT("FrontDoorsRoot"));
     FrontDoorsRoot->SetupAttachment(RootComponent);
@@ -74,24 +81,28 @@ AProceduralElevator::AProceduralElevator()
     BackRightDoorMesh->SetupAttachment(BackDoorsRoot);
     BackRightDoorMesh->SetMobility(EComponentMobility::Movable);
 
-    ButtonRoot = CreateDefaultSubobject<USceneComponent>(TEXT("ButtonRoot"));
-    ButtonRoot->SetupAttachment(RootComponent);
-    ButtonRoot->SetMobility(EComponentMobility::Movable);
+    // Create button components
+    Button0 = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Button0"));
+    Button1 = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Button1"));
+    Button2 = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Button2"));
+    Button3 = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Button3"));
+    Button4 = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Button4"));
+    Button5 = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Button5"));
+    Button6 = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Button6"));
+    Button7 = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Button7"));
+    Button8 = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Button8"));
+    Button9 = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Button9"));
+    ButtonAlarm = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ButtonAlarm"));
+    ButtonCallDown = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ButtonCallDown"));
+    ButtonCallUp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ButtonCallUp"));
+    ButtonDoorClose = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ButtonDoorClose"));
+    ButtonDoorOpen = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ButtonDoorOpen"));
 
-    ButtonMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ButtonMesh"));
-    ButtonMesh->SetupAttachment(ButtonRoot);
-    ButtonMesh->SetMobility(EComponentMobility::Movable);
-    ButtonMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    // Create indicator components
+    IndicatorUp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("IndicatorUp"));
+    IndicatorDown = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("IndicatorDown"));
 
-    ButtonTrigger = CreateDefaultSubobject<UBoxComponent>(TEXT("ButtonTrigger"));
-    ButtonTrigger->SetupAttachment(ButtonRoot);
-    ButtonTrigger->SetMobility(EComponentMobility::Movable);
-    ButtonTrigger->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-    ButtonTrigger->SetCollisionResponseToAllChannels(ECR_Ignore);
-    ButtonTrigger->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
-    ButtonTrigger->SetCollisionResponseToChannel(ECC_Visibility, ECR_Overlap);
-    ButtonTrigger->SetGenerateOverlapEvents(true);
-    ButtonTrigger->OnComponentBeginOverlap.AddDynamic(this, &AProceduralElevator::HandleButtonOverlap);
+    SetupButtonComponents();
 
     FrontDoorRootOffset = FVector::ZeroVector;
     BackDoorRootOffset = FVector::ZeroVector;
@@ -109,8 +120,8 @@ void AProceduralElevator::OnConstruction(const FTransform &Transform)
         DoorController->SetParameters(MakeDoorControllerParameters());
     }
 
+    SyncDoorMeshes();
     RefreshDoorTransforms();
-    UpdateButtonConfiguration();
 }
 
 void AProceduralElevator::Tick(float DeltaSeconds)
@@ -138,17 +149,29 @@ void AProceduralElevator::PostEditChangeProperty(FPropertyChangedEvent &Property
 {
     Super::PostEditChangeProperty(PropertyChangedEvent);
 
-    if (DoorController && PropertyChangedEvent.Property)
+    if (PropertyChangedEvent.Property)
     {
         const FName PropertyName = PropertyChangedEvent.Property->GetFName();
         if (PropertyName == GET_MEMBER_NAME_CHECKED(AProceduralElevator, DoorSlideSpeed))
         {
-            DoorController->SetParameters(MakeDoorControllerParameters());
+            if (DoorController)
+            {
+                DoorController->SetParameters(MakeDoorControllerParameters());
+            }
+        }
+    }
+
+    // Check if DoorMesh component's static mesh changed
+    if (PropertyChangedEvent.MemberProperty)
+    {
+        const FName MemberPropertyName = PropertyChangedEvent.MemberProperty->GetFName();
+        if (MemberPropertyName == GET_MEMBER_NAME_CHECKED(AProceduralElevator, DoorMesh))
+        {
+            SyncDoorMeshes();
         }
     }
 
     RefreshDoorTransforms();
-    UpdateButtonConfiguration();
 }
 #endif
 
@@ -224,8 +247,8 @@ void AProceduralElevator::ApplyDoorOffset(EProceduralElevatorDoorSlot Slot)
         return;
     }
 
-    UStaticMeshComponent *DoorMesh = GetDoorMesh(Slot);
-    if (!DoorMesh)
+    UStaticMeshComponent *DoorMeshComponent = GetDoorMesh(Slot);
+    if (!DoorMeshComponent)
     {
         return;
     }
@@ -235,65 +258,151 @@ void AProceduralElevator::ApplyDoorOffset(EProceduralElevatorDoorSlot Slot)
     const float OpenX = ClosedX + DirectionSign * DoorSlideDistance;
     const float Fraction = FMath::Clamp(GetDoorFraction(Slot), 0.0f, 1.0f);
 
-    FVector DesiredLocation = DoorMesh->GetRelativeLocation();
+    FVector DesiredLocation = DoorMeshComponent->GetRelativeLocation();
     DesiredLocation.X = FMath::Lerp(ClosedX, OpenX, Fraction);
 
 #if WITH_EDITOR
-    if (UWorld *World = DoorMesh->GetWorld(); World && World->WorldType == EWorldType::Editor)
+    if (UWorld *World = DoorMeshComponent->GetWorld(); World && World->WorldType == EWorldType::Editor)
     {
-        DoorMesh->Modify();
-        DoorMesh->MarkRenderTransformDirty();
+        DoorMeshComponent->Modify();
+        DoorMeshComponent->MarkRenderTransformDirty();
     }
 #endif
 
-    DoorMesh->SetRelativeLocation(DesiredLocation, false, nullptr, ETeleportType::TeleportPhysics);
+    DoorMeshComponent->SetRelativeLocation(DesiredLocation, false, nullptr, ETeleportType::TeleportPhysics);
 }
 
-void AProceduralElevator::UpdateButtonConfiguration()
+void AProceduralElevator::SetupButtonComponents()
 {
-    if (!ButtonRoot || !ButtonTrigger || !ButtonMesh)
+    TArray<UStaticMeshComponent*> AllButtons = {
+        Button0, Button1, Button2, Button3, Button4, Button5,
+        Button6, Button7, Button8, Button9, ButtonAlarm,
+        ButtonCallDown, ButtonCallUp, ButtonDoorClose, ButtonDoorOpen
+    };
+
+    for (UStaticMeshComponent* Button : AllButtons)
     {
-        return;
+        if (Button)
+        {
+            Button->SetupAttachment(RootComponent);
+            Button->SetMobility(EComponentMobility::Movable);
+            Button->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+            Button->SetCollisionResponseToAllChannels(ECR_Ignore);
+            Button->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+        }
     }
 
-    ButtonRoot->SetRelativeLocation(ButtonRelativeLocation);
-    ButtonRoot->SetRelativeRotation(ButtonRelativeRotation);
-
-    const bool bShouldEnable = bEnableDoorButton;
-
-    ButtonRoot->SetVisibility(bShouldEnable, true);
-    ButtonRoot->SetHiddenInGame(!bShouldEnable, true);
-    ButtonMesh->SetVisibility(bShouldEnable, true);
-    ButtonMesh->SetHiddenInGame(!bShouldEnable);
-    if (bShouldEnable)
+    TArray<UStaticMeshComponent*> AllIndicators = { IndicatorUp, IndicatorDown };
+    for (UStaticMeshComponent* Indicator : AllIndicators)
     {
-        const FVector ClampedExtents(
-            FMath::Max(ButtonTriggerExtents.X, 1.0f),
-            FMath::Max(ButtonTriggerExtents.Y, 1.0f),
-            FMath::Max(ButtonTriggerExtents.Z, 1.0f));
-        ButtonTrigger->SetBoxExtent(ClampedExtents);
-        ButtonTrigger->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-        ButtonTrigger->SetGenerateOverlapEvents(true);
-    }
-    else
-    {
-        ButtonTrigger->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-        ButtonTrigger->SetGenerateOverlapEvents(false);
+        if (Indicator)
+        {
+            Indicator->SetupAttachment(RootComponent);
+            Indicator->SetMobility(EComponentMobility::Movable);
+            Indicator->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        }
     }
 }
 
-void AProceduralElevator::HandleButtonOverlap(UPrimitiveComponent *OverlappedComponent, AActor *OtherActor, UPrimitiveComponent *OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult &SweepResult)
+void AProceduralElevator::SyncDoorMeshes()
 {
-    if (!bEnableDoorButton || !OtherActor || OtherActor == this)
+    if (!DoorMesh)
     {
         return;
     }
 
-    if (!OtherActor->IsA(APawn::StaticClass()))
+    UStaticMesh* Mesh = DoorMesh->GetStaticMesh();
+    if (!Mesh)
     {
         return;
     }
 
+    // Sync the mesh to all four door panels
+    TArray<UStaticMeshComponent*> AllDoorMeshes = {
+        FrontLeftDoorMesh, FrontRightDoorMesh, BackLeftDoorMesh, BackRightDoorMesh
+    };
+
+    for (UStaticMeshComponent* DoorMeshComponent : AllDoorMeshes)
+    {
+        if (DoorMeshComponent && DoorMeshComponent->GetStaticMesh() != Mesh)
+        {
+            DoorMeshComponent->SetStaticMesh(Mesh);
+        }
+    }
+}
+
+bool AProceduralElevator::IsInteractiveButton(UPrimitiveComponent* Component) const
+{
+    return Component == Button0 || Component == Button1 || Component == Button2 ||
+           Component == Button3 || Component == Button4 || Component == Button5 ||
+           Component == Button6 || Component == Button7 || Component == Button8 ||
+           Component == Button9 || Component == ButtonAlarm || Component == ButtonCallDown ||
+           Component == ButtonCallUp || Component == ButtonDoorClose || Component == ButtonDoorOpen;
+}
+
+UPrimitiveComponent* AProceduralElevator::FindClosestButtonWithinRadius(const FVector& Point, float Radius) const
+{
+    if (Radius <= 0.0f)
+    {
+        return nullptr;
+    }
+
+    const float RadiusSquared = Radius * Radius;
+    float ClosestDistanceSquared = RadiusSquared;
+    UPrimitiveComponent* ClosestButton = nullptr;
+
+    const TArray<UStaticMeshComponent*> AllButtons = {
+        Button0, Button1, Button2, Button3, Button4, Button5,
+        Button6, Button7, Button8, Button9, ButtonAlarm,
+        ButtonCallDown, ButtonCallUp, ButtonDoorClose, ButtonDoorOpen
+    };
+
+    for (UStaticMeshComponent* Button : AllButtons)
+    {
+        if (!Button)
+        {
+            continue;
+        }
+
+        FVector ClosestPoint;
+        const float DistanceToCollision = Button->GetClosestPointOnCollision(Point, ClosestPoint);
+        const bool bHasClosestPoint = DistanceToCollision >= 0.0f;
+        const float DistanceSquared = bHasClosestPoint
+            ? FVector::DistSquared(Point, ClosestPoint)
+            : FVector::DistSquared(Point, Button->GetComponentLocation());
+
+        if (DistanceSquared <= ClosestDistanceSquared)
+        {
+            ClosestDistanceSquared = DistanceSquared;
+            ClosestButton = Button;
+        }
+    }
+
+    return ClosestButton;
+}
+
+bool AProceduralElevator::CanInteract_Implementation(APawn* PlayerPawn) const
+{
+    return DoorController != nullptr;
+}
+
+void AProceduralElevator::OnInteract_Implementation(APawn* PlayerPawn)
+{
+    if (!DoorController)
+    {
+        return;
+    }
+
+    ToggleDoors();
+}
+
+FText AProceduralElevator::GetInteractionPrompt_Implementation() const
+{
+    return InteractionPrompt;
+}
+
+void AProceduralElevator::ToggleDoors()
+{
     if (!DoorController)
     {
         return;
