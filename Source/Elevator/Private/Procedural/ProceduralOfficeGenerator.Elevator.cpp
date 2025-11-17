@@ -1,25 +1,15 @@
 #include "Procedural/ProceduralOfficeGenerator.h"
 #include "Procedural/ProceduralOfficeGenerator.Helpers.h"
 #include "Procedural/ProceduralOfficeGenerator.Log.h"
+#include "Procedural/ProceduralElevator.h"
 
+#include "Components/ChildActorComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/RectLightComponent.h"
+#include "Components/SceneComponent.h"
 
 void AProceduralOfficeGenerator::PlaceElevator(const FOfficeElementDefinition &Element)
 {
-    UStaticMesh *ElevatorMeshPtr = ElevatorMesh.Get();
-    if (!ElevatorMeshPtr)
-    {
-        UE_LOG(LogProceduralOffice, Warning, TEXT("Elevator mesh not assigned."));
-        return;
-    }
-
-    UInstancedStaticMeshComponent *Component = GetOrCreateISMC(ElevatorMeshPtr, FName(TEXT("Elevator")), ElevatorMaterialOverride.Get());
-    if (!Component)
-    {
-        return;
-    }
-
     float TotalSpan = 0.0f;
     FVector2D UnitDirection2D = ProceduralOffice::Utils::CalculateUnitDirection(Element.Start, Element.End, TotalSpan);
     FVector2D Center2D = Element.Start;
@@ -27,6 +17,10 @@ void AProceduralOfficeGenerator::PlaceElevator(const FOfficeElementDefinition &E
 
     FVector2D WallStart2D = Element.Start;
     FVector2D WallEnd2D = Element.End;
+
+    const float ApproxWidth = (Element.Dimensions.X > KINDA_SMALL_NUMBER) ? Element.Dimensions.X : ElevatorDefaultWidth;
+    const float ApproxDepth = (Element.Dimensions.Y > KINDA_SMALL_NUMBER) ? Element.Dimensions.Y : ElevatorDefaultDepth;
+    const float ApproxHeight = (Element.Height > KINDA_SMALL_NUMBER) ? Element.Height : ElevatorDefaultHeight;
 
     if (TotalSpan > KINDA_SMALL_NUMBER)
     {
@@ -38,13 +32,7 @@ void AProceduralOfficeGenerator::PlaceElevator(const FOfficeElementDefinition &E
         const float YawRadians = FMath::DegreesToRadians(YawDegrees);
         UnitDirection2D = FVector2D(FMath::Cos(YawRadians), FMath::Sin(YawRadians));
 
-        float DefaultSpan = Element.Dimensions.X;
-        if (DefaultSpan <= KINDA_SMALL_NUMBER)
-        {
-            DefaultSpan = ElevatorMeshPtr->GetBounds().BoxExtent.X * 2.0f;
-        }
-
-        TotalSpan = FMath::Max(DefaultSpan, 1.0f);
+        TotalSpan = FMath::Max(ApproxWidth, 1.0f);
         const FVector2D HalfSpan = UnitDirection2D * (TotalSpan * 0.5f);
         WallStart2D = Center2D - HalfSpan;
         WallEnd2D = Center2D + HalfSpan;
@@ -53,9 +41,49 @@ void AProceduralOfficeGenerator::PlaceElevator(const FOfficeElementDefinition &E
     const FVector2D PerpDirection2D(-UnitDirection2D.Y, UnitDirection2D.X);
     const FVector ElevatorInsetOffset(PerpDirection2D.X * ElevatorWallInset, PerpDirection2D.Y * ElevatorWallInset, 0.0f);
 
-    const FVector Location = FVector(Center2D.X, Center2D.Y, FloorHeight + Element.HeightOffset) + ElevatorInsetOffset;
-    const FTransform InstanceTransform(FRotator(0.0f, YawDegrees, 0.0f), Location, FVector::OneVector);
-    Component->AddInstance(InstanceTransform);
+    const FVector BaseLocation = FVector(Center2D.X, Center2D.Y, FloorHeight + Element.HeightOffset) + ElevatorInsetOffset;
+    const FRotator BaseRotation(0.0f, YawDegrees, 0.0f);
+    const FTransform BaseTransform(BaseRotation, BaseLocation, FVector::OneVector);
+
+    if (ElevatorActorClass)
+    {
+        const FTransform SpawnTransform = ElevatorActorOffset * BaseTransform;
+        const FVector SpawnLocation = SpawnTransform.GetTranslation();
+        const FRotator SpawnRotation = SpawnTransform.GetRotation().Rotator();
+        const FVector OffsetScale = SpawnTransform.GetScale3D();
+
+        const FName ComponentName = MakeUniqueObjectName(this, UChildActorComponent::StaticClass(), FName(TEXT("ProceduralElevator")));
+        if (UChildActorComponent *ElevatorComponent = NewObject<UChildActorComponent>(this, ComponentName))
+        {
+            ElevatorComponent->CreationMethod = EComponentCreationMethod::UserConstructionScript;
+            ElevatorComponent->SetMobility(EComponentMobility::Movable);
+            ElevatorComponent->SetupAttachment(Root);
+            ElevatorComponent->SetChildActorClass(ElevatorActorClass);
+            ElevatorComponent->RegisterComponent();
+
+            FVector BlueprintScale = FVector::OneVector;
+            if (AActor *ExistingChild = ElevatorComponent->GetChildActor())
+            {
+                BlueprintScale = ExistingChild->GetActorScale3D();
+            }
+
+            const FVector DesiredScale = BlueprintScale * OffsetScale * ElevatorActorScale;
+            ElevatorComponent->SetWorldLocationAndRotation(SpawnLocation, SpawnRotation);
+            ElevatorComponent->SetWorldScale3D(DesiredScale);
+            ElevatorComponent->UpdateComponentToWorld();
+
+            if (AActor *ChildActor = ElevatorComponent->GetChildActor())
+            {
+                ChildActor->SetActorTransform(ElevatorComponent->GetComponentTransform());
+            }
+
+            SpawnedChildActors.Add(ElevatorComponent);
+        }
+    }
+    else
+    {
+        UE_LOG(LogProceduralOffice, Verbose, TEXT("Elevator actor class not set; skipping cab actor spawn."));
+    }
 
     if (bSpawnElevatorLightComponents && ElevatorLightIntensity > KINDA_SMALL_NUMBER)
     {
@@ -75,10 +103,9 @@ void AProceduralOfficeGenerator::PlaceElevator(const FOfficeElementDefinition &E
             NewLight->RegisterComponent();
 
             float ElevatorTop = CeilingHeight;
-            if (ElevatorMeshPtr)
+            if (ApproxHeight > KINDA_SMALL_NUMBER)
             {
-                const float MeshHeight = ElevatorMeshPtr->GetBounds().BoxExtent.Z * 2.0f;
-                ElevatorTop = FloorHeight + Element.HeightOffset + MeshHeight;
+                ElevatorTop = FloorHeight + Element.HeightOffset + ApproxHeight;
             }
 
             const FVector LightLocation = FVector(Center2D.X, Center2D.Y, ElevatorTop - ElevatorLightVerticalOffset) + ElevatorInsetOffset;
@@ -129,18 +156,17 @@ void AProceduralOfficeGenerator::PlaceElevator(const FOfficeElementDefinition &E
     }
 
     // Build an interior shaft using dedicated meshes so the cab sits cleanly behind the doorway.
-    const float ElevatorMeshDepth = ElevatorMeshPtr ? ElevatorMeshPtr->GetBounds().BoxExtent.Y * 2.0f : 0.0f;
     float RequestedShaftDepth = Element.Dimensions.Y;
     if (RequestedShaftDepth <= KINDA_SMALL_NUMBER)
     {
-        RequestedShaftDepth = ElevatorMeshDepth;
+        RequestedShaftDepth = ApproxDepth;
     }
     if (RequestedShaftDepth <= KINDA_SMALL_NUMBER)
     {
         RequestedShaftDepth = 200.0f;
     }
 
-    const float MeshHalfDepth = ElevatorMeshDepth * 0.5f;
+    const float MeshHalfDepth = ApproxDepth * 0.5f;
     const float InsetForDepth = FMath::Max(ElevatorWallInset, 0.0f);
     const float MinimumDepth = InsetForDepth + MeshHalfDepth;
     float ShaftDepth = FMath::Max(FMath::Max(RequestedShaftDepth, MinimumDepth), KINDA_SMALL_NUMBER);
@@ -251,62 +277,14 @@ void AProceduralOfficeGenerator::PlaceElevator(const FOfficeElementDefinition &E
         }
     }
 
-    const auto SpawnElevatorDoor = [&](bool bUseLeftMesh, const FVector2D& DoorCenter2D, float DepthOffset, float OpenRatio)
-    {
-        UStaticMesh *DoorMesh = bUseLeftMesh ? ElevatorDoorMeshLeft.Get() : ElevatorDoorMeshRight.Get();
-        if (!DoorMesh)
-        {
-            return;
-        }
-
-        UMaterialInterface *DoorMaterialOverride = bUseLeftMesh ? ElevatorDoorMaterialOverrideLeft.Get() : ElevatorDoorMaterialOverrideRight.Get();
-        const FName ComponentName = bUseLeftMesh ? FName(TEXT("ElevatorDoorLeft")) : FName(TEXT("ElevatorDoorRight"));
-        UInstancedStaticMeshComponent *DoorComponent = GetOrCreateISMC(DoorMesh, ComponentName, DoorMaterialOverride);
-        if (!DoorComponent)
-        {
-            return;
-        }
-
-        const FVector ClosedOffset = bUseLeftMesh ? ElevatorDoorLeftClosedOffset : ElevatorDoorRightClosedOffset;
-        const FVector OpenOffset = bUseLeftMesh ? ElevatorDoorLeftOpenOffset : ElevatorDoorRightOpenOffset;
-        const float ClampedRatio = FMath::Clamp(OpenRatio, 0.0f, 1.0f);
-        const FVector LocalOffset = FMath::Lerp(ClosedOffset, OpenOffset, ClampedRatio);
-
-        const FVector WorldPerp(PerpDirection2D.X, PerpDirection2D.Y, 0.0f);
-        const FVector BaseLocation = FVector(DoorCenter2D.X, DoorCenter2D.Y, FloorHeight + Element.HeightOffset) + ElevatorInsetOffset + WorldPerp * DepthOffset;
-        const FRotator DoorRotation(0.0f, YawDegrees, 0.0f);
-        const FVector DoorLocation = BaseLocation + DoorRotation.RotateVector(LocalOffset);
-        const FTransform DoorTransform(DoorRotation, DoorLocation, ElevatorDoorScale);
-        DoorComponent->AddInstance(DoorTransform);
-    };
-
-    const FVector2D OpeningCenter2D = (AdjustedLeftEdge + AdjustedRightEdge) * 0.5f;
-    const FVector2D DoorHalfOffset = UnitDirection2D * (FinalOpeningWidth * 0.25f);
-    const FVector2D LeftDoorCenter2D = OpeningCenter2D - DoorHalfOffset;
-    const FVector2D RightDoorCenter2D = OpeningCenter2D + DoorHalfOffset;
-
-    SpawnElevatorDoor(true, LeftDoorCenter2D, ElevatorDoorOuterOffset, ElevatorDoorOuterOpenRatio);
-    SpawnElevatorDoor(false, RightDoorCenter2D, ElevatorDoorOuterOffset, ElevatorDoorOuterOpenRatio);
-    SpawnElevatorDoor(true, LeftDoorCenter2D, ElevatorDoorInnerOffset, ElevatorDoorInnerOpenRatio);
-    SpawnElevatorDoor(false, RightDoorCenter2D, ElevatorDoorInnerOffset, ElevatorDoorInnerOpenRatio);
-
     const float WallHeight = ProceduralOffice::Utils::ComputeWallHeight(FloorHeight, CeilingHeight, 0.0f);
-    float RequestedElevatorHeight = Element.Height;
-    float ElevatorMeshHeight = 0.0f;
-    if (ElevatorMeshPtr)
+    float RequestedElevatorHeight = (Element.Height > KINDA_SMALL_NUMBER) ? Element.Height : ApproxHeight;
+    if (ApproxHeight > KINDA_SMALL_NUMBER)
     {
-        ElevatorMeshHeight = ElevatorMeshPtr->GetBounds().BoxExtent.Z * 2.0f;
-    }
-    if (RequestedElevatorHeight <= KINDA_SMALL_NUMBER)
-    {
-        RequestedElevatorHeight = ElevatorMeshHeight;
-    }
-    else if (ElevatorMeshHeight > KINDA_SMALL_NUMBER)
-    {
-        RequestedElevatorHeight = FMath::Max(RequestedElevatorHeight, ElevatorMeshHeight);
+        RequestedElevatorHeight = FMath::Max(RequestedElevatorHeight, ApproxHeight);
     }
     const float FinalElevatorHeight = FMath::Min(FMath::Max(RequestedElevatorHeight, KINDA_SMALL_NUMBER), WallHeight);
-    const float TopPadding = ElevatorTopWallPadding;
+    const float TopPadding = FMath::Max(ElevatorTopWallPadding, 0.0f);
     const float FillHeight = WallHeight - FinalElevatorHeight - TopPadding;
 
     if (FillHeight > KINDA_SMALL_NUMBER)

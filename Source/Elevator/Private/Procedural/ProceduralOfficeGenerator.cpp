@@ -1,6 +1,7 @@
 #include "Procedural/ProceduralOfficeGenerator.h"
 #include "Procedural/ProceduralOfficeGenerator.Helpers.h"
 #include "Procedural/ProceduralOfficeGenerator.Log.h"
+#include "Procedural/ProceduralElevator.h"
 
 #include "Components/ChildActorComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -20,6 +21,8 @@ AProceduralOfficeGenerator::AProceduralOfficeGenerator()
     SetRootComponent(Root);
 
     LayoutFileRelativePath = TEXT("Layouts/ExampleOpenOffice.json");
+
+    ElevatorActorClass = AProceduralElevator::StaticClass();
 }
 
 void AProceduralOfficeGenerator::OnConstruction(const FTransform &Transform)
@@ -116,7 +119,13 @@ void AProceduralOfficeGenerator::PostEditChangeProperty(FPropertyChangedEvent &P
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, ElevatorRectLightBarnDoorAngle) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, ElevatorRectLightBarnDoorLength) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, ElevatorWallPadding) ||
-            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, ElevatorWallInset))
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, ElevatorWallInset) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, ElevatorActorClass) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, ElevatorActorOffset) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, ElevatorActorScale) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, ElevatorDefaultWidth) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, ElevatorDefaultDepth) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, ElevatorDefaultHeight))
         {
             GenerateFromData();
         }
@@ -271,10 +280,19 @@ void AProceduralOfficeGenerator::DestroySpawnedComponents()
 
     for (UChildActorComponent *ChildComponent : SpawnedChildActors)
     {
-        if (ChildComponent)
+        if (!ChildComponent)
         {
-            ChildComponent->DestroyComponent();
+            continue;
         }
+
+        ChildComponent->DestroyChildActor();
+
+        if (ChildComponent->IsRegistered())
+        {
+            ChildComponent->UnregisterComponent();
+        }
+
+        ChildComponent->DestroyComponent();
     }
     SpawnedChildActors.Empty();
 
@@ -295,4 +313,5 @@ void AProceduralOfficeGenerator::DestroySpawnedComponents()
         }
     }
     SpawnedElevatorLights.Empty();
+
 }
