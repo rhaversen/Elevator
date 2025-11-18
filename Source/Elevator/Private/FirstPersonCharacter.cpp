@@ -1,13 +1,13 @@
 #include "FirstPersonCharacter.h"
 
 #include "Interactable.h"
+#include "InteractionFocusProvider.h"
 #include "Procedural/ProceduralElevator.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/InputComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "DrawDebugHelpers.h"
 
 AFirstPersonCharacter::AFirstPersonCharacter()
 {
@@ -84,37 +84,23 @@ void AFirstPersonCharacter::Tick(float DeltaSeconds)
             {
                 if (AActor* HitActor = HitResult.GetActor())
                 {
-                    // Check if this is a button on an elevator first
-                    if (AProceduralElevator* Elevator = Cast<AProceduralElevator>(HitActor))
+                    if (HitActor->Implements<UInteractionFocusProvider>())
                     {
-                        UPrimitiveComponent* ButtonComponent = nullptr;
+                        UPrimitiveComponent* CandidateHighlight = nullptr;
+                        const bool bHasFocus = IInteractionFocusProvider::Execute_EvaluateInteractionFocus(HitActor, this, HitResult, InteractionAssistRadius, CandidateHighlight);
 
-                        if (UPrimitiveComponent* HitComponent = HitResult.GetComponent())
+                        if (bHasFocus && HitActor->Implements<UInteractable>())
                         {
-                            if (Elevator->IsInteractiveButton(HitComponent))
+                            IInteractable* Interactable = Cast<IInteractable>(HitActor);
+                            if (Interactable && Interactable->Execute_CanInteract(HitActor, this))
                             {
-                                ButtonComponent = HitComponent;
-                            }
-                        }
-
-                        if (!ButtonComponent && ButtonSearchRadius > 0.0f)
-                        {
-                            const FVector SearchOrigin = HitResult.ImpactPoint.IsNearlyZero() ? HitResult.Location : HitResult.ImpactPoint;
-                            ButtonComponent = Elevator->FindClosestButtonWithinRadius(SearchOrigin, ButtonSearchRadius);
-                        }
-
-                        if (ButtonComponent && Elevator->Implements<UInteractable>())
-                        {
-                            IInteractable* Interactable = Cast<IInteractable>(Elevator);
-                            if (Interactable && Interactable->Execute_CanInteract(Elevator, this))
-                            {
-                                CurrentInteractable = Elevator;
-                                NewHighlightComponent = ButtonComponent;
+                                CurrentInteractable = HitActor;
+                                NewHighlightComponent = CandidateHighlight;
                             }
                         }
                     }
-                    // For other interactables that aren't elevators
-                    else if (HitActor->Implements<UInteractable>())
+
+                    if (!CurrentInteractable && HitActor->Implements<UInteractable>())
                     {
                         IInteractable* Interactable = Cast<IInteractable>(HitActor);
                         if (Interactable && Interactable->Execute_CanInteract(HitActor, this))
@@ -126,7 +112,7 @@ void AFirstPersonCharacter::Tick(float DeltaSeconds)
             }
         }
 
-        UpdateButtonHighlight(NewHighlightComponent);
+        UpdateInteractionHighlight(NewHighlightComponent);
     }
 }
 
@@ -209,13 +195,8 @@ void AFirstPersonCharacter::Interact()
 {
     if (CurrentInteractable && CurrentInteractable->Implements<UInteractable>())
     {
-        // Log which button was clicked if we have a highlighted component
+        // Log which component was clicked if we have a highlight to report
         if (CurrentHighlightedComponent)
-        {
-            FString ButtonName = CurrentHighlightedComponent->GetName();
-            UE_LOG(LogTemp, Display, TEXT("Button clicked: %s"), *ButtonName);
-        }
-
         if (AProceduralElevator* Elevator = Cast<AProceduralElevator>(CurrentInteractable))
         {
             if (CurrentHighlightedComponent && Elevator->HandleButtonPressed(CurrentHighlightedComponent))
@@ -228,9 +209,9 @@ void AFirstPersonCharacter::Interact()
     }
 }
 
-void AFirstPersonCharacter::UpdateButtonHighlight(UPrimitiveComponent* NewComponent)
+void AFirstPersonCharacter::UpdateInteractionHighlight(UPrimitiveComponent* NewComponent)
 {
-    if (!bEnableButtonHighlight)
+    if (!bEnableInteractionHighlight)
     {
         return;
     }
@@ -247,10 +228,7 @@ void AFirstPersonCharacter::UpdateButtonHighlight(UPrimitiveComponent* NewCompon
     if (CurrentHighlightedComponent)
     {
         CurrentHighlightedComponent->SetRenderCustomDepth(true);
-        CurrentHighlightedComponent->SetCustomDepthStencilValue(252); // Use 252 for highlight outline
-        
-        // Log which button is being hovered
-        FString ButtonName = CurrentHighlightedComponent->GetName();
-        UE_LOG(LogTemp, Verbose, TEXT("Hovering over button: %s"), *ButtonName);
+        CurrentHighlightedComponent->SetCustomDepthStencilValue(252); // Outline value reserved for interaction highlight
+
     }
 }

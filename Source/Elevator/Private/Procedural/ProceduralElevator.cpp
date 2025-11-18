@@ -347,6 +347,34 @@ bool AProceduralElevator::IsInteractiveButton(UPrimitiveComponent* Component) co
            Component == ButtonCallUp || Component == ButtonDoorClose || Component == ButtonDoorOpen;
 }
 
+bool AProceduralElevator::EvaluateInteractionFocus_Implementation(APawn* PlayerPawn, const FHitResult& Hit, float AssistRadius, UPrimitiveComponent*& OutHighlightComponent)
+{
+    OutHighlightComponent = nullptr;
+
+    UPrimitiveComponent* ButtonComponent = nullptr;
+    if (UPrimitiveComponent* HitComponent = Hit.GetComponent())
+    {
+        if (IsInteractiveButton(HitComponent))
+        {
+            ButtonComponent = HitComponent;
+        }
+    }
+
+    if (!ButtonComponent && AssistRadius > 0.0f)
+    {
+        const FVector SearchOrigin = Hit.ImpactPoint.IsNearlyZero() ? Hit.Location : Hit.ImpactPoint;
+        ButtonComponent = FindClosestButtonWithinRadius(SearchOrigin, AssistRadius);
+    }
+
+    if (ButtonComponent)
+    {
+        OutHighlightComponent = ButtonComponent;
+        return true;
+    }
+
+    return false;
+}
+
 UPrimitiveComponent* AProceduralElevator::FindClosestButtonWithinRadius(const FVector& Point, float Radius) const
 {
     if (Radius <= 0.0f)

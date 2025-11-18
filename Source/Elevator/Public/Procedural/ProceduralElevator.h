@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "Templates/UniquePtr.h"
 #include "Interactable.h"
+#include "InteractionFocusProvider.h"
 #include "Procedural/ProceduralElevatorDoorController.h"
 #include "TimerManager.h"
 #include "ProceduralElevator.generated.h"
@@ -28,7 +29,7 @@ enum class EProceduralElevatorDoorSlot : uint8
  * Minimal actor that owns moving elevator pieces so each elevator can be controlled independently.
  */
 UCLASS()
-class ELEVATOR_API AProceduralElevator : public AActor, public IInteractable
+class ELEVATOR_API AProceduralElevator : public AActor, public IInteractable, public IInteractionFocusProvider
 {
     GENERATED_BODY()
 
@@ -76,6 +77,9 @@ public:
     virtual bool CanInteract_Implementation(APawn* PlayerPawn) const override;
     virtual void OnInteract_Implementation(APawn* PlayerPawn) override;
     virtual FText GetInteractionPrompt_Implementation() const override;
+
+    // IInteractionFocusProvider interface
+    virtual bool EvaluateInteractionFocus_Implementation(APawn* PlayerPawn, const FHitResult& Hit, float AssistRadius, UPrimitiveComponent*& OutHighlightComponent) override;
 
 protected:
     virtual void BeginPlay() override;

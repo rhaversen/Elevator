@@ -5,7 +5,9 @@
 
 #include "Components/ChildActorComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Components/RectLightComponent.h"
+#include "Engine/EngineTypes.h"
 #include "GameFramework/PlayerStart.h"
 #include "JsonObjectConverter.h"
 #include "Misc/FileHelper.h"
@@ -14,6 +16,9 @@
 // Core lifecycle and shared logic for the procedural office generator lives in this translation unit.
 
 DEFINE_LOG_CATEGORY(LogProceduralOffice);
+
+const FName AProceduralOfficeGenerator::WorkstationMonitorComponentKey(TEXT("CubicleComputer"));
+const FName AProceduralOfficeGenerator::WorkstationMonitorTag(TEXT("WorkstationMonitor"));
 
 AProceduralOfficeGenerator::AProceduralOfficeGenerator()
 {
@@ -239,6 +244,9 @@ void AProceduralOfficeGenerator::BuildFromLayout(const FOfficeLayout &Layout)
     {
         BuildElement(Element);
     }
+
+    ResolveComputerMeshComponent();
+    HideComputerHighlight();
 }
 
 void AProceduralOfficeGenerator::BuildElement(const FOfficeElementDefinition &Element)
@@ -285,9 +293,9 @@ UInstancedStaticMeshComponent *AProceduralOfficeGenerator::GetOrCreateISMC(UStat
         return nullptr;
     }
 
-    if (UInstancedStaticMeshComponent **Found = InstancedCache.Find(ComponentName))
+    if (TObjectPtr<UInstancedStaticMeshComponent>* Found = InstancedCache.Find(ComponentName))
     {
-        return *Found;
+        return Found->Get();
     }
 
     UInstancedStaticMeshComponent *NewComponent = NewObject<UInstancedStaticMeshComponent>(this, ComponentName);
@@ -322,6 +330,15 @@ void AProceduralOfficeGenerator::DestroySpawnedComponents()
     }
     SpawnedInstancedComponents.Empty();
     InstancedCache.Empty();
+
+    ComputerMeshComponent = nullptr;
+    HoveredComputerInstanceIndex = INDEX_NONE;
+
+    if (IsValid(ComputerHighlightProxy))
+    {
+        ComputerHighlightProxy->DestroyComponent();
+        ComputerHighlightProxy = nullptr;
+    }
 
     for (UChildActorComponent *ChildComponent : SpawnedChildActors)
     {
@@ -359,4 +376,223 @@ void AProceduralOfficeGenerator::DestroySpawnedComponents()
     }
     SpawnedElevatorLights.Empty();
 
+}
+
+bool AProceduralOfficeGenerator::EvaluateInteractionFocus_Implementation(APawn *PlayerPawn, const FHitResult &Hit, float AssistRadius, UPrimitiveComponent *&OutHighlightComponent)
+{
+    OutHighlightComponent = nullptr;
+    HoveredComputerInstanceIndex = INDEX_NONE;
+
+    UInstancedStaticMeshComponent* ActiveComputerComponent = ComputerMeshComponent.Get();
+    if (!IsValid(ActiveComputerComponent))
+    {
+        ActiveComputerComponent = ResolveComputerMeshComponent();
+    }
+
+    if (!IsValid(ActiveComputerComponent))
+    {
+        HideComputerHighlight();
+        return false;
+    }
+
+    const UPrimitiveComponent* HitComponent = Hit.GetComponent();
+    const bool bHitMonitorComponent = (HitComponent == ActiveComputerComponent);
+
+    if (!bHitMonitorComponent)
+    {
+        HideComputerHighlight();
+        return false;
+    }
+
+    int32 InstanceIndex = Hit.Item >= 0 ? Hit.Item : INDEX_NONE;
+
+    if (InstanceIndex == INDEX_NONE && AssistRadius > 0.0f)
+    {
+        const FVector SearchOrigin = Hit.ImpactPoint.IsNearlyZero() ? Hit.Location : Hit.ImpactPoint;
+        InstanceIndex = FindClosestComputerInstance(SearchOrigin, AssistRadius);
+    }
+
+    if (InstanceIndex == INDEX_NONE)
+    {
+        HideComputerHighlight();
+        return false;
+    }
+
+    NotifyComputerLookedAt(ActiveComputerComponent, InstanceIndex);
+
+    FTransform InstanceTransform;
+    if (!ActiveComputerComponent->GetInstanceTransform(InstanceIndex, InstanceTransform, true))
+    {
+        HideComputerHighlight();
+        return false;
+    }
+
+    if (UStaticMeshComponent* HighlightProxyComponent = GetOrCreateComputerHighlightProxy(ActiveComputerComponent))
+    {
+        HighlightProxyComponent->SetWorldTransform(InstanceTransform);
+        HighlightProxyComponent->SetVisibility(true);
+        HighlightProxyComponent->SetRenderCustomDepth(true);
+        HighlightProxyComponent->SetCustomDepthStencilValue(252);
+        HighlightProxyComponent->MarkRenderTransformDirty();
+        OutHighlightComponent = HighlightProxyComponent;
+    }
+    else
+    {
+        OutHighlightComponent = ActiveComputerComponent;
+    }
+    return true;
+}
+
+bool AProceduralOfficeGenerator::CanInteract_Implementation(APawn *PlayerPawn) const
+{
+    return HoveredComputerInstanceIndex != INDEX_NONE;
+}
+
+void AProceduralOfficeGenerator::OnInteract_Implementation(APawn *PlayerPawn)
+{
+    if (HoveredComputerInstanceIndex == INDEX_NONE)
+    {
+        return;
+    }
+
+    UE_LOG(LogProceduralOffice, Display, TEXT("Workstation monitor interaction triggered on instance %d."), HoveredComputerInstanceIndex);
+}
+
+FText AProceduralOfficeGenerator::GetInteractionPrompt_Implementation() const
+{
+    return HoveredComputerInstanceIndex != INDEX_NONE ? WorkstationInteractionPrompt : FText::GetEmpty();
+}
+
+void AProceduralOfficeGenerator::NotifyComputerLookedAt(const UPrimitiveComponent *Component, int32 InstanceIndex)
+{
+    const bool bComponentMatches = Component && Component == ComputerMeshComponent;
+    const bool bValidInstance = InstanceIndex >= 0;
+    HoveredComputerInstanceIndex = (bComponentMatches && bValidInstance) ? InstanceIndex : INDEX_NONE;
+}
+
+int32 AProceduralOfficeGenerator::FindClosestComputerInstance(const FVector &WorldPoint, float Radius) const
+{
+    const UInstancedStaticMeshComponent* ActiveComputerComponent = ComputerMeshComponent ? ComputerMeshComponent.Get() : nullptr;
+    if (!ActiveComputerComponent || Radius <= 0.0f)
+    {
+        return INDEX_NONE;
+    }
+
+    const float RadiusSquared = Radius * Radius;
+    int32 ClosestIndex = INDEX_NONE;
+    float ClosestDistanceSquared = RadiusSquared;
+
+    const int32 InstanceCount = ActiveComputerComponent->GetInstanceCount();
+    for (int32 InstanceIdx = 0; InstanceIdx < InstanceCount; ++InstanceIdx)
+    {
+        FTransform InstanceTransform;
+        if (!ActiveComputerComponent->GetInstanceTransform(InstanceIdx, InstanceTransform, true))
+        {
+            continue;
+        }
+
+        const FVector InstanceLocation = InstanceTransform.GetLocation();
+        const float DistanceSquared = FVector::DistSquared(InstanceLocation, WorldPoint);
+        if (DistanceSquared <= ClosestDistanceSquared)
+        {
+            ClosestDistanceSquared = DistanceSquared;
+            ClosestIndex = InstanceIdx;
+        }
+    }
+
+    return ClosestIndex;
+}
+
+UStaticMeshComponent* AProceduralOfficeGenerator::GetOrCreateComputerHighlightProxy(UInstancedStaticMeshComponent* SourceComponent)
+{
+    if (!IsValid(SourceComponent))
+    {
+        return nullptr;
+    }
+
+    if (!IsValid(ComputerHighlightProxy))
+    {
+        ComputerHighlightProxy = NewObject<UStaticMeshComponent>(this, TEXT("ComputerHighlightProxy"));
+        if (!ComputerHighlightProxy)
+        {
+            return nullptr;
+        }
+
+        ComputerHighlightProxy->SetMobility(EComponentMobility::Movable);
+        ComputerHighlightProxy->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        ComputerHighlightProxy->SetCastShadow(false);
+        ComputerHighlightProxy->bRenderInMainPass = false;
+        ComputerHighlightProxy->SetRenderCustomDepth(false);
+        ComputerHighlightProxy->SetCustomDepthStencilValue(0);
+        ComputerHighlightProxy->SetupAttachment(Root);
+        ComputerHighlightProxy->RegisterComponent();
+        ComputerHighlightProxy->SetHiddenInGame(false);
+        ComputerHighlightProxy->SetVisibility(false);
+    }
+
+    if (ComputerHighlightProxy->GetStaticMesh() != SourceComponent->GetStaticMesh())
+    {
+        ComputerHighlightProxy->SetStaticMesh(SourceComponent->GetStaticMesh());
+    }
+
+    const int32 MaterialCount = SourceComponent->GetNumMaterials();
+    for (int32 MaterialIdx = 0; MaterialIdx < MaterialCount; ++MaterialIdx)
+    {
+        ComputerHighlightProxy->SetMaterial(MaterialIdx, SourceComponent->GetMaterial(MaterialIdx));
+    }
+
+    return ComputerHighlightProxy;
+}
+
+void AProceduralOfficeGenerator::HideComputerHighlight()
+{
+    if (IsValid(ComputerHighlightProxy))
+    {
+        ComputerHighlightProxy->SetRenderCustomDepth(false);
+        ComputerHighlightProxy->SetCustomDepthStencilValue(0);
+        ComputerHighlightProxy->SetVisibility(false);
+    }
+}
+
+UInstancedStaticMeshComponent* AProceduralOfficeGenerator::ResolveComputerMeshComponent()
+{
+    if (IsValid(ComputerMeshComponent))
+    {
+        return ComputerMeshComponent;
+    }
+
+    if (TObjectPtr<UInstancedStaticMeshComponent>* Found = InstancedCache.Find(AProceduralOfficeGenerator::WorkstationMonitorComponentKey))
+    {
+        if (IsValid(Found->Get()))
+        {
+            ComputerMeshComponent = Found->Get();
+            return ComputerMeshComponent;
+        }
+    }
+
+    // Attempt to rebuild cache from existing instanced mesh components (PIE duplication case)
+    UE_LOG(LogProceduralOffice, Warning, TEXT("ResolveComputerMeshComponent: Monitor cache invalid, scanning instanced components."));
+    TArray<UInstancedStaticMeshComponent*> InstancedComponents;
+    GetComponents<UInstancedStaticMeshComponent>(InstancedComponents);
+    const FString MonitorNamePrefix = AProceduralOfficeGenerator::WorkstationMonitorComponentKey.ToString();
+    for (UInstancedStaticMeshComponent* Component : InstancedComponents)
+    {
+        if (!IsValid(Component))
+        {
+            continue;
+        }
+
+        const bool bIsTaggedMonitor = Component->ComponentTags.Contains(AProceduralOfficeGenerator::WorkstationMonitorTag);
+        const bool bNameMatchesMonitor = Component->GetName().StartsWith(MonitorNamePrefix);
+
+        if (bIsTaggedMonitor || bNameMatchesMonitor)
+        {
+            ComputerMeshComponent = Component;
+            InstancedCache.FindOrAdd(AProceduralOfficeGenerator::WorkstationMonitorComponentKey) = Component;
+            return ComputerMeshComponent;
+        }
+    }
+
+    UE_LOG(LogProceduralOffice, Warning, TEXT("ResolveComputerMeshComponent: Monitor component scan failed."));
+    return nullptr;
 }

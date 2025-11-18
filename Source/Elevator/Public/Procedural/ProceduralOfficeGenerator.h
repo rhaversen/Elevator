@@ -2,11 +2,16 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Interactable.h"
+#include "InteractionFocusProvider.h"
 #include "ProceduralOfficeGenerator.generated.h"
 
 class UChildActorComponent;
 class URectLightComponent;
 class AProceduralElevator;
+class UInstancedStaticMeshComponent;
+class UStaticMeshComponent;
+class UPrimitiveComponent;
 
 UENUM(BlueprintType)
 enum class EOfficeElementType : uint8
@@ -74,11 +79,14 @@ struct FOfficeLayout
  * Actor that can read lightweight JSON layout definitions and stamp out modular office geometry using instanced meshes.
  */
 UCLASS(Blueprintable)
-class ELEVATOR_API AProceduralOfficeGenerator : public AActor
+class ELEVATOR_API AProceduralOfficeGenerator : public AActor, public IInteractable, public IInteractionFocusProvider
 {
     GENERATED_BODY()
 
 public:
+    static const FName WorkstationMonitorComponentKey;
+    static const FName WorkstationMonitorTag;
+
     AProceduralOfficeGenerator();
 
     virtual void OnConstruction(const FTransform& Transform) override;
@@ -94,6 +102,14 @@ public:
 
     UFUNCTION(CallInEditor, Category = "Generation")
     void ClearGeneratedContent();
+
+    // IInteractable interface
+    virtual bool CanInteract_Implementation(APawn* PlayerPawn) const override;
+    virtual void OnInteract_Implementation(APawn* PlayerPawn) override;
+    virtual FText GetInteractionPrompt_Implementation() const override;
+
+    // IInteractionFocusProvider interface
+    virtual bool EvaluateInteractionFocus_Implementation(APawn* PlayerPawn, const FHitResult& Hit, float AssistRadius, UPrimitiveComponent*& OutHighlightComponent) override;
 
 protected:
     bool LoadLayoutData(FOfficeLayout& OutLayout) const;
@@ -351,6 +367,9 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Cubicles|Workstation")
     FVector CubicleNotepadScale = FVector(1.0f, 1.0f, 1.0f);
 
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Workstation", meta = (DisplayName = "Workstation Interaction Prompt"))
+    FText WorkstationInteractionPrompt = NSLOCTEXT("ProceduralOfficeGenerator", "WorkstationPrompt", "Press E to use workstation");
+
     UPROPERTY(EditAnywhere, Category = "Lighting")
     TObjectPtr<UStaticMesh> CeilingLightMesh;
 
@@ -502,5 +521,20 @@ protected:
     TArray<TObjectPtr<URectLightComponent>> SpawnedElevatorLights;
 
 private:
-    TMap<FName, UInstancedStaticMeshComponent*> InstancedCache;
+    UPROPERTY(Transient)
+    TMap<FName, TObjectPtr<UInstancedStaticMeshComponent>> InstancedCache;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UInstancedStaticMeshComponent> ComputerMeshComponent;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UStaticMeshComponent> ComputerHighlightProxy;
+
+    int32 HoveredComputerInstanceIndex = INDEX_NONE;
+
+    void NotifyComputerLookedAt(const UPrimitiveComponent* Component, int32 InstanceIndex);
+    int32 FindClosestComputerInstance(const FVector& WorldPoint, float Radius) const;
+    UStaticMeshComponent* GetOrCreateComputerHighlightProxy(UInstancedStaticMeshComponent* SourceComponent);
+    UInstancedStaticMeshComponent* ResolveComputerMeshComponent();
+    void HideComputerHighlight();
 };

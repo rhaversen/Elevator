@@ -2,6 +2,7 @@
 #include "Procedural/ProceduralOfficeGenerator.Log.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Engine/EngineTypes.h"
 
 void AProceduralOfficeGenerator::PlaceCubicle(const FVector2D &Center, const FVector2D &Size, float Yaw)
 {
@@ -96,17 +97,25 @@ void AProceduralOfficeGenerator::PlaceCubicle(const FVector2D &Center, const FVe
     const float ComputerYaw = Yaw + CubicleComputerYawOffset;
     const FTransform StationTransform(FRotator(0.0f, ComputerYaw, 0.0f), ComputerLocation, FVector::OneVector);
 
-    auto AddAccessoryInstance = [&](UStaticMesh* Mesh, UMaterialInterface* Material, const FVector& RelativeLocation, const FRotator& RelativeRotation, const FVector& RelativeScale, const TCHAR* ComponentBaseName)
+    auto AddAccessoryInstance = [&](UStaticMesh* Mesh, UMaterialInterface* Material, const FVector& RelativeLocation, const FRotator& RelativeRotation, const FVector& RelativeScale, const FName& ComponentKey)
     {
         if (!Mesh)
         {
             return;
         }
 
-        UInstancedStaticMeshComponent* Component = GetOrCreateISMC(Mesh, FName(ComponentBaseName), Material);
+        UInstancedStaticMeshComponent* Component = GetOrCreateISMC(Mesh, ComponentKey, Material);
         if (!Component)
         {
             return;
+        }
+
+        if (ComponentKey == AProceduralOfficeGenerator::WorkstationMonitorComponentKey)
+        {
+            ComputerMeshComponent = Component;
+            Component->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+            Component->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+            Component->ComponentTags.AddUnique(AProceduralOfficeGenerator::WorkstationMonitorTag);
         }
 
         const FTransform RelativeTransform(RelativeRotation, RelativeLocation, RelativeScale);
@@ -114,12 +123,12 @@ void AProceduralOfficeGenerator::PlaceCubicle(const FVector2D &Center, const FVe
         Component->AddInstance(WorldTransform);
     };
 
-    AddAccessoryInstance(CubicleComputerMesh.Get(), CubicleComputerMaterialOverride.Get(), CubicleComputerRelativeLocation, CubicleComputerRelativeRotation, CubicleComputerScale, TEXT("CubicleComputer"));
-    AddAccessoryInstance(CubicleKeyboardMesh.Get(), CubicleKeyboardMaterialOverride.Get(), CubicleKeyboardRelativeLocation, CubicleKeyboardRelativeRotation, CubicleKeyboardScale, TEXT("CubicleKeyboard"));
-    AddAccessoryInstance(CubicleMouseMesh.Get(), CubicleMouseMaterialOverride.Get(), CubicleMouseRelativeLocation, CubicleMouseRelativeRotation, CubicleMouseScale, TEXT("CubicleMouse"));
-    AddAccessoryInstance(CubicleDeskLampMesh.Get(), CubicleDeskLampMaterialOverride.Get(), CubicleDeskLampRelativeLocation, CubicleDeskLampRelativeRotation, CubicleDeskLampScale, TEXT("CubicleDeskLamp"));
-    AddAccessoryInstance(CubicleMousePadMesh.Get(), CubicleMousePadMaterialOverride.Get(), CubicleMousePadRelativeLocation, CubicleMousePadRelativeRotation, CubicleMousePadScale, TEXT("CubicleMousePad"));
-    AddAccessoryInstance(CubicleComputerTowerMesh.Get(), CubicleComputerTowerMaterialOverride.Get(), CubicleComputerTowerRelativeLocation, CubicleComputerTowerRelativeRotation, CubicleComputerTowerScale, TEXT("CubicleComputerTower"));
-    AddAccessoryInstance(CubiclePhoneMesh.Get(), CubiclePhoneMaterialOverride.Get(), CubiclePhoneRelativeLocation, CubiclePhoneRelativeRotation, CubiclePhoneScale, TEXT("CubiclePhone"));
-    AddAccessoryInstance(CubicleNotepadMesh.Get(), CubicleNotepadMaterialOverride.Get(), CubicleNotepadRelativeLocation, CubicleNotepadRelativeRotation, CubicleNotepadScale, TEXT("CubicleNotepad"));
+    AddAccessoryInstance(CubicleComputerMesh.Get(), CubicleComputerMaterialOverride.Get(), CubicleComputerRelativeLocation, CubicleComputerRelativeRotation, CubicleComputerScale, AProceduralOfficeGenerator::WorkstationMonitorComponentKey);
+    AddAccessoryInstance(CubicleKeyboardMesh.Get(), CubicleKeyboardMaterialOverride.Get(), CubicleKeyboardRelativeLocation, CubicleKeyboardRelativeRotation, CubicleKeyboardScale, FName(TEXT("CubicleKeyboard")));
+    AddAccessoryInstance(CubicleMouseMesh.Get(), CubicleMouseMaterialOverride.Get(), CubicleMouseRelativeLocation, CubicleMouseRelativeRotation, CubicleMouseScale, FName(TEXT("CubicleMouse")));
+    AddAccessoryInstance(CubicleDeskLampMesh.Get(), CubicleDeskLampMaterialOverride.Get(), CubicleDeskLampRelativeLocation, CubicleDeskLampRelativeRotation, CubicleDeskLampScale, FName(TEXT("CubicleDeskLamp")));
+    AddAccessoryInstance(CubicleMousePadMesh.Get(), CubicleMousePadMaterialOverride.Get(), CubicleMousePadRelativeLocation, CubicleMousePadRelativeRotation, CubicleMousePadScale, FName(TEXT("CubicleMousePad")));
+    AddAccessoryInstance(CubicleComputerTowerMesh.Get(), CubicleComputerTowerMaterialOverride.Get(), CubicleComputerTowerRelativeLocation, CubicleComputerTowerRelativeRotation, CubicleComputerTowerScale, FName(TEXT("CubicleComputerTower")));
+    AddAccessoryInstance(CubiclePhoneMesh.Get(), CubiclePhoneMaterialOverride.Get(), CubiclePhoneRelativeLocation, CubiclePhoneRelativeRotation, CubiclePhoneScale, FName(TEXT("CubiclePhone")));
+    AddAccessoryInstance(CubicleNotepadMesh.Get(), CubicleNotepadMaterialOverride.Get(), CubicleNotepadRelativeLocation, CubicleNotepadRelativeRotation, CubicleNotepadScale, FName(TEXT("CubicleNotepad")));
 }

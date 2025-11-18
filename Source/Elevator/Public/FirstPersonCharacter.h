@@ -42,16 +42,16 @@ private:
     float InteractionCheckInterval = 0.05f; // 20 times per second
 
     UPROPERTY(EditAnywhere, Category = "Interaction", meta = (ClampMin = "0.0"))
-    float ButtonSearchRadius = 10.0f;
+    float InteractionAssistRadius = 10.0f;
 
     UPROPERTY(EditAnywhere, Category = "Interaction")
-    bool bEnableButtonHighlight = true;
+    bool bEnableInteractionHighlight = true;
 
     AActor* CurrentInteractable;
     UPrimitiveComponent* CurrentHighlightedComponent;
     float TimeSinceLastInteractionCheck;
 
-    void UpdateButtonHighlight(UPrimitiveComponent* NewComponent);
+    void UpdateInteractionHighlight(UPrimitiveComponent* NewComponent);
 
     FVector SmoothMoveStart;
     FVector SmoothMoveTarget;
