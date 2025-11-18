@@ -9,6 +9,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "Math/UnrealMathUtility.h"
+#include "TimerManager.h"
 
 namespace
 {
@@ -175,15 +176,24 @@ void AProceduralElevator::PostEditChangeProperty(FPropertyChangedEvent &Property
 }
 #endif
 
+void AProceduralElevator::BeginPlay()
+{
+    Super::BeginPlay();
+
+    if (DoorController)
+    {
+        DoorController->CloseDoors();
+    }
+
+    RequestOpenDoors(true);
+}
+
 void AProceduralElevator::OpenAllDoors()
 {
 #if WITH_EDITOR
     Modify();
 #endif
-    if (DoorController)
-    {
-        DoorController->OpenDoors();
-    }
+    RequestOpenDoors(true);
 }
 
 void AProceduralElevator::CloseAllDoors()
@@ -191,10 +201,7 @@ void AProceduralElevator::CloseAllDoors()
 #if WITH_EDITOR
     Modify();
 #endif
-    if (DoorController)
-    {
-        DoorController->CloseDoors();
-    }
+    RequestCloseDoors(true);
 }
 
 void AProceduralElevator::SetDoorFraction(EProceduralElevatorDoorSlot Slot, float Fraction)
@@ -381,6 +388,45 @@ UPrimitiveComponent* AProceduralElevator::FindClosestButtonWithinRadius(const FV
     return ClosestButton;
 }
 
+bool AProceduralElevator::HandleButtonPressed(UPrimitiveComponent* ButtonComponent)
+{
+    if (!ButtonComponent)
+    {
+        return false;
+    }
+
+    if (ButtonComponent == ButtonDoorOpen)
+    {
+        RequestOpenDoors();
+        return true;
+    }
+
+    if (ButtonComponent == ButtonDoorClose)
+    {
+        RequestCloseDoors(true);
+        return true;
+    }
+
+    if (ButtonComponent == ButtonCallDown || ButtonComponent == ButtonCallUp)
+    {
+        UnlockDoorsAndOpen();
+        return true;
+    }
+
+    if (ButtonComponent == ButtonAlarm)
+    {
+        return true;
+    }
+
+    if (IsFloorButtonComponent(ButtonComponent))
+    {
+        HandleFloorButtonPressed();
+        return true;
+    }
+
+    return false;
+}
+
 bool AProceduralElevator::CanInteract_Implementation(APawn* PlayerPawn) const
 {
     return DoorController != nullptr;
@@ -411,12 +457,90 @@ void AProceduralElevator::ToggleDoors()
     const float CurrentFraction = DoorController->GetDoorFraction(EProceduralElevatorDoorSlot::FrontLeft);
     if (CurrentFraction < 0.5f)
     {
-        DoorController->OpenDoors();
+        RequestOpenDoors();
     }
     else
     {
-        DoorController->CloseDoors();
+        RequestCloseDoors(true);
     }
+}
+
+void AProceduralElevator::RequestOpenDoors(bool bForce)
+{
+    if (!DoorController)
+    {
+        return;
+    }
+
+    if (!bForce && bDoorsLocked)
+    {
+        return;
+    }
+
+    DoorController->OpenDoors();
+}
+
+void AProceduralElevator::RequestCloseDoors(bool bForce)
+{
+    if (!DoorController)
+    {
+        return;
+    }
+
+    if (!bForce && bDoorsLocked)
+    {
+        return;
+    }
+
+    DoorController->CloseDoors();
+}
+
+bool AProceduralElevator::IsFloorButtonComponent(const UPrimitiveComponent* Component) const
+{
+    return Component == Button0 || Component == Button1 || Component == Button2 || Component == Button3 ||
+           Component == Button4 || Component == Button5 || Component == Button6 || Component == Button7 ||
+           Component == Button8 || Component == Button9;
+}
+
+void AProceduralElevator::HandleFloorButtonPressed()
+{
+    CancelDoorUnlockTimer();
+    bDoorsLocked = true;
+
+    RequestCloseDoors(true);
+
+    if (FloorSelectionDoorHoldTime <= KINDA_SMALL_NUMBER)
+    {
+        HandleDoorUnlockTimerElapsed();
+        return;
+    }
+
+    if (UWorld* World = GetWorld())
+    {
+        World->GetTimerManager().SetTimer(DoorUnlockTimerHandle, this, &AProceduralElevator::HandleDoorUnlockTimerElapsed, FloorSelectionDoorHoldTime, false);
+    }
+}
+
+void AProceduralElevator::HandleDoorUnlockTimerElapsed()
+{
+    CancelDoorUnlockTimer();
+    bDoorsLocked = false;
+    RequestOpenDoors(true);
+}
+
+void AProceduralElevator::CancelDoorUnlockTimer()
+{
+    if (UWorld* World = GetWorld())
+    {
+        World->GetTimerManager().ClearTimer(DoorUnlockTimerHandle);
+    }
+}
+
+void AProceduralElevator::UnlockDoorsAndOpen()
+{
+    CancelDoorUnlockTimer();
+    bDoorsLocked = false;
+    RequestOpenDoors(true);
 }
 
 UStaticMeshComponent *AProceduralElevator::GetDoorMesh(EProceduralElevatorDoorSlot Slot) const

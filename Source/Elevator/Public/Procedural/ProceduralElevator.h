@@ -5,6 +5,7 @@
 #include "Templates/UniquePtr.h"
 #include "Interactable.h"
 #include "Procedural/ProceduralElevatorDoorController.h"
+#include "TimerManager.h"
 #include "ProceduralElevator.generated.h"
 
 class USceneComponent;
@@ -69,12 +70,16 @@ public:
     UFUNCTION(BlueprintPure, Category = "Interaction")
     UPrimitiveComponent* FindClosestButtonWithinRadius(const FVector& Point, float Radius) const;
 
+    bool HandleButtonPressed(UPrimitiveComponent* ButtonComponent);
+
     // IInteractable interface
     virtual bool CanInteract_Implementation(APawn* PlayerPawn) const override;
     virtual void OnInteract_Implementation(APawn* PlayerPawn) override;
     virtual FText GetInteractionPrompt_Implementation() const override;
 
 protected:
+    virtual void BeginPlay() override;
+
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     USceneComponent *Root;
 
@@ -189,6 +194,9 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
     FText InteractionPrompt = FText::FromString(TEXT("Press E to toggle doors"));
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction", meta = (ClampMin = "0.0"))
+    float FloorSelectionDoorHoldTime = 10.0f;
+
 private:
     friend class FProceduralElevatorDoorController;
 
@@ -200,6 +208,13 @@ private:
     void SyncDoorMeshes();
     FProceduralElevatorDoorControllerParameters MakeDoorControllerParameters() const;
     void ToggleDoors();
+    void RequestOpenDoors(bool bForce = false);
+    void RequestCloseDoors(bool bForce = false);
+    bool IsFloorButtonComponent(const UPrimitiveComponent* Component) const;
+    void HandleFloorButtonPressed();
+    void HandleDoorUnlockTimerElapsed();
+    void CancelDoorUnlockTimer();
+    void UnlockDoorsAndOpen();
 
     UStaticMeshComponent *FrontLeftDoorMesh;
     UStaticMeshComponent *FrontRightDoorMesh;
@@ -207,4 +222,7 @@ private:
     UStaticMeshComponent *BackRightDoorMesh;
 
     TUniquePtr<FProceduralElevatorDoorController> DoorController;
+
+    bool bDoorsLocked = false;
+    FTimerHandle DoorUnlockTimerHandle;
 };

@@ -215,7 +215,15 @@ void AFirstPersonCharacter::Interact()
             FString ButtonName = CurrentHighlightedComponent->GetName();
             UE_LOG(LogTemp, Display, TEXT("Button clicked: %s"), *ButtonName);
         }
-        
+
+        if (AProceduralElevator* Elevator = Cast<AProceduralElevator>(CurrentInteractable))
+        {
+            if (CurrentHighlightedComponent && Elevator->HandleButtonPressed(CurrentHighlightedComponent))
+            {
+                return;
+            }
+        }
+
         IInteractable::Execute_OnInteract(CurrentInteractable, this);
     }
 }
