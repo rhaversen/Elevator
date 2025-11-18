@@ -92,7 +92,52 @@ void AProceduralOfficeGenerator::PostEditChangeProperty(FPropertyChangedEvent &P
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleDeskBackOffsetRatio) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleChairRotation) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleChairScale) ||
-            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleChairFrontOffsetRatio) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleChairRelativeLocation) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubiclePartitionWidthScale) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubiclePartitionDepthScale) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleComputerMesh) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleComputerMaterialOverride) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleComputerOffset) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleComputerHeightOffset) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleComputerYawOffset) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleComputerScale) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleComputerRelativeLocation) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleComputerRelativeRotation) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleKeyboardMesh) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleKeyboardMaterialOverride) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleKeyboardRelativeLocation) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleKeyboardRelativeRotation) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleKeyboardScale) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleMouseMesh) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleMouseMaterialOverride) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleMouseRelativeLocation) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleMouseRelativeRotation) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleMouseScale) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleDeskLampMesh) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleDeskLampMaterialOverride) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleDeskLampRelativeLocation) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleDeskLampRelativeRotation) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleDeskLampScale) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleMousePadMesh) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleMousePadMaterialOverride) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleMousePadRelativeLocation) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleMousePadRelativeRotation) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleMousePadScale) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleComputerTowerMesh) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleComputerTowerMaterialOverride) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleComputerTowerRelativeLocation) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleComputerTowerRelativeRotation) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleComputerTowerScale) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubiclePhoneMesh) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubiclePhoneMaterialOverride) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubiclePhoneRelativeLocation) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubiclePhoneRelativeRotation) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubiclePhoneScale) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleNotepadMesh) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleNotepadMaterialOverride) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleNotepadRelativeLocation) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleNotepadRelativeRotation) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleNotepadScale) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingLightMesh) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingLightMaterialOverride) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingLightScale) ||

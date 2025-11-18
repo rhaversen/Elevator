@@ -213,8 +213,143 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Cubicles")
     FVector CubicleChairScale = FVector(1.0f, 1.0f, 1.0f);
 
-    UPROPERTY(EditAnywhere, Category = "Cubicles", meta = (ClampMin = "0.0", ClampMax = "0.45"))
-    float CubicleChairFrontOffsetRatio = 0.15f;
+    UPROPERTY(EditAnywhere, Category = "Cubicles")
+    FVector CubicleChairRelativeLocation = FVector(0.0f, 84.0f, 0.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles", meta = (ClampMin = "0.01"))
+    float CubiclePartitionWidthScale = 1.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles", meta = (ClampMin = "0.01"))
+    float CubiclePartitionDepthScale = 1.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    TObjectPtr<UStaticMesh> CubicleComputerMesh;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    TObjectPtr<UMaterialInterface> CubicleComputerMaterialOverride;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FVector2D CubicleComputerOffset = FVector2D(0.0f, -45.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    float CubicleComputerHeightOffset = 95.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    float CubicleComputerYawOffset = 180.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FVector CubicleComputerScale = FVector(1.0f, 1.0f, 1.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FVector CubicleComputerRelativeLocation = FVector::ZeroVector;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FRotator CubicleComputerRelativeRotation = FRotator::ZeroRotator;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    TObjectPtr<UStaticMesh> CubicleKeyboardMesh;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    TObjectPtr<UMaterialInterface> CubicleKeyboardMaterialOverride;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FVector CubicleKeyboardRelativeLocation = FVector(20.0f, 0.0f, -10.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FRotator CubicleKeyboardRelativeRotation = FRotator::ZeroRotator;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FVector CubicleKeyboardScale = FVector(1.0f, 1.0f, 1.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    TObjectPtr<UStaticMesh> CubicleMouseMesh;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    TObjectPtr<UMaterialInterface> CubicleMouseMaterialOverride;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FVector CubicleMouseRelativeLocation = FVector(30.0f, -20.0f, -10.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FRotator CubicleMouseRelativeRotation = FRotator::ZeroRotator;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FVector CubicleMouseScale = FVector(1.0f, 1.0f, 1.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    TObjectPtr<UStaticMesh> CubicleDeskLampMesh;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    TObjectPtr<UMaterialInterface> CubicleDeskLampMaterialOverride;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FVector CubicleDeskLampRelativeLocation = FVector(-15.0f, 25.0f, 0.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FRotator CubicleDeskLampRelativeRotation = FRotator::ZeroRotator;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FVector CubicleDeskLampScale = FVector(1.0f, 1.0f, 1.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    TObjectPtr<UStaticMesh> CubicleMousePadMesh;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    TObjectPtr<UMaterialInterface> CubicleMousePadMaterialOverride;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FVector CubicleMousePadRelativeLocation = FVector(35.0f, -20.0f, -10.5f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FRotator CubicleMousePadRelativeRotation = FRotator::ZeroRotator;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FVector CubicleMousePadScale = FVector(1.0f, 1.0f, 1.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    TObjectPtr<UStaticMesh> CubicleComputerTowerMesh;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    TObjectPtr<UMaterialInterface> CubicleComputerTowerMaterialOverride;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FVector CubicleComputerTowerRelativeLocation = FVector(-55.0f, -40.0f, -40.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FRotator CubicleComputerTowerRelativeRotation = FRotator::ZeroRotator;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FVector CubicleComputerTowerScale = FVector(1.0f, 1.0f, 1.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    TObjectPtr<UStaticMesh> CubiclePhoneMesh;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    TObjectPtr<UMaterialInterface> CubiclePhoneMaterialOverride;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FVector CubiclePhoneRelativeLocation = FVector(-25.0f, 20.0f, -10.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FRotator CubiclePhoneRelativeRotation = FRotator::ZeroRotator;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FVector CubiclePhoneScale = FVector(1.0f, 1.0f, 1.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    TObjectPtr<UStaticMesh> CubicleNotepadMesh;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    TObjectPtr<UMaterialInterface> CubicleNotepadMaterialOverride;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FVector CubicleNotepadRelativeLocation = FVector(10.0f, 25.0f, -10.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FRotator CubicleNotepadRelativeRotation = FRotator::ZeroRotator;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Computer")
+    FVector CubicleNotepadScale = FVector(1.0f, 1.0f, 1.0f);
 
     UPROPERTY(EditAnywhere, Category = "Lighting")
     TObjectPtr<UStaticMesh> CeilingLightMesh;
