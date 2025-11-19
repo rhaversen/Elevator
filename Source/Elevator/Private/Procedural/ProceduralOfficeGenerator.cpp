@@ -2,11 +2,13 @@
 #include "Procedural/ProceduralOfficeGenerator.Helpers.h"
 #include "Procedural/ProceduralOfficeGenerator.Log.h"
 #include "Procedural/ProceduralElevator.h"
+#include "FirstPersonCharacter.h"
 
 #include "Components/ChildActorComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/RectLightComponent.h"
+#include "Components/ArrowComponent.h"
 #include "Engine/EngineTypes.h"
 #include "GameFramework/PlayerStart.h"
 #include "JsonObjectConverter.h"
@@ -143,6 +145,11 @@ void AProceduralOfficeGenerator::PostEditChangeProperty(FPropertyChangedEvent &P
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleNotepadRelativeLocation) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleNotepadRelativeRotation) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleNotepadScale) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WorkstationInteractionTargetOffset) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WorkstationInteractionMoveDuration) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WorkstationInteractionArcHeight) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, WorkstationInteractionCurveBias) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, bShowWorkstationTargetPreview) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingLightMesh) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingLightMaterialOverride) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingLightScale) ||
@@ -247,6 +254,7 @@ void AProceduralOfficeGenerator::BuildFromLayout(const FOfficeLayout &Layout)
 
     ResolveComputerMeshComponent();
     HideComputerHighlight();
+    RefreshWorkstationTargetPreview();
 }
 
 void AProceduralOfficeGenerator::BuildElement(const FOfficeElementDefinition &Element)
@@ -332,6 +340,8 @@ void AProceduralOfficeGenerator::DestroySpawnedComponents()
     InstancedCache.Empty();
 
     ComputerMeshComponent = nullptr;
+    PendingWorkstationViewTransform = FTransform::Identity;
+    bHasPendingWorkstationViewTransform = false;
     HoveredComputerInstanceIndex = INDEX_NONE;
 
     if (IsValid(ComputerHighlightProxy))
@@ -339,6 +349,17 @@ void AProceduralOfficeGenerator::DestroySpawnedComponents()
         ComputerHighlightProxy->DestroyComponent();
         ComputerHighlightProxy = nullptr;
     }
+
+#if WITH_EDITOR
+    for (UArrowComponent* Arrow : WorkstationTargetVisualizers)
+    {
+        if (Arrow)
+        {
+            Arrow->DestroyComponent();
+        }
+    }
+    WorkstationTargetVisualizers.Empty();
+#endif
 
     for (UChildActorComponent *ChildComponent : SpawnedChildActors)
     {
@@ -382,6 +403,7 @@ bool AProceduralOfficeGenerator::EvaluateInteractionFocus_Implementation(APawn *
 {
     OutHighlightComponent = nullptr;
     HoveredComputerInstanceIndex = INDEX_NONE;
+    bHasPendingWorkstationViewTransform = false;
 
     UInstancedStaticMeshComponent* ActiveComputerComponent = ComputerMeshComponent.Get();
     if (!IsValid(ActiveComputerComponent))
@@ -427,6 +449,10 @@ bool AProceduralOfficeGenerator::EvaluateInteractionFocus_Implementation(APawn *
         return false;
     }
 
+    const FTransform TargetTransform = WorkstationInteractionTargetOffset * InstanceTransform;
+    PendingWorkstationViewTransform = TargetTransform;
+    bHasPendingWorkstationViewTransform = true;
+
     if (UStaticMeshComponent* HighlightProxyComponent = GetOrCreateComputerHighlightProxy(ActiveComputerComponent))
     {
         HighlightProxyComponent->SetWorldTransform(InstanceTransform);
@@ -445,17 +471,26 @@ bool AProceduralOfficeGenerator::EvaluateInteractionFocus_Implementation(APawn *
 
 bool AProceduralOfficeGenerator::CanInteract_Implementation(APawn *PlayerPawn) const
 {
-    return HoveredComputerInstanceIndex != INDEX_NONE;
+    return HoveredComputerInstanceIndex != INDEX_NONE && bHasPendingWorkstationViewTransform;
 }
 
 void AProceduralOfficeGenerator::OnInteract_Implementation(APawn *PlayerPawn)
 {
-    if (HoveredComputerInstanceIndex == INDEX_NONE)
+    if (HoveredComputerInstanceIndex == INDEX_NONE || !bHasPendingWorkstationViewTransform)
     {
         return;
     }
 
+    if (AFirstPersonCharacter* FirstPersonCharacter = Cast<AFirstPersonCharacter>(PlayerPawn))
+    {
+        FirstPersonCharacter->BeginWorkstationInteraction(PendingWorkstationViewTransform, WorkstationInteractionMoveDuration, WorkstationInteractionArcHeight, WorkstationInteractionCurveBias);
+    }
+
     UE_LOG(LogProceduralOffice, Display, TEXT("Workstation monitor interaction triggered on instance %d."), HoveredComputerInstanceIndex);
+
+    HoveredComputerInstanceIndex = INDEX_NONE;
+    bHasPendingWorkstationViewTransform = false;
+    HideComputerHighlight();
 }
 
 FText AProceduralOfficeGenerator::GetInteractionPrompt_Implementation() const
@@ -595,4 +630,66 @@ UInstancedStaticMeshComponent* AProceduralOfficeGenerator::ResolveComputerMeshCo
 
     UE_LOG(LogProceduralOffice, Warning, TEXT("ResolveComputerMeshComponent: Monitor component scan failed."));
     return nullptr;
+}
+
+void AProceduralOfficeGenerator::RefreshWorkstationTargetPreview()
+{
+#if WITH_EDITOR
+    for (UArrowComponent* Arrow : WorkstationTargetVisualizers)
+    {
+        if (Arrow)
+        {
+            Arrow->DestroyComponent();
+        }
+    }
+    WorkstationTargetVisualizers.Empty();
+
+    if (!bShowWorkstationTargetPreview)
+    {
+        return;
+    }
+
+    UInstancedStaticMeshComponent* ActiveComputerComponent = ComputerMeshComponent.Get();
+    if (!IsValid(ActiveComputerComponent))
+    {
+        ActiveComputerComponent = ResolveComputerMeshComponent();
+    }
+
+    if (!IsValid(ActiveComputerComponent))
+    {
+        return;
+    }
+
+    const int32 InstanceCount = ActiveComputerComponent->GetInstanceCount();
+    WorkstationTargetVisualizers.Reserve(InstanceCount);
+
+    for (int32 InstanceIdx = 0; InstanceIdx < InstanceCount; ++InstanceIdx)
+    {
+        FTransform InstanceTransform;
+        if (!ActiveComputerComponent->GetInstanceTransform(InstanceIdx, InstanceTransform, true))
+        {
+            continue;
+        }
+
+        const FTransform TargetTransform = WorkstationInteractionTargetOffset * InstanceTransform;
+
+        UArrowComponent* Arrow = NewObject<UArrowComponent>(this);
+        if (!Arrow)
+        {
+            continue;
+        }
+
+        Arrow->bIsEditorOnly = true;
+        Arrow->SetMobility(EComponentMobility::Movable);
+        Arrow->ArrowColor = FColor::Orange;
+        Arrow->ArrowSize = 1.25f;
+        Arrow->SetHiddenInGame(true);
+        Arrow->SetVisibility(true);
+        Arrow->SetWorldTransform(TargetTransform);
+        Arrow->AttachToComponent(Root, FAttachmentTransformRules::KeepWorldTransform);
+        Arrow->RegisterComponent();
+
+        WorkstationTargetVisualizers.Add(Arrow);
+    }
+#endif
 }

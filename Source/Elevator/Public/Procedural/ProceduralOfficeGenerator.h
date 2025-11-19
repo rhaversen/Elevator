@@ -12,6 +12,7 @@ class AProceduralElevator;
 class UInstancedStaticMeshComponent;
 class UStaticMeshComponent;
 class UPrimitiveComponent;
+class UArrowComponent;
 
 UENUM(BlueprintType)
 enum class EOfficeElementType : uint8
@@ -370,6 +371,21 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Cubicles|Workstation", meta = (DisplayName = "Workstation Interaction Prompt"))
     FText WorkstationInteractionPrompt = NSLOCTEXT("ProceduralOfficeGenerator", "WorkstationPrompt", "Press E to use workstation");
 
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Workstation", meta = (MakeEditWidget = true))
+    FTransform WorkstationInteractionTargetOffset = FTransform(FRotator(-5.0f, 180.0f, 0.0f), FVector(45.0f, 0.0f, 110.0f));
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Workstation", meta = (ClampMin = "0.1"))
+    float WorkstationInteractionMoveDuration = 1.5f;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Workstation", meta = (ClampMin = "0.0"))
+    float WorkstationInteractionArcHeight = 35.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Workstation", meta = (ClampMin = "0.0", ClampMax = "0.5"))
+    float WorkstationInteractionCurveBias = 0.35f;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Workstation")
+    bool bShowWorkstationTargetPreview = true;
+
     UPROPERTY(EditAnywhere, Category = "Lighting")
     TObjectPtr<UStaticMesh> CeilingLightMesh;
 
@@ -530,6 +546,14 @@ private:
     UPROPERTY(Transient)
     TObjectPtr<UStaticMeshComponent> ComputerHighlightProxy;
 
+    FTransform PendingWorkstationViewTransform = FTransform::Identity;
+    bool bHasPendingWorkstationViewTransform = false;
+
+#if WITH_EDITORONLY_DATA
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<UArrowComponent>> WorkstationTargetVisualizers;
+#endif
+
     int32 HoveredComputerInstanceIndex = INDEX_NONE;
 
     void NotifyComputerLookedAt(const UPrimitiveComponent* Component, int32 InstanceIndex);
@@ -537,4 +561,5 @@ private:
     UStaticMeshComponent* GetOrCreateComputerHighlightProxy(UInstancedStaticMeshComponent* SourceComponent);
     UInstancedStaticMeshComponent* ResolveComputerMeshComponent();
     void HideComputerHighlight();
+    void RefreshWorkstationTargetPreview();
 };
