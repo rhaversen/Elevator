@@ -5,6 +5,7 @@
 #include "FirstPersonCharacter.generated.h"
 
 class UCameraComponent;
+class UWorkstationInteractionComponent;
 
 UCLASS()
 class ELEVATOR_API AFirstPersonCharacter : public ACharacter
@@ -20,8 +21,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Cinematic")
     void SmoothMoveTo(const FVector& TargetLocation, float Duration = 1.0f);
 
-    void BeginWorkstationInteraction(const FTransform& TargetTransform, float TravelTime, float ArcHeight, float CurveBias);
+    void BeginWorkstationInteraction(const FTransform& TargetTransform, float TravelTime, float ArcHeight, float CurveBias, AActor* WorkstationActor);
     void CancelWorkstationInteraction();
+    UCameraComponent* GetFirstPersonCameraComponent() const { return FirstPersonCamera; }
 
 protected:
     virtual void BeginPlay() override;
@@ -37,6 +39,9 @@ protected:
 private:
     UPROPERTY(VisibleAnywhere, Category = "Components")
     UCameraComponent* FirstPersonCamera;
+
+    UPROPERTY(VisibleAnywhere, Category = "Components")
+    UWorkstationInteractionComponent* WorkstationInteractionComponent;
 
     UPROPERTY(EditAnywhere, Category = "Interaction")
     float InteractionTraceDistance = 150.0f;
@@ -55,28 +60,17 @@ private:
     float TimeSinceLastInteractionCheck;
 
     void UpdateInteractionHighlight(UPrimitiveComponent* NewComponent);
-    FVector EvaluateWorkstationBezier(float T) const;
     void LockMovementInput(bool bLock);
     void LockLookInput(bool bLock);
+    void HandleWorkstationExitComplete();
 
     FVector SmoothMoveStart;
     FVector SmoothMoveTarget;
     float SmoothMoveDuration;
     float SmoothMoveElapsed;
     bool bIsSmoothMoving;
-    bool bIsWorkstationTransitionActive = false;
-    bool bIsWorkstationLocked = false;
     bool bIsMovementInputLocked = false;
     bool bIsLookInputLocked = false;
-    FVector WorkstationStartLocation;
-    FVector WorkstationTargetLocation;
-    FVector WorkstationControlPointA;
-    FVector WorkstationControlPointB;
-    FQuat WorkstationStartQuat;
-    FQuat WorkstationTargetQuat;
-    float WorkstationTravelDuration = 0.0f;
-    float WorkstationElapsedTime = 0.0f;
-    float WorkstationArcHeight = 0.0f;
-    float WorkstationCurveBias = 0.0f;
-    bool bIsExitingWorkstation = false;
+
+    friend class UWorkstationInteractionComponent;
 };

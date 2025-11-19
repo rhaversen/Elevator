@@ -4,10 +4,12 @@
 #include "InteractionFocusProvider.h"
 #include "Procedural/ProceduralElevator.h"
 #include "Camera/CameraComponent.h"
+#include "Interaction/WorkstationInteractionComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/InputComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "InputCoreTypes.h"
 
 AFirstPersonCharacter::AFirstPersonCharacter()
@@ -30,6 +32,8 @@ AFirstPersonCharacter::AFirstPersonCharacter()
     FirstPersonCamera->SetupAttachment(GetCapsuleComponent());
     FirstPersonCamera->SetRelativeLocation(FVector(0.0f, 0.0f, 64.0f));
     FirstPersonCamera->bUsePawnControlRotation = true;
+
+    WorkstationInteractionComponent = CreateDefaultSubobject<UWorkstationInteractionComponent>(TEXT("WorkstationInteractionComponent"));
 
     SmoothMoveDuration = 0.0f;
     SmoothMoveElapsed = 0.0f;
@@ -62,59 +66,30 @@ void AFirstPersonCharacter::Tick(float DeltaSeconds)
         }
     }
 
-    if (bIsWorkstationTransitionActive)
-    {
-        WorkstationElapsedTime += DeltaSeconds;
-        const float DurationSafe = FMath::Max(WorkstationTravelDuration, KINDA_SMALL_NUMBER);
-        const float Alpha = FMath::Clamp(WorkstationElapsedTime / DurationSafe, 0.0f, 1.0f);
-        const float SmoothAlpha = FMath::InterpEaseInOut(0.0f, 1.0f, Alpha, 2.0f);
-
-        const FVector NewLocation = EvaluateWorkstationBezier(SmoothAlpha);
-        SetActorLocation(NewLocation, false);
-
-        const FQuat NewQuat = FQuat::Slerp(WorkstationStartQuat, WorkstationTargetQuat, SmoothAlpha).GetNormalized();
-        const FRotator NewRotator = NewQuat.Rotator();
-        if (Controller)
-        {
-            Controller->SetControlRotation(NewRotator);
-        }
-        SetActorRotation(FRotator(0.0f, NewRotator.Yaw, 0.0f));
-
-        if (Alpha >= 1.0f)
-        {
-            bIsWorkstationTransitionActive = false;
-            WorkstationElapsedTime = DurationSafe;
-            SetActorLocation(WorkstationTargetLocation, false);
-            const FRotator TargetRotator = WorkstationTargetQuat.Rotator();
-            if (Controller)
-            {
-                Controller->SetControlRotation(TargetRotator);
-            }
-            SetActorRotation(FRotator(0.0f, TargetRotator.Yaw, 0.0f));
-
-            if (bIsExitingWorkstation)
-            {
-                // Fully exited - unlock controls
-                bIsExitingWorkstation = false;
-                bIsWorkstationLocked = false;
-                LockMovementInput(false);
-                LockLookInput(false);
-                TimeSinceLastInteractionCheck = InteractionCheckInterval;
-            }
-            else
-            {
-                // Fully entered - lock in place
-                bIsWorkstationLocked = true;
-            }
-        }
-    }
-
-    if (bIsWorkstationTransitionActive || bIsWorkstationLocked)
+    if (WorkstationInteractionComponent && WorkstationInteractionComponent->IsTransitionActive())
     {
         return;
     }
 
-    // Check for interactables periodically
+    if (WorkstationInteractionComponent && WorkstationInteractionComponent->IsInteractionLocked())
+    {
+        if (APlayerController* PC = Cast<APlayerController>(Controller))
+        {
+            FHitResult Hit;
+            if (PC->GetHitResultUnderCursor(ECC_Visibility, false, Hit))
+            {
+                if (AActor* WorkstationActor = WorkstationInteractionComponent->GetCurrentWorkstationActor())
+                {
+                    if (Hit.GetActor() == WorkstationActor && WorkstationActor->Implements<UInteractable>())
+                    {
+                        IInteractable::Execute_OnInteractionHover(WorkstationActor, Hit);
+                    }
+                }
+            }
+        }
+        return;
+    }
+
     TimeSinceLastInteractionCheck += DeltaSeconds;
     if (TimeSinceLastInteractionCheck >= InteractionCheckInterval)
     {
@@ -127,7 +102,7 @@ void AFirstPersonCharacter::Tick(float DeltaSeconds)
         {
             const FVector CameraLocation = FirstPersonCamera->GetComponentLocation();
             const FVector CameraForward = FirstPersonCamera->GetForwardVector();
-            FVector TraceEnd = CameraLocation + (CameraForward * InteractionTraceDistance);
+            const FVector TraceEnd = CameraLocation + (CameraForward * InteractionTraceDistance);
 
             FHitResult HitResult;
             FCollisionQueryParams QueryParams;
@@ -277,12 +252,12 @@ void AFirstPersonCharacter::StopJump()
 
 void AFirstPersonCharacter::Interact()
 {
-    if (bIsWorkstationTransitionActive)
+    if (WorkstationInteractionComponent && WorkstationInteractionComponent->IsTransitionActive())
     {
         return;
     }
 
-    if (bIsWorkstationLocked)
+    if (WorkstationInteractionComponent && WorkstationInteractionComponent->IsInteractionLocked())
     {
         CancelWorkstationInteraction();
         return;
@@ -328,148 +303,35 @@ void AFirstPersonCharacter::UpdateInteractionHighlight(UPrimitiveComponent* NewC
     }
 }
 
-void AFirstPersonCharacter::BeginWorkstationInteraction(const FTransform& TargetTransform, float TravelTime, float ArcHeight, float CurveBias)
+void AFirstPersonCharacter::BeginWorkstationInteraction(const FTransform& TargetTransform, float TravelTime, float ArcHeight, float CurveBias, AActor* WorkstationActor)
 {
-    if (bIsWorkstationTransitionActive || bIsWorkstationLocked)
+    if (!WorkstationInteractionComponent)
     {
         return;
     }
 
-    WorkstationStartLocation = GetActorLocation();
-    WorkstationTargetLocation = TargetTransform.GetLocation();
-
-    // Adjust target location so the camera ends up at the target transform location
-    if (FirstPersonCamera)
+    if (WorkstationInteractionComponent->IsTransitionActive() || WorkstationInteractionComponent->IsInteractionLocked())
     {
-        WorkstationTargetLocation -= FirstPersonCamera->GetRelativeLocation();
+        return;
     }
 
-    const FRotator StartRotator = Controller ? Controller->GetControlRotation() : GetActorRotation();
-    WorkstationStartQuat = StartRotator.Quaternion();
-    const FQuat RawTargetQuat = TargetTransform.GetRotation();
-    WorkstationTargetQuat = RawTargetQuat.IsNormalized() ? RawTargetQuat : RawTargetQuat.GetNormalized();
-
-    FVector PathDirection = WorkstationTargetLocation - WorkstationStartLocation;
-    const float Distance = PathDirection.Size();
-    if (Distance > KINDA_SMALL_NUMBER)
-    {
-        PathDirection /= Distance;
-    }
-    else
-    {
-        PathDirection = FirstPersonCamera ? FirstPersonCamera->GetForwardVector() : GetActorForwardVector();
-    }
-
-    const float Bias = FMath::Clamp(CurveBias, 0.0f, 0.49f);
-    const float DistanceBias = Distance * Bias;
-    const FVector UpOffset = FVector::UpVector * ArcHeight;
-
-    if (Distance > KINDA_SMALL_NUMBER)
-    {
-        WorkstationControlPointA = WorkstationStartLocation + PathDirection * DistanceBias + UpOffset;
-        WorkstationControlPointB = WorkstationTargetLocation - PathDirection * DistanceBias + UpOffset;
-    }
-    else
-    {
-        WorkstationControlPointA = WorkstationStartLocation + UpOffset;
-        WorkstationControlPointB = WorkstationTargetLocation + UpOffset;
-    }
-
-    WorkstationTravelDuration = FMath::Max(TravelTime, 0.01f);
-    WorkstationElapsedTime = 0.0f;
-    WorkstationArcHeight = ArcHeight;
-    WorkstationCurveBias = CurveBias;
-
-    bIsWorkstationTransitionActive = true;
-    bIsWorkstationLocked = false;
-    bIsExitingWorkstation = false;
-
-    LockMovementInput(true);
-    LockLookInput(true);
     bIsSmoothMoving = false;
-
     UpdateInteractionHighlight(nullptr);
     CurrentInteractable = nullptr;
     CurrentHighlightedComponent = nullptr;
     TimeSinceLastInteractionCheck = 0.0f;
 
-    SetActorRotation(FRotator(0.0f, StartRotator.Yaw, 0.0f));
+    WorkstationInteractionComponent->BeginInteraction(TargetTransform, TravelTime, ArcHeight, CurveBias, WorkstationActor);
 }
 
 void AFirstPersonCharacter::CancelWorkstationInteraction()
 {
-    if (!bIsWorkstationTransitionActive && !bIsWorkstationLocked)
+    if (!WorkstationInteractionComponent)
     {
         return;
     }
 
-    if (bIsWorkstationTransitionActive && !bIsExitingWorkstation)
-    {
-        // If already transitioning in, ignore
-        return;
-    }
-
-    // Begin exit transition - swap start and target
-    const FVector CurrentLocation = GetActorLocation();
-    const FRotator CurrentRotator = Controller ? Controller->GetControlRotation() : GetActorRotation();
-
-    // Swap locations and rotations for return journey
-    const FVector TempLocation = WorkstationStartLocation;
-    WorkstationStartLocation = CurrentLocation;
-    WorkstationTargetLocation = TempLocation;
-
-    const FQuat TempQuat = WorkstationStartQuat;
-    WorkstationStartQuat = CurrentRotator.Quaternion();
-    WorkstationTargetQuat = TempQuat;
-
-    // Recalculate control points for the return arc
-    FVector PathDirection = WorkstationTargetLocation - WorkstationStartLocation;
-    const float Distance = PathDirection.Size();
-    if (Distance > KINDA_SMALL_NUMBER)
-    {
-        PathDirection /= Distance;
-    }
-    else
-    {
-        PathDirection = FirstPersonCamera ? FirstPersonCamera->GetForwardVector() : GetActorForwardVector();
-    }
-
-    const float Bias = FMath::Clamp(WorkstationCurveBias, 0.0f, 0.49f);
-    const float DistanceBias = Distance * Bias;
-    const FVector UpOffset = FVector::UpVector * WorkstationArcHeight;
-
-    if (Distance > KINDA_SMALL_NUMBER)
-    {
-        WorkstationControlPointA = WorkstationStartLocation + PathDirection * DistanceBias + UpOffset;
-        WorkstationControlPointB = WorkstationTargetLocation - PathDirection * DistanceBias + UpOffset;
-    }
-    else
-    {
-        WorkstationControlPointA = WorkstationStartLocation + UpOffset;
-        WorkstationControlPointB = WorkstationTargetLocation + UpOffset;
-    }
-
-    WorkstationElapsedTime = 0.0f;
-    bIsWorkstationTransitionActive = true;
-    bIsWorkstationLocked = false;
-    bIsExitingWorkstation = true;
-}
-
-FVector AFirstPersonCharacter::EvaluateWorkstationBezier(float T) const
-{
-    const FVector P0 = WorkstationStartLocation;
-    const FVector P1 = WorkstationControlPointA;
-    const FVector P2 = WorkstationControlPointB;
-    const FVector P3 = WorkstationTargetLocation;
-
-    const FVector A = FMath::Lerp(P0, P1, T);
-    const FVector B = FMath::Lerp(P1, P2, T);
-    const FVector C = FMath::Lerp(P2, P3, T);
-
-    const FVector D = FMath::Lerp(A, B, T);
-    const FVector E = FMath::Lerp(B, C, T);
-
-    return FMath::Lerp(D, E, T);
+    WorkstationInteractionComponent->CancelInteraction();
 }
 
 void AFirstPersonCharacter::LockMovementInput(bool bLock)
@@ -493,6 +355,11 @@ void AFirstPersonCharacter::LockMovementInput(bool bLock)
             MoveComp->SetMovementMode(MOVE_Walking);
         }
     }
+}
+
+void AFirstPersonCharacter::HandleWorkstationExitComplete()
+{
+    TimeSinceLastInteractionCheck = InteractionCheckInterval;
 }
 
 void AFirstPersonCharacter::LockLookInput(bool bLock)

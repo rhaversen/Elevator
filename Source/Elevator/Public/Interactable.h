@@ -42,4 +42,29 @@ public:
     UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
     FText GetInteractionPrompt() const;
     virtual FText GetInteractionPrompt_Implementation() const { return FText::FromString(TEXT("Press E to interact")); }
+
+    /**
+     * Called when the player cancels an ongoing interaction (e.g. leaves a workstation).
+     * @param PlayerPawn The pawn that canceled the interaction
+     */
+    UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+    void OnInteractionCanceled(APawn* PlayerPawn);
+    virtual void OnInteractionCanceled_Implementation(APawn* PlayerPawn) { /* Override in derived classes */ }
+
+    /**
+     * Called when the player provides input while interacting (e.g. moving mouse in workstation view).
+     * @param PlayerPawn The pawn providing input
+     * @param InputDelta The input delta (X = Yaw/Turn, Y = Pitch/LookUp)
+     */
+    UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+    void OnInteractionInput(APawn* PlayerPawn, FVector2D InputDelta);
+    virtual void OnInteractionInput_Implementation(APawn* PlayerPawn, FVector2D InputDelta) { /* Override in derived classes */ }
+
+    /**
+     * Called when the player hovers over the interactable with a hardware cursor.
+     * @param Hit The hit result from the cursor trace
+     */
+    UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+    void OnInteractionHover(const FHitResult& Hit);
+    virtual void OnInteractionHover_Implementation(const FHitResult& Hit) { /* Override in derived classes */ }
 };

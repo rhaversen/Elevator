@@ -13,6 +13,7 @@ class UInstancedStaticMeshComponent;
 class UStaticMeshComponent;
 class UPrimitiveComponent;
 class UArrowComponent;
+class UInteractiveScreenComponent;
 
 UENUM(BlueprintType)
 enum class EOfficeElementType : uint8
@@ -89,6 +90,7 @@ public:
     static const FName WorkstationMonitorTag;
 
     AProceduralOfficeGenerator();
+    virtual ~AProceduralOfficeGenerator();
 
     virtual void OnConstruction(const FTransform& Transform) override;
     virtual void BeginPlay() override;
@@ -108,6 +110,9 @@ public:
     virtual bool CanInteract_Implementation(APawn* PlayerPawn) const override;
     virtual void OnInteract_Implementation(APawn* PlayerPawn) override;
     virtual FText GetInteractionPrompt_Implementation() const override;
+    virtual void OnInteractionCanceled_Implementation(APawn* PlayerPawn) override;
+    virtual void OnInteractionInput_Implementation(APawn* PlayerPawn, FVector2D InputDelta) override;
+    virtual void OnInteractionHover_Implementation(const FHitResult& Hit) override;
 
     // IInteractionFocusProvider interface
     virtual bool EvaluateInteractionFocus_Implementation(APawn* PlayerPawn, const FHitResult& Hit, float AssistRadius, UPrimitiveComponent*& OutHighlightComponent) override;
@@ -256,6 +261,18 @@ protected:
 
     UPROPERTY(EditAnywhere, Category = "Cubicles|Workstation", meta = (DisplayName = "Monitor Scale"))
     FVector CubicleComputerScale = FVector(1.0f, 1.0f, 1.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Workstation", meta = (DisplayName = "Monitor Screen Offset"))
+    FVector MonitorScreenOffset = FVector(15.0f, 0.0f, 45.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Workstation", meta = (DisplayName = "Monitor Screen Rotation"))
+    FRotator MonitorScreenRotation = FRotator::ZeroRotator;
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Workstation", meta = (DisplayName = "Monitor Screen Size"))
+    FVector2D MonitorScreenSize = FVector2D(48.0f, 27.0f);
+
+    UPROPERTY(EditAnywhere, Category = "Cubicles|Workstation", meta = (DisplayName = "Show Interaction Debug"))
+    bool bShowMonitorInteractionDebug = false;
 
     UPROPERTY(EditAnywhere, Category = "Cubicles|Workstation", meta = (DisplayName = "Monitor Relative Location"))
     FVector CubicleComputerRelativeLocation = FVector::ZeroVector;
@@ -539,10 +556,19 @@ protected:
     UPROPERTY(EditAnywhere, Category = "UI")
     TObjectPtr<UTextureRenderTarget2D> ScreenRenderTarget;
 
+    UPROPERTY(VisibleAnywhere, Category = "UI")
+    TObjectPtr<UInteractiveScreenComponent> MonitorScreenComponent;
+
 private:
-    void RenderSlateToRenderTarget();
-    TSharedPtr<class SWidget> CreateSlateWidget(FVector2D Size);
+    void InitializeMonitorScreen();
     
+    UInstancedStaticMeshComponent* ResolveComputerMeshComponent();
+    void HideComputerHighlight();
+    void RefreshWorkstationTargetPreview();
+    void UpdateMonitorInteractionDebug();
+    int32 FindClosestComputerInstance(const FVector& WorldPoint, float Radius) const;
+    UStaticMeshComponent* GetOrCreateComputerHighlightProxy(UInstancedStaticMeshComponent* SourceComponent);
+
     UPROPERTY(Transient)
     TMap<FName, TObjectPtr<UInstancedStaticMeshComponent>> InstancedCache;
 
@@ -552,20 +578,17 @@ private:
     UPROPERTY(Transient)
     TObjectPtr<UStaticMeshComponent> ComputerHighlightProxy;
 
+    UPROPERTY(Transient)
+    TObjectPtr<UStaticMeshComponent> MonitorInteractionDebugProxy;
+
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<UArrowComponent>> WorkstationTargetVisualizers;
+
     FTransform PendingWorkstationViewTransform = FTransform::Identity;
     bool bHasPendingWorkstationViewTransform = false;
 
-#if WITH_EDITORONLY_DATA
-    UPROPERTY(Transient)
-    TArray<TObjectPtr<UArrowComponent>> WorkstationTargetVisualizers;
-#endif
-
     int32 HoveredComputerInstanceIndex = INDEX_NONE;
+    int32 CurrentInteractionInstanceIndex = INDEX_NONE;
 
     void NotifyComputerLookedAt(const UPrimitiveComponent* Component, int32 InstanceIndex);
-    int32 FindClosestComputerInstance(const FVector& WorldPoint, float Radius) const;
-    UStaticMeshComponent* GetOrCreateComputerHighlightProxy(UInstancedStaticMeshComponent* SourceComponent);
-    UInstancedStaticMeshComponent* ResolveComputerMeshComponent();
-    void HideComputerHighlight();
-    void RefreshWorkstationTargetPreview();
 };
