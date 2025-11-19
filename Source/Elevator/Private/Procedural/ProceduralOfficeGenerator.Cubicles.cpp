@@ -115,7 +115,12 @@ void AProceduralOfficeGenerator::PlaceCubicle(const FVector2D &Center, const FVe
             ComputerMeshComponent = Component;
             Component->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
             Component->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
-            Component->ComponentTags.AddUnique(AProceduralOfficeGenerator::WorkstationMonitorTag);
+            
+            // Ensure the tag is always present, even if component was retrieved from cache
+            if (!Component->ComponentTags.Contains(AProceduralOfficeGenerator::WorkstationMonitorTag))
+            {
+                Component->ComponentTags.AddUnique(AProceduralOfficeGenerator::WorkstationMonitorTag);
+            }
         }
 
         const FTransform RelativeTransform(RelativeRotation, RelativeLocation, RelativeScale);

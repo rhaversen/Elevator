@@ -14,6 +14,14 @@
 #include "JsonObjectConverter.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Engine/Canvas.h"
+#include "Kismet/KismetRenderingLibrary.h"
+#include "Slate/WidgetRenderer.h"
+#include "Widgets/SCompoundWidget.h"
+#include "Widgets/SCanvas.h"
+#include "Widgets/Images/SImage.h"
+#include "Styling/SlateBrush.h"
 
 // Core lifecycle and shared logic for the procedural office generator lives in this translation unit.
 
@@ -49,6 +57,18 @@ void AProceduralOfficeGenerator::BeginPlay()
     if (!bRegenerateOnConstruction)
     {
         GenerateFromData();
+    }
+
+    // Render Slate UI to the render target
+    if (ScreenRenderTarget)
+    {
+        RenderSlateToRenderTarget();
+        UpdateScreenMaterialParameters();
+        UE_LOG(LogProceduralOffice, Display, TEXT("Rendered Slate UI to render target RT_ScreenInterface"));
+    }
+    else
+    {
+        UE_LOG(LogProceduralOffice, Warning, TEXT("ScreenRenderTarget is not set. Please assign RT_ScreenInterface in the details panel."));
     }
 }
 
@@ -185,6 +205,10 @@ void AProceduralOfficeGenerator::PostEditChangeProperty(FPropertyChangedEvent &P
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, ElevatorDefaultHeight))
         {
             GenerateFromData();
+        }
+        else if (Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, ScreenMaterialBase))
+        {
+            UpdateScreenMaterialParameters();
         }
     }
 }
@@ -610,22 +634,41 @@ UInstancedStaticMeshComponent* AProceduralOfficeGenerator::ResolveComputerMeshCo
     TArray<UInstancedStaticMeshComponent*> InstancedComponents;
     GetComponents<UInstancedStaticMeshComponent>(InstancedComponents);
     const FString MonitorNamePrefix = AProceduralOfficeGenerator::WorkstationMonitorComponentKey.ToString();
-    for (UInstancedStaticMeshComponent* Component : InstancedComponents)
+    
+    // Priority 1: Search for component with specific tag
+    UInstancedStaticMeshComponent** TagMatch = InstancedComponents.FindByPredicate([](UInstancedStaticMeshComponent* Component)
+    {
+        return IsValid(Component) && Component->ComponentTags.Contains(AProceduralOfficeGenerator::WorkstationMonitorTag);
+    });
+
+    if (TagMatch)
+    {
+        UE_LOG(LogProceduralOffice, Display, TEXT("ResolveComputerMeshComponent: Found tagged monitor component: %s"), *(*TagMatch)->GetName());
+        ComputerMeshComponent = *TagMatch;
+        InstancedCache.FindOrAdd(AProceduralOfficeGenerator::WorkstationMonitorComponentKey) = ComputerMeshComponent;
+        return ComputerMeshComponent;
+    }
+
+    // Priority 2: Fallback to name matching
+    UInstancedStaticMeshComponent** NameMatch = InstancedComponents.FindByPredicate([&MonitorNamePrefix](UInstancedStaticMeshComponent* Component)
     {
         if (!IsValid(Component))
         {
-            continue;
+            return false;
         }
 
-        const bool bIsTaggedMonitor = Component->ComponentTags.Contains(AProceduralOfficeGenerator::WorkstationMonitorTag);
-        const bool bNameMatchesMonitor = Component->GetName().StartsWith(MonitorNamePrefix);
+        const FString ComponentName = Component->GetName();
+        // Match exact name or name with suffix like "_0", "_1", etc. but NOT "CubicleComputerTower"
+        return ComponentName == MonitorNamePrefix || 
+               (ComponentName.StartsWith(MonitorNamePrefix + TEXT("_")) && !ComponentName.Contains(TEXT("Tower")));
+    });
 
-        if (bIsTaggedMonitor || bNameMatchesMonitor)
-        {
-            ComputerMeshComponent = Component;
-            InstancedCache.FindOrAdd(AProceduralOfficeGenerator::WorkstationMonitorComponentKey) = Component;
-            return ComputerMeshComponent;
-        }
+    if (NameMatch)
+    {
+        UE_LOG(LogProceduralOffice, Display, TEXT("ResolveComputerMeshComponent: Found monitor by name match: %s"), *(*NameMatch)->GetName());
+        ComputerMeshComponent = *NameMatch;
+        InstancedCache.FindOrAdd(AProceduralOfficeGenerator::WorkstationMonitorComponentKey) = ComputerMeshComponent;
+        return ComputerMeshComponent;
     }
 
     UE_LOG(LogProceduralOffice, Warning, TEXT("ResolveComputerMeshComponent: Monitor component scan failed."));
@@ -692,4 +735,190 @@ void AProceduralOfficeGenerator::RefreshWorkstationTargetPreview()
         WorkstationTargetVisualizers.Add(Arrow);
     }
 #endif
+}
+
+TSharedPtr<SWidget> AProceduralOfficeGenerator::CreateSlateWidget(FVector2D Size)
+{
+    const float BorderThickness = 3.0f;
+    const FLinearColor BorderColor = FLinearColor::White;
+    const float EdgePadding = 2.0f; // Padding to ensure edge pixels are black for clamping
+    
+    // Vertical line with circle dimensions
+    const float LineHeight = Size.Y * 0.5f;
+    const float LineThickness = 4.0f;
+    const float CircleRadius = Size.X * 0.08f; // 8% of width
+    const FVector2D LineCenter = FVector2D(Size.X * 0.5f, Size.Y * 0.5f);
+    const float LineBottomY = LineCenter.Y + LineHeight * 0.5f;
+    const float LineTopY = LineCenter.Y - LineHeight * 0.5f;
+    const float CircleCenterY = LineTopY;
+    const int32 CircleSegments = 32; // Number of segments to approximate the circle
+    
+    // Create the widget - fills entire render target
+    TSharedRef<SCanvas> ContentCanvas = SNew(SCanvas)
+        // Top border
+        + SCanvas::Slot()
+        .Position(FVector2D(EdgePadding, EdgePadding))
+        .Size(FVector2D(Size.X - EdgePadding * 2.0f, BorderThickness))
+        [
+            SNew(SImage)
+            .ColorAndOpacity(BorderColor)
+        ]
+        // Bottom border
+        + SCanvas::Slot()
+        .Position(FVector2D(EdgePadding, Size.Y - BorderThickness - EdgePadding))
+        .Size(FVector2D(Size.X - EdgePadding * 2.0f, BorderThickness))
+        [
+            SNew(SImage)
+            .ColorAndOpacity(BorderColor)
+        ]
+        // Left border
+        + SCanvas::Slot()
+        .Position(FVector2D(EdgePadding, EdgePadding))
+        .Size(FVector2D(BorderThickness, Size.Y - EdgePadding * 2.0f))
+        [
+            SNew(SImage)
+            .ColorAndOpacity(BorderColor)
+        ]
+        // Right border
+        + SCanvas::Slot()
+        .Position(FVector2D(Size.X - BorderThickness - EdgePadding, EdgePadding))
+        .Size(FVector2D(BorderThickness, Size.Y - EdgePadding * 2.0f))
+        [
+            SNew(SImage)
+            .ColorAndOpacity(BorderColor)
+        ]
+        // Vertical line
+        + SCanvas::Slot()
+        .Position(FVector2D(LineCenter.X - LineThickness * 0.5f, LineTopY))
+        .Size(FVector2D(LineThickness, LineHeight))
+        [
+            SNew(SImage)
+            .ColorAndOpacity(BorderColor)
+        ];
+    
+    // Add circle segments
+    for (int32 i = 0; i < CircleSegments; ++i)
+    {
+        const float Angle1 = (float)i / CircleSegments * 2.0f * PI;
+        const float Angle2 = (float)(i + 1) / CircleSegments * 2.0f * PI;
+        
+        const FVector2D Point1 = FVector2D(
+            LineCenter.X + CircleRadius * FMath::Cos(Angle1),
+            CircleCenterY + CircleRadius * FMath::Sin(Angle1)
+        );
+        const FVector2D Point2 = FVector2D(
+            LineCenter.X + CircleRadius * FMath::Cos(Angle2),
+            CircleCenterY + CircleRadius * FMath::Sin(Angle2)
+        );
+        
+        const FVector2D SegmentCenter = (Point1 + Point2) * 0.5f;
+        const float SegmentLength = FVector2D::Distance(Point1, Point2);
+        const float SegmentAngle = FMath::Atan2(Point2.Y - Point1.Y, Point2.X - Point1.X);
+        
+        ContentCanvas->AddSlot()
+        .Position(SegmentCenter - FVector2D(SegmentLength * 0.5f, BorderThickness * 0.5f))
+        .Size(FVector2D(SegmentLength, BorderThickness))
+        [
+            SNew(SImage)
+            .ColorAndOpacity(BorderColor)
+            .RenderTransform(FSlateRenderTransform(FQuat2D(SegmentAngle)))
+            .RenderTransformPivot(FVector2D(0.5f, 0.5f))
+        ];
+    }
+    
+    return ContentCanvas;
+}
+
+void AProceduralOfficeGenerator::RenderSlateToRenderTarget()
+{
+    if (!ScreenRenderTarget)
+    {
+        UE_LOG(LogProceduralOffice, Warning, TEXT("Cannot render Slate: ScreenRenderTarget is null"));
+        return;
+    }
+
+    // Ensure texture clamping so edges don't streak if we sample outside 0-1
+    ScreenRenderTarget->AddressX = TA_Clamp;
+    ScreenRenderTarget->AddressY = TA_Clamp;
+
+    // Get render target dimensions
+    const int32 Width = ScreenRenderTarget->SizeX;
+    const int32 Height = ScreenRenderTarget->SizeY;
+
+    if (Width <= 0 || Height <= 0)
+    {
+        UE_LOG(LogProceduralOffice, Warning, TEXT("Invalid render target dimensions: %dx%d"), Width, Height);
+        return;
+    }
+
+    // Create the Slate widget
+    TSharedPtr<SWidget> Widget = CreateSlateWidget(FVector2D(Width, Height));
+    if (!Widget.IsValid())
+    {
+        UE_LOG(LogProceduralOffice, Error, TEXT("Failed to create Slate widget"));
+        return;
+    }
+
+    // Create widget renderer
+    FWidgetRenderer* WidgetRenderer = new FWidgetRenderer(true, false);
+    if (!WidgetRenderer)
+    {
+        UE_LOG(LogProceduralOffice, Error, TEXT("Failed to create FWidgetRenderer"));
+        return;
+    }
+
+    // Clear the render target first
+    UKismetRenderingLibrary::ClearRenderTarget2D(this, ScreenRenderTarget, FLinearColor::Black);
+
+    // Render the widget to the render target
+    WidgetRenderer->DrawWidget(
+        ScreenRenderTarget,
+        Widget.ToSharedRef(),
+        FVector2D(Width, Height),
+        0.0f,
+        false
+    );
+
+    // Clean up
+    delete WidgetRenderer;
+
+    UE_LOG(LogProceduralOffice, Display, TEXT("Successfully rendered Slate widget to render target (%dx%d)"), Width, Height);
+}
+
+void AProceduralOfficeGenerator::UpdateScreenMaterialParameters()
+{
+    if (!ScreenMaterialBase)
+    {
+        UE_LOG(LogProceduralOffice, Warning, TEXT("ScreenMaterialBase is not set. Cannot update material parameters."));
+        return;
+    }
+
+    UInstancedStaticMeshComponent* ActiveComputerComponent = ComputerMeshComponent.Get();
+    if (!IsValid(ActiveComputerComponent))
+    {
+        ActiveComputerComponent = ResolveComputerMeshComponent();
+    }
+
+    if (!IsValid(ActiveComputerComponent))
+    {
+        UE_LOG(LogProceduralOffice, Warning, TEXT("No computer mesh component found. Cannot update material parameters."));
+        return;
+    }
+
+    // Create a dynamic material instance if needed
+    UMaterialInterface* CurrentMaterial = ActiveComputerComponent->GetMaterial(0);
+    UMaterialInstanceDynamic* DynamicMaterial = Cast<UMaterialInstanceDynamic>(CurrentMaterial);
+    
+    if (!DynamicMaterial || DynamicMaterial->Parent != ScreenMaterialBase)
+    {
+        DynamicMaterial = UMaterialInstanceDynamic::Create(ScreenMaterialBase, this);
+        if (!DynamicMaterial)
+        {
+            UE_LOG(LogProceduralOffice, Error, TEXT("Failed to create dynamic material instance"));
+            return;
+        }
+        
+        ActiveComputerComponent->SetMaterial(0, DynamicMaterial);
+        UE_LOG(LogProceduralOffice, Display, TEXT("Created and assigned dynamic material instance to monitor mesh"));
+    }
 }

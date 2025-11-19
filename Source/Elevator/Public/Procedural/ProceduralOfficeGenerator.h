@@ -536,7 +536,13 @@ protected:
     UPROPERTY(Transient)
     TArray<TObjectPtr<URectLightComponent>> SpawnedElevatorLights;
 
+    UPROPERTY(EditAnywhere, Category = "UI")
+    TObjectPtr<UTextureRenderTarget2D> ScreenRenderTarget;
+
 private:
+    void RenderSlateToRenderTarget();
+    TSharedPtr<class SWidget> CreateSlateWidget(FVector2D Size);
+    
     UPROPERTY(Transient)
     TMap<FName, TObjectPtr<UInstancedStaticMeshComponent>> InstancedCache;
 
