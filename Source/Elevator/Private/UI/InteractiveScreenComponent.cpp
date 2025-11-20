@@ -429,6 +429,16 @@ void UInteractiveScreenComponent::CreateInterfaceIfNeeded()
                             .ColorAndOpacity(FSlateColor(FLinearColor::Green))
                         ]
                         + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .VAlign(VAlign_Center)
+                        .Padding(FMargin(FooterTextSpacing, 0.0f, 0.0f, 0.0f))
+                        [
+                            SNew(STextBlock)
+                            .Text_Lambda([this]() { return GetFooterTaskStatusText(); })
+                            .Font(FCoreStyle::GetDefaultFontStyle("Bold", 16))
+                            .ColorAndOpacity_Lambda([this]() { return GetFooterTaskStatusColor(); })
+                        ]
+                        + SHorizontalBox::Slot()
                         .FillWidth(1.0f)
                         .VAlign(VAlign_Center)
                         [
@@ -721,4 +731,22 @@ FText UInteractiveScreenComponent::GetFooterWeekdayText() const
     return (Index >= 0 && Index < UE_ARRAY_COUNT(DayNames))
         ? FText::FromString(DayNames[Index])
         : FText::FromString(TEXT(""));
+}
+
+FText UInteractiveScreenComponent::GetFooterTaskStatusText() const
+{
+    if (!CurrentProgram.IsValid())
+    {
+        return FText::FromString(TEXT("No Task"));
+    }
+    return CurrentProgram->IsTaskComplete() ? FText::FromString(TEXT("Task Complete")) : FText::FromString(TEXT("Task Pending"));
+}
+
+FSlateColor UInteractiveScreenComponent::GetFooterTaskStatusColor() const
+{
+    if (!CurrentProgram.IsValid())
+    {
+        return FSlateColor(FLinearColor(0.5f, 0.5f, 0.5f));
+    }
+    return CurrentProgram->IsTaskComplete() ? FSlateColor(FLinearColor::Green) : FSlateColor(FLinearColor(1.0f, 0.5f, 0.0f));
 }

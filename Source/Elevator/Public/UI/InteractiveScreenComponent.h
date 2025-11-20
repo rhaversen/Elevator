@@ -79,6 +79,8 @@ private:
     FText GetFooterDateText() const;
     FText GetFooterTimeText() const;
     FText GetFooterWeekdayText() const;
+    FText GetFooterTaskStatusText() const;
+    FSlateColor GetFooterTaskStatusColor() const;
 
     UPROPERTY(EditAnywhere, Category = "Interactive Screen")
     TObjectPtr<UTextureRenderTarget2D> ScreenRenderTarget;
