@@ -1,6 +1,7 @@
 #include "UI/InteractiveScreenComponent.h"
 
 #include "UI/IScreenProgram.h"
+#include "UI/SlateWidgetHelpers.h"
 
 #include "Engine/TextureRenderTarget2D.h"
 #include "GameFramework/PlayerController.h"
@@ -27,96 +28,6 @@ namespace
     constexpr float FooterHorizontalPadding = 48.0f;
     constexpr float FooterExitButtonSpacing = 12.0f;
     const FVector2D ExitButtonSize(180.0f, 60.0f);
-
-    TSharedRef<SWidget> CreateOutlinedButton(
-        const FVector2D& Size,
-        const FText& ButtonText,
-        int32 FontSize,
-        TAttribute<FSlateColor> BorderColorAttr,
-        TAttribute<FSlateColor> FillColorAttr,
-        TAttribute<FSlateColor> TextColorAttr)
-    {
-        const float BorderThickness = 2.0f;
-        const FSlateBrush* Brush = FCoreStyle::Get().GetBrush("WhiteBrush");
-
-        return SNew(SBox)
-            .WidthOverride(Size.X)
-            .HeightOverride(Size.Y)
-            [
-                SNew(SOverlay)
-                // Background fill
-                + SOverlay::Slot()
-                .HAlign(HAlign_Fill)
-                .VAlign(VAlign_Fill)
-                [
-                    SNew(SImage)
-                    .Image(Brush)
-                    .ColorAndOpacity(FillColorAttr)
-                ]
-                // Top border
-                + SOverlay::Slot()
-                .HAlign(HAlign_Fill)
-                .VAlign(VAlign_Top)
-                [
-                    SNew(SBox)
-                    .HeightOverride(BorderThickness)
-                    [
-                        SNew(SImage)
-                        .Image(Brush)
-                        .ColorAndOpacity(BorderColorAttr)
-                    ]
-                ]
-                // Bottom border
-                + SOverlay::Slot()
-                .HAlign(HAlign_Fill)
-                .VAlign(VAlign_Bottom)
-                [
-                    SNew(SBox)
-                    .HeightOverride(BorderThickness)
-                    [
-                        SNew(SImage)
-                        .Image(Brush)
-                        .ColorAndOpacity(BorderColorAttr)
-                    ]
-                ]
-                // Left border
-                + SOverlay::Slot()
-                .HAlign(HAlign_Left)
-                .VAlign(VAlign_Fill)
-                [
-                    SNew(SBox)
-                    .WidthOverride(BorderThickness)
-                    [
-                        SNew(SImage)
-                        .Image(Brush)
-                        .ColorAndOpacity(BorderColorAttr)
-                    ]
-                ]
-                // Right border
-                + SOverlay::Slot()
-                .HAlign(HAlign_Right)
-                .VAlign(VAlign_Fill)
-                [
-                    SNew(SBox)
-                    .WidthOverride(BorderThickness)
-                    [
-                        SNew(SImage)
-                        .Image(Brush)
-                        .ColorAndOpacity(BorderColorAttr)
-                    ]
-                ]
-                // Centered text
-                + SOverlay::Slot()
-                .HAlign(HAlign_Center)
-                .VAlign(VAlign_Center)
-                [
-                    SNew(STextBlock)
-                    .Text(ButtonText)
-                    .Font(FCoreStyle::GetDefaultFontStyle("Bold", FontSize))
-                    .ColorAndOpacity(TextColorAttr)
-                ]
-            ];
-    }
 }
 
 UInteractiveScreenComponent::UInteractiveScreenComponent()
@@ -448,7 +359,7 @@ void UInteractiveScreenComponent::CreateInterfaceIfNeeded()
                         .AutoWidth()
                         .VAlign(VAlign_Center)
                         [
-                            CreateOutlinedButton(
+                            SlateWidgetHelpers::CreateOutlinedButton(
                                 ExitButtonSize,
                                 FText::FromString(TEXT("Exit")),
                                 14,
