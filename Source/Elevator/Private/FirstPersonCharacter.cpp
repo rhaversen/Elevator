@@ -158,6 +158,7 @@ void AFirstPersonCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
     PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &AFirstPersonCharacter::StartJump);
     PlayerInputComponent->BindAction("Jump", IE_Released, this, &AFirstPersonCharacter::StopJump);
     PlayerInputComponent->BindAction("Interact", IE_Pressed, this, &AFirstPersonCharacter::Interact);
+    PlayerInputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &AFirstPersonCharacter::HandleWorkstationClick);
     PlayerInputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AFirstPersonCharacter::CancelWorkstationInteraction);
 }
 
@@ -259,7 +260,7 @@ void AFirstPersonCharacter::Interact()
 
     if (WorkstationInteractionComponent && WorkstationInteractionComponent->IsInteractionLocked())
     {
-        CancelWorkstationInteraction();
+        // Don't allow regular interact to cancel workstation - only Escape key should do that
         return;
     }
 
@@ -332,6 +333,30 @@ void AFirstPersonCharacter::CancelWorkstationInteraction()
     }
 
     WorkstationInteractionComponent->CancelInteraction();
+}
+
+void AFirstPersonCharacter::HandleWorkstationClick()
+{
+    if (!WorkstationInteractionComponent || !WorkstationInteractionComponent->IsInteractionLocked())
+    {
+        return;
+    }
+
+    if (APlayerController* PC = Cast<APlayerController>(Controller))
+    {
+        FHitResult Hit;
+        if (PC->GetHitResultUnderCursor(ECC_Visibility, false, Hit))
+        {
+            if (AActor* WorkstationActor = WorkstationInteractionComponent->GetCurrentWorkstationActor())
+            {
+                if (Hit.GetActor() == WorkstationActor && WorkstationActor->Implements<UInteractable>())
+                {
+                    // Notify the workstation of the click - it will handle completion internally
+                    IInteractable::Execute_OnInteractionClick(WorkstationActor, this, Hit);
+                }
+            }
+        }
+    }
 }
 
 void AFirstPersonCharacter::LockMovementInput(bool bLock)

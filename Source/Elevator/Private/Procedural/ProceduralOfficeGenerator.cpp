@@ -3,6 +3,7 @@
 #include "Procedural/ProceduralOfficeGenerator.Log.h"
 #include "Procedural/ProceduralElevator.h"
 #include "UI/InteractiveScreenComponent.h"
+#include "UI/Programs/SimpleButtonProgram.h"
 #include "FirstPersonCharacter.h"
 
 #include "Components/ChildActorComponent.h"
@@ -92,6 +93,10 @@ void AProceduralOfficeGenerator::InitializeMonitorScreen()
     }
 
     MonitorScreenComponent->SetRenderTarget(ScreenRenderTarget);
+    
+    // Set the default program for the office monitor
+    MonitorScreenComponent->SetProgram(MakeShared<FSimpleButtonProgram>());
+    
     MonitorScreenComponent->InitializeScreen();
 
     if (MonitorScreenComponent->IsReady())
@@ -571,9 +576,24 @@ void AProceduralOfficeGenerator::OnInteractionCanceled_Implementation(APawn* Pla
     }
 }
 
-void AProceduralOfficeGenerator::OnInteractionInput_Implementation(APawn* PlayerPawn, FVector2D InputDelta)
+void AProceduralOfficeGenerator::OnInteractionClick_Implementation(APawn* PlayerPawn, const FHitResult& Hit)
 {
-    // Unused for hardware cursor
+    if (!MonitorScreenComponent || !MonitorScreenComponent->IsReady())
+    {
+        return;
+    }
+
+    // Process the click in the screen component
+    MonitorScreenComponent->ProcessClick();
+    
+    if (MonitorScreenComponent->ShouldExit())
+    {
+        // Exit requested - exit workstation
+        if (AFirstPersonCharacter* Character = Cast<AFirstPersonCharacter>(PlayerPawn))
+        {
+            Character->CancelWorkstationInteraction();
+        }
+    }
 }
 
 void AProceduralOfficeGenerator::OnInteractionHover_Implementation(const FHitResult& Hit)

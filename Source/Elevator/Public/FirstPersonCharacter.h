@@ -35,6 +35,7 @@ protected:
     void StartJump();
     void StopJump();
     void Interact();
+    void HandleWorkstationClick();
 
 private:
     UPROPERTY(VisibleAnywhere, Category = "Components")

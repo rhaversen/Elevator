@@ -7,7 +7,6 @@
 class AActor;
 class AFirstPersonCharacter;
 class APlayerController;
-class UCharacterMovementComponent;
 
 /**
  * Handles workstation camera transitions, cursor toggling, and input locking for the owning character.
@@ -45,7 +44,6 @@ private:
 
     TWeakObjectPtr<AFirstPersonCharacter> CachedCharacter;
     TWeakObjectPtr<APlayerController> CachedController;
-    TWeakObjectPtr<UCharacterMovementComponent> CachedMovement;
 
     FVector EntryOriginLocation = FVector::ZeroVector;
     FQuat EntryOriginQuat = FQuat::Identity;

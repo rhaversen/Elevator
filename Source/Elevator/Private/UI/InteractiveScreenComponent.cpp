@@ -1,14 +1,17 @@
 #include "UI/InteractiveScreenComponent.h"
 
-#include "Procedural/InteractiveMonitorWidget.h"
+#include "UI/IScreenProgram.h"
 
 #include "Engine/TextureRenderTarget2D.h"
 #include "Kismet/KismetRenderingLibrary.h"
-#include "Slate/WidgetRenderer.h"
 
 UInteractiveScreenComponent::UInteractiveScreenComponent()
 {
     PrimaryComponentTick.bCanEverTick = false;
+}
+
+UInteractiveScreenComponent::~UInteractiveScreenComponent()
+{
 }
 
 void UInteractiveScreenComponent::BeginPlay()
@@ -19,8 +22,13 @@ void UInteractiveScreenComponent::BeginPlay()
 
 void UInteractiveScreenComponent::OnComponentDestroyed(bool bDestroyingHierarchy)
 {
+    if (CurrentProgram.IsValid())
+    {
+        CurrentProgram->OnDeactivated();
+    }
     SlateWidgetRenderer.Reset();
-    MonitorWidget.Reset();
+    ProgramWidget.Reset();
+    CurrentProgram.Reset();
     Super::OnComponentDestroyed(bDestroyingHierarchy);
 }
 
@@ -34,9 +42,9 @@ void UInteractiveScreenComponent::InitializeScreen()
 {
     CreateWidgetIfNeeded();
     UpdateWidgetSizeFromRenderTarget();
-    if (MonitorWidget.IsValid())
+    if (CurrentProgram.IsValid())
     {
-        MonitorWidget->UpdateCursorPosition(VirtualCursorPosition);
+        CurrentProgram->UpdateCursor(VirtualCursorPosition);
     }
     RefreshRender();
 }
@@ -53,9 +61,47 @@ void UInteractiveScreenComponent::UpdateCursor(const FVector2D& NormalizedPositi
     RefreshRender();
 }
 
+void UInteractiveScreenComponent::SetProgram(TSharedPtr<IScreenProgram> InProgram)
+{
+    if (CurrentProgram.IsValid())
+    {
+        CurrentProgram->OnDeactivated();
+    }
+
+    CurrentProgram = InProgram;
+    ProgramWidget.Reset();
+    bWidgetInitialized = false;
+
+    if (CurrentProgram.IsValid())
+    {
+        CurrentProgram->OnActivated();
+        CreateWidgetIfNeeded();
+        RefreshRender();
+    }
+}
+
+void UInteractiveScreenComponent::ProcessClick()
+{
+    if (!CurrentProgram.IsValid())
+    {
+        return;
+    }
+
+    const bool bHandled = CurrentProgram->HandleClick();
+    if (bHandled)
+    {
+        RefreshRender();
+    }
+}
+
+bool UInteractiveScreenComponent::ShouldExit() const
+{
+    return CurrentProgram.IsValid() && CurrentProgram->ShouldExit();
+}
+
 void UInteractiveScreenComponent::RefreshRender()
 {
-    if (!ScreenRenderTarget || !MonitorWidget.IsValid())
+    if (!ScreenRenderTarget || !ProgramWidget.IsValid())
     {
         return;
     }
@@ -74,15 +120,20 @@ void UInteractiveScreenComponent::RefreshRender()
     UKismetRenderingLibrary::ClearRenderTarget2D(this, ScreenRenderTarget, FLinearColor::Black);
     SlateWidgetRenderer->DrawWidget(
         ScreenRenderTarget,
-        MonitorWidget.ToSharedRef(),
+        ProgramWidget.ToSharedRef(),
         WidgetSize,
         0.0f,
         false);
 }
 
+bool UInteractiveScreenComponent::IsProgramTaskComplete() const
+{
+    return CurrentProgram.IsValid() && CurrentProgram->IsTaskComplete();
+}
+
 bool UInteractiveScreenComponent::IsReady() const
 {
-    return ScreenRenderTarget != nullptr && MonitorWidget.IsValid() && WidgetSize.X > 0.0f && WidgetSize.Y > 0.0f;
+    return ScreenRenderTarget != nullptr && ProgramWidget.IsValid() && WidgetSize.X > 0.0f && WidgetSize.Y > 0.0f;
 }
 
 void UInteractiveScreenComponent::EnsureRenderer()
@@ -95,16 +146,16 @@ void UInteractiveScreenComponent::EnsureRenderer()
 
 void UInteractiveScreenComponent::CreateWidgetIfNeeded()
 {
-    if (!MonitorWidget.IsValid())
+    if (!ProgramWidget.IsValid() && CurrentProgram.IsValid())
     {
-        MonitorWidget = SNew(SInteractiveMonitorWidget);
+        ProgramWidget = CurrentProgram->CreateWidget(WidgetSize);
         bWidgetInitialized = false;
     }
 }
 
 void UInteractiveScreenComponent::UpdateWidgetSizeFromRenderTarget()
 {
-    if (!ScreenRenderTarget || !MonitorWidget.IsValid())
+    if (!ScreenRenderTarget || !CurrentProgram.IsValid())
     {
         return;
     }
@@ -118,7 +169,10 @@ void UInteractiveScreenComponent::UpdateWidgetSizeFromRenderTarget()
     if (!bWidgetInitialized || !Size.Equals(WidgetSize))
     {
         WidgetSize = Size;
-        MonitorWidget->SetWidgetSize(Size);
+        CurrentProgram->OnScreenResized(Size);
+        
+        // Recreate widget with new size
+        ProgramWidget = CurrentProgram->CreateWidget(Size);
         bWidgetInitialized = true;
     }
 }
@@ -130,8 +184,8 @@ void UInteractiveScreenComponent::UpdateCursorInternal(const FVector2D& Normaliz
         FMath::Clamp(NormalizedPosition.Y, 0.0f, 1.0f));
 
     VirtualCursorPosition = Clamped;
-    if (MonitorWidget.IsValid())
+    if (CurrentProgram.IsValid())
     {
-        MonitorWidget->UpdateCursorPosition(VirtualCursorPosition);
+        CurrentProgram->UpdateCursor(VirtualCursorPosition);
     }
 }

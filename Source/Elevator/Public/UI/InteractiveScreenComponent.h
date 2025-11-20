@@ -3,10 +3,10 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Slate/WidgetRenderer.h"
+#include "UI/IScreenProgram.h"
 #include "InteractiveScreenComponent.generated.h"
 
 class UTextureRenderTarget2D;
-class SInteractiveMonitorWidget;
 
 /**
  * Component that manages rendering of a Slate monitor widget to a texture render target
@@ -19,6 +19,7 @@ class ELEVATOR_API UInteractiveScreenComponent : public UActorComponent
 
 public:
     UInteractiveScreenComponent();
+    virtual ~UInteractiveScreenComponent();
 
     virtual void BeginPlay() override;
     virtual void OnComponentDestroyed(bool bDestroyingHierarchy) override;
@@ -38,12 +39,19 @@ public:
     /** Redraw the widget using the current cursor state. */
     void RefreshRender();
 
+    /** Process a click at the current cursor position. */
+    void ProcessClick();
+
+    /** Check if the active program requests to exit. */
+    bool ShouldExit() const;
+
+    /** Set the active program to display on this screen. */
+    void SetProgram(TSharedPtr<IScreenProgram> InProgram);
+
     bool IsReady() const;
     FVector2D GetWidgetSize() const { return WidgetSize; }
     FVector2D GetCursor() const { return VirtualCursorPosition; }
-
-    /** Direct access to the underlying monitor widget if specialized configuration is required. */
-    TSharedPtr<SInteractiveMonitorWidget> GetMonitorWidget() const { return MonitorWidget; }
+    bool IsProgramTaskComplete() const;
 
 private:
     void EnsureRenderer();
@@ -54,7 +62,8 @@ private:
     UPROPERTY(EditAnywhere, Category = "Interactive Screen")
     TObjectPtr<UTextureRenderTarget2D> ScreenRenderTarget;
 
-    TSharedPtr<SInteractiveMonitorWidget> MonitorWidget;
+    TSharedPtr<IScreenProgram> CurrentProgram;
+    TSharedPtr<SWidget> ProgramWidget;
     TUniquePtr<FWidgetRenderer> SlateWidgetRenderer;
     FVector2D WidgetSize = FVector2D::ZeroVector;
     FVector2D VirtualCursorPosition = FVector2D::ZeroVector;

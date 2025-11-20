@@ -67,4 +67,13 @@ public:
     UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
     void OnInteractionHover(const FHitResult& Hit);
     virtual void OnInteractionHover_Implementation(const FHitResult& Hit) { /* Override in derived classes */ }
+
+    /**
+     * Called when the player clicks while interacting with the object (e.g. mouse button press in workstation view).
+     * @param PlayerPawn The pawn that triggered the click
+     * @param Hit The hit result from the click trace
+     */
+    UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+    void OnInteractionClick(APawn* PlayerPawn, const FHitResult& Hit);
+    virtual void OnInteractionClick_Implementation(APawn* PlayerPawn, const FHitResult& Hit) { /* Override in derived classes */ }
 };

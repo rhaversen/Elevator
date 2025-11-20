@@ -111,7 +111,7 @@ public:
     virtual void OnInteract_Implementation(APawn* PlayerPawn) override;
     virtual FText GetInteractionPrompt_Implementation() const override;
     virtual void OnInteractionCanceled_Implementation(APawn* PlayerPawn) override;
-    virtual void OnInteractionInput_Implementation(APawn* PlayerPawn, FVector2D InputDelta) override;
+    virtual void OnInteractionClick_Implementation(APawn* PlayerPawn, const FHitResult& Hit) override;
     virtual void OnInteractionHover_Implementation(const FHitResult& Hit) override;
 
     // IInteractionFocusProvider interface

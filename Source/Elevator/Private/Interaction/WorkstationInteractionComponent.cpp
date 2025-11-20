@@ -4,7 +4,6 @@
 #include "Interactable.h"
 
 #include "Camera/CameraComponent.h"
-#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 
 UWorkstationInteractionComponent::UWorkstationInteractionComponent()
@@ -124,11 +123,6 @@ void UWorkstationInteractionComponent::EnsureOwnerReferences()
         {
             return;
         }
-    }
-
-    if (!CachedMovement.IsValid() && CachedCharacter.IsValid())
-    {
-        CachedMovement = CachedCharacter->GetCharacterMovement();
     }
 
     UpdateCachedController();
@@ -324,5 +318,21 @@ void UWorkstationInteractionComponent::ToggleCursor(bool bEnable)
         CachedController->bShowMouseCursor = bEnable;
         CachedController->bEnableClickEvents = bEnable;
         CachedController->bEnableMouseOverEvents = bEnable;
+        
+        if (bEnable)
+        {
+            // Enable mouse for UI interaction
+            FInputModeGameAndUI InputMode;
+            InputMode.SetHideCursorDuringCapture(false);
+            InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+            CachedController->SetInputMode(InputMode);
+        }
+        else
+        {
+            // Return to game-only mode with captured mouse
+            FInputModeGameOnly InputMode;
+            InputMode.SetConsumeCaptureMouseDown(false);
+            CachedController->SetInputMode(InputMode);
+        }
     }
 }
