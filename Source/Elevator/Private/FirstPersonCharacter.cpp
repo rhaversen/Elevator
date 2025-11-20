@@ -158,7 +158,8 @@ void AFirstPersonCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
     PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &AFirstPersonCharacter::StartJump);
     PlayerInputComponent->BindAction("Jump", IE_Released, this, &AFirstPersonCharacter::StopJump);
     PlayerInputComponent->BindAction("Interact", IE_Pressed, this, &AFirstPersonCharacter::Interact);
-    PlayerInputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &AFirstPersonCharacter::HandleWorkstationClick);
+    PlayerInputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &AFirstPersonCharacter::HandleWorkstationPointerPressed);
+    PlayerInputComponent->BindKey(EKeys::LeftMouseButton, IE_Released, this, &AFirstPersonCharacter::HandleWorkstationPointerReleased);
     PlayerInputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AFirstPersonCharacter::CancelWorkstationInteraction);
 }
 
@@ -335,7 +336,7 @@ void AFirstPersonCharacter::CancelWorkstationInteraction()
     WorkstationInteractionComponent->CancelInteraction();
 }
 
-void AFirstPersonCharacter::HandleWorkstationClick()
+void AFirstPersonCharacter::HandleWorkstationPointerPressed()
 {
     if (!WorkstationInteractionComponent || !WorkstationInteractionComponent->IsInteractionLocked())
     {
@@ -351,10 +352,31 @@ void AFirstPersonCharacter::HandleWorkstationClick()
             {
                 if (Hit.GetActor() == WorkstationActor && WorkstationActor->Implements<UInteractable>())
                 {
-                    // Notify the workstation of the click - it will handle completion internally
-                    IInteractable::Execute_OnInteractionClick(WorkstationActor, this, Hit);
+                    IInteractable::Execute_OnInteractionPointerPressed(WorkstationActor, this, Hit, EKeys::LeftMouseButton);
                 }
             }
+        }
+    }
+}
+
+void AFirstPersonCharacter::HandleWorkstationPointerReleased()
+{
+    if (!WorkstationInteractionComponent || !WorkstationInteractionComponent->IsInteractionLocked())
+    {
+        return;
+    }
+
+    if (AActor* WorkstationActor = WorkstationInteractionComponent->GetCurrentWorkstationActor())
+    {
+        if (WorkstationActor->Implements<UInteractable>())
+        {
+            FHitResult Hit;
+            if (APlayerController* PC = Cast<APlayerController>(Controller))
+            {
+                PC->GetHitResultUnderCursor(ECC_Visibility, false, Hit);
+            }
+
+            IInteractable::Execute_OnInteractionPointerReleased(WorkstationActor, this, Hit, EKeys::LeftMouseButton);
         }
     }
 }

@@ -576,19 +576,27 @@ void AProceduralOfficeGenerator::OnInteractionCanceled_Implementation(APawn* Pla
     }
 }
 
-void AProceduralOfficeGenerator::OnInteractionClick_Implementation(APawn* PlayerPawn, const FHitResult& Hit)
+void AProceduralOfficeGenerator::OnInteractionPointerPressed_Implementation(APawn* PlayerPawn, const FHitResult& Hit, FKey PointerKey)
 {
     if (!MonitorScreenComponent || !MonitorScreenComponent->IsReady())
     {
         return;
     }
 
-    // Process the click in the screen component
-    MonitorScreenComponent->ProcessClick();
-    
+    MonitorScreenComponent->ProcessPointerPressed(PointerKey);
+}
+
+void AProceduralOfficeGenerator::OnInteractionPointerReleased_Implementation(APawn* PlayerPawn, const FHitResult& Hit, FKey PointerKey)
+{
+    if (!MonitorScreenComponent || !MonitorScreenComponent->IsReady())
+    {
+        return;
+    }
+
+    MonitorScreenComponent->ProcessPointerReleased(PointerKey);
+
     if (MonitorScreenComponent->ShouldExit())
     {
-        // Exit requested - exit workstation
         if (AFirstPersonCharacter* Character = Cast<AFirstPersonCharacter>(PlayerPawn))
         {
             Character->CancelWorkstationInteraction();

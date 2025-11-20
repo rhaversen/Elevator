@@ -1,12 +1,40 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "InputCoreTypes.h"
+#include "GenericPlatform/ICursor.h"
 #include "Widgets/SCompoundWidget.h"
 
 /**
  * Interface for screen programs that can be displayed on interactive screens.
  * Programs should be lightweight and report back when their task is completed.
  */
+/**
+ * Pointer input payload passed to screen programs. Positions are already normalized to the
+ * program content area; the host may provide multiple pressed keys for combo interactions.
+ */
+struct ELEVATOR_API FScreenPointerEvent
+{
+    FScreenPointerEvent() = default;
+
+    FKey TriggerKey = EKeys::Invalid;
+    TArray<FKey> PressedKeys;
+    FVector2D ProgramNormalizedPosition = FVector2D::ZeroVector;
+    FVector2D ProgramPixelPosition = FVector2D::ZeroVector;
+    FVector2D ScreenPixelPosition = FVector2D::ZeroVector;
+    int32 PointerIndex = 0;
+
+    bool IsButtonPressed(const FKey& Key) const
+    {
+        return PressedKeys.Contains(Key);
+    }
+
+    bool HasAnyButtonPressed() const
+    {
+        return PressedKeys.Num() > 0;
+    }
+};
+
 class ELEVATOR_API IScreenProgram
 {
 public:
@@ -20,16 +48,22 @@ public:
     virtual TSharedRef<SWidget> CreateWidget(const FVector2D& Size) = 0;
 
     /**
-     * Called when the cursor position changes.
-     * @param NormalizedPosition Cursor position in normalized 0-1 coordinates
+     * Called whenever the pointer moves inside the program content area.
+     * @param Event Pointer description containing normalized and pixel positions plus pressed keys
      */
-    virtual void UpdateCursor(const FVector2D& NormalizedPosition) = 0;
+    virtual void OnPointerMoved(const FScreenPointerEvent& Event) = 0;
 
     /**
-     * Called when a click occurs at the current cursor position.
-     * @return True if the click was handled and requires a render update
+     * Called when a pointer button is pressed while hovering the program.
+     * @param Event Pointer description for the press event
      */
-    virtual bool HandleClick() = 0;
+    virtual void OnPointerPressed(const FScreenPointerEvent& Event) = 0;
+
+    /**
+     * Called when a pointer button is released.
+     * @param Event Pointer description for the release event
+     */
+    virtual void OnPointerReleased(const FScreenPointerEvent& Event) = 0;
 
     /**
      * Check if the program's task is complete.
@@ -38,10 +72,9 @@ public:
     virtual bool IsTaskComplete() const = 0;
 
     /**
-     * Check if the program requests to exit the workstation.
-     * @return True if the user should exit the workstation
+     * Provide the cursor style best representing the current hover/interaction state.
      */
-    virtual bool ShouldExit() const { return false; }
+    virtual EMouseCursor::Type GetCursorType() const { return EMouseCursor::Default; }
 
     /**
      * Called when the screen size changes (e.g., render target resize).

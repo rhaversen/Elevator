@@ -324,8 +324,16 @@ void UWorkstationInteractionComponent::ToggleCursor(bool bEnable)
             // Enable mouse for UI interaction
             FInputModeGameAndUI InputMode;
             InputMode.SetHideCursorDuringCapture(false);
-            InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+            InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::LockAlways);
             CachedController->SetInputMode(InputMode);
+
+            if (ULocalPlayer* LocalPlayer = CachedController->GetLocalPlayer())
+            {
+                if (UGameViewportClient* ViewportClient = LocalPlayer->ViewportClient)
+                {
+                    ViewportClient->SetMouseCaptureMode(EMouseCaptureMode::CapturePermanently_IncludingInitialMouseDown);
+                }
+            }
         }
         else
         {
@@ -333,6 +341,16 @@ void UWorkstationInteractionComponent::ToggleCursor(bool bEnable)
             FInputModeGameOnly InputMode;
             InputMode.SetConsumeCaptureMouseDown(false);
             CachedController->SetInputMode(InputMode);
+
+            if (ULocalPlayer* LocalPlayer = CachedController->GetLocalPlayer())
+            {
+                if (UGameViewportClient* ViewportClient = LocalPlayer->ViewportClient)
+                {
+                    ViewportClient->SetMouseCaptureMode(EMouseCaptureMode::CapturePermanently);
+                    ViewportClient->SetMouseLockMode(EMouseLockMode::LockOnCapture);
+                    ViewportClient->SetHideCursorDuringCapture(true);
+                }
+            }
         }
     }
 }

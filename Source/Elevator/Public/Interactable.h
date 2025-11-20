@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "InputCoreTypes.h"
 #include "UObject/Interface.h"
 #include "Interactable.generated.h"
 
@@ -69,11 +70,22 @@ public:
     virtual void OnInteractionHover_Implementation(const FHitResult& Hit) { /* Override in derived classes */ }
 
     /**
-     * Called when the player clicks while interacting with the object (e.g. mouse button press in workstation view).
-     * @param PlayerPawn The pawn that triggered the click
-     * @param Hit The hit result from the click trace
+     * Called when the player presses a pointer button while interacting with the object.
+     * @param PlayerPawn The pawn that triggered the press
+     * @param Hit The hit result from the pointer trace
+     * @param PointerKey The input key associated with the pointer button
      */
     UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
-    void OnInteractionClick(APawn* PlayerPawn, const FHitResult& Hit);
-    virtual void OnInteractionClick_Implementation(APawn* PlayerPawn, const FHitResult& Hit) { /* Override in derived classes */ }
+    void OnInteractionPointerPressed(APawn* PlayerPawn, const FHitResult& Hit, FKey PointerKey);
+    virtual void OnInteractionPointerPressed_Implementation(APawn* PlayerPawn, const FHitResult& Hit, FKey PointerKey) { /* Override in derived classes */ }
+
+    /**
+     * Called when the player releases a pointer button while interacting with the object.
+     * @param PlayerPawn The pawn that triggered the release
+     * @param Hit The hit result from the pointer trace
+     * @param PointerKey The input key associated with the pointer button
+     */
+    UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+    void OnInteractionPointerReleased(APawn* PlayerPawn, const FHitResult& Hit, FKey PointerKey);
+    virtual void OnInteractionPointerReleased_Implementation(APawn* PlayerPawn, const FHitResult& Hit, FKey PointerKey) { /* Override in derived classes */ }
 };

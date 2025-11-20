@@ -4,105 +4,79 @@
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/SBoxPanel.h"
+#include "Widgets/SCanvas.h"
+#include "Widgets/Layout/SBorder.h"
 #include "Styling/CoreStyle.h"
 
 FSimpleButtonProgram::FSimpleButtonProgram()
 {
+    // Initialize a default window
+    Window.Position = FVector2D(400.0f, 300.0f);
+    Window.Size = FVector2D(600.0f, 400.0f);
+    Window.Title = TEXT("My Computer");
 }
 
 namespace
 {
-    // Helper function to create an outlined button with text and hover indicator
-    TSharedRef<SWidget> CreateOutlinedButton(
-        float Width,
-        float Height,
-        const FText& ButtonText,
-        int32 FontSize,
-        TAttribute<FSlateColor> MainColor,
-        TAttribute<bool> IsHovered)
+    // Helper to create the window content
+    TSharedRef<SWidget> CreateMockWindow(const FString& Title)
     {
-        const float BorderThickness = 2.0f;
+        const FSlateBrush* Brush = FCoreStyle::Get().GetBrush("WhiteBrush");
+        const FLinearColor Black = FLinearColor::Black;
+        const FLinearColor Green = FLinearColor::Green;
 
-        return SNew(SBox)
-            .WidthOverride(Width)
-            .HeightOverride(Height)
+        return SNew(SBorder)
+            .BorderImage(Brush)
+            .BorderBackgroundColor(Green)
+            .Padding(2.0f)
             [
-                SNew(SOverlay)
-                // Background fill (visible on hover)
-                + SOverlay::Slot()
-                .HAlign(HAlign_Fill)
-                .VAlign(VAlign_Fill)
+                SNew(SBorder)
+                .BorderImage(Brush)
+                .BorderBackgroundColor(Black)
+                .Padding(0.0f)
                 [
-                    SNew(SImage)
-                    .Image(FCoreStyle::Get().GetBrush("WhiteBrush"))
-                    .ColorAndOpacity(MainColor)
-                    .Visibility(TAttribute<EVisibility>::Create(TAttribute<EVisibility>::FGetter::CreateLambda([IsHovered]() {
-                        return IsHovered.Get() ? EVisibility::Visible : EVisibility::Hidden;
-                    })))
-                ]
-                // Top border
-                + SOverlay::Slot()
-                .HAlign(HAlign_Fill)
-                .VAlign(VAlign_Top)
-                [
-                    SNew(SBox)
-                    .HeightOverride(BorderThickness)
+                    SNew(SVerticalBox)
+                    // Title Bar
+                    + SVerticalBox::Slot()
+                    .AutoHeight()
                     [
-                        SNew(SImage)
-                        .Image(FCoreStyle::Get().GetBrush("WhiteBrush"))
-                        .ColorAndOpacity(MainColor)
+                        SNew(SBorder)
+                        .BorderImage(Brush)
+                        .BorderBackgroundColor(Black)
+                        .Padding(FMargin(10.0f, 8.0f))
+                        [
+                            SNew(STextBlock)
+                            .Text(FText::FromString(Title))
+                            .Font(FCoreStyle::GetDefaultFontStyle("Bold", 12))
+                            .ColorAndOpacity(Green)
+                        ]
                     ]
-                ]
-                // Bottom border
-                + SOverlay::Slot()
-                .HAlign(HAlign_Fill)
-                .VAlign(VAlign_Bottom)
-                [
-                    SNew(SBox)
-                    .HeightOverride(BorderThickness)
+                    // Divider
+                    + SVerticalBox::Slot()
+                    .AutoHeight()
                     [
-                        SNew(SImage)
-                        .Image(FCoreStyle::Get().GetBrush("WhiteBrush"))
-                        .ColorAndOpacity(MainColor)
+                        SNew(SBox)
+                        .HeightOverride(2.0f)
+                        [
+                            SNew(SImage)
+                            .Image(Brush)
+                            .ColorAndOpacity(Green)
+                        ]
                     ]
-                ]
-                // Left border
-                + SOverlay::Slot()
-                .HAlign(HAlign_Left)
-                .VAlign(VAlign_Fill)
-                [
-                    SNew(SBox)
-                    .WidthOverride(BorderThickness)
+                    // Content Area
+                    + SVerticalBox::Slot()
+                    .FillHeight(1.0f)
                     [
-                        SNew(SImage)
-                        .Image(FCoreStyle::Get().GetBrush("WhiteBrush"))
-                        .ColorAndOpacity(MainColor)
+                        SNew(SBorder)
+                        .BorderImage(Brush)
+                        .BorderBackgroundColor(Black)
+                        .Padding(10.0f)
+                        [
+                            SNew(STextBlock)
+                            .Text(FText::FromString(TEXT("Welcome to Mock OS v0.1\n\n- Drag title bar to move\n- Drag bottom-right to resize")))
+                            .ColorAndOpacity(Green)
+                        ]
                     ]
-                ]
-                // Right border
-                + SOverlay::Slot()
-                .HAlign(HAlign_Right)
-                .VAlign(VAlign_Fill)
-                [
-                    SNew(SBox)
-                    .WidthOverride(BorderThickness)
-                    [
-                        SNew(SImage)
-                        .Image(FCoreStyle::Get().GetBrush("WhiteBrush"))
-                        .ColorAndOpacity(MainColor)
-                    ]
-                ]
-                // Centered text
-                + SOverlay::Slot()
-                .HAlign(HAlign_Center)
-                .VAlign(VAlign_Center)
-                [
-                    SNew(STextBlock)
-                    .Text(ButtonText)
-                    .Font(FCoreStyle::GetDefaultFontStyle("Bold", FontSize))
-                    .ColorAndOpacity(TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateLambda([MainColor, IsHovered]() {
-                        return IsHovered.Get() ? FSlateColor(FLinearColor::Black) : MainColor.Get();
-                    })))
                 ]
             ];
     }
@@ -110,137 +84,152 @@ namespace
 
 TSharedRef<SWidget> FSimpleButtonProgram::CreateWidget(const FVector2D& Size)
 {
-    ScreenSize = Size;
+    ProgramSize = FVector2D(FMath::Max(Size.X, 1.0f), FMath::Max(Size.Y, 1.0f));
+    ApplyCursorPosition(CursorPosition);
 
-    return SNew(SOverlay)
-        // Background (MUST be completely black)
-        + SOverlay::Slot()
-        .HAlign(HAlign_Fill)
-        .VAlign(VAlign_Fill)
+    return SNew(SCanvas)
+        // The Window
+        + SCanvas::Slot()
+        .Position(TAttribute<FVector2D>::Create(TAttribute<FVector2D>::FGetter::CreateSP(this, &FSimpleButtonProgram::GetWindowPosition)))
+        .Size(TAttribute<FVector2D>::Create(TAttribute<FVector2D>::FGetter::CreateSP(this, &FSimpleButtonProgram::GetWindowSize)))
         [
-            SNew(SImage)
-            .ColorAndOpacity(FLinearColor::Black)
-        ]
-        // Buttons container (Centered)
-        + SOverlay::Slot()
-        .HAlign(HAlign_Center)
-        .VAlign(VAlign_Center)
-        [
-            SNew(SHorizontalBox)
-            // Task button
-            + SHorizontalBox::Slot()
-            .AutoWidth()
-            [
-                CreateOutlinedButton(
-                    TaskButtonWidth,
-                    TaskButtonHeight,
-                    FText::FromString(TEXT("Complete Task")),
-                    16,
-                    TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateSP(this, &FSimpleButtonProgram::GetTaskButtonColor)),
-                    TAttribute<bool>::Create(TAttribute<bool>::FGetter::CreateLambda([this](){ return bTaskButtonHovered; }))
-                )
-            ]
-            // Spacing
-            + SHorizontalBox::Slot()
-            .AutoWidth()
-            [
-                SNew(SBox)
-                .WidthOverride(ButtonSpacing)
-            ]
-            // Exit button
-            + SHorizontalBox::Slot()
-            .AutoWidth()
-            [
-                CreateOutlinedButton(
-                    ExitButtonWidth,
-                    ExitButtonHeight,
-                    FText::FromString(TEXT("Exit")),
-                    14,
-                    TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateSP(this, &FSimpleButtonProgram::GetExitButtonColor)),
-                    TAttribute<bool>::Create(TAttribute<bool>::FGetter::CreateLambda([this](){ return bExitButtonHovered; }))
-                )
-            ]
-        ]
-        // Task status indicator (bottom center)
-        + SOverlay::Slot()
-        .HAlign(HAlign_Center)
-        .VAlign(VAlign_Bottom)
-        .Padding(FMargin(0.0f, 0.0f, 0.0f, 30.0f))
-        [
-            SNew(STextBlock)
-            .Text(this, &FSimpleButtonProgram::GetTaskStatusText)
-            .Font(FCoreStyle::GetDefaultFontStyle("Regular", 18))
-            .ColorAndOpacity(FLinearColor::Green)
+            CreateMockWindow(Window.Title)
         ];
 }
 
-void FSimpleButtonProgram::GetButtonRects(const FVector2D& InScreenSize, FBox2D& OutTaskRect, FBox2D& OutExitRect) const
+void FSimpleButtonProgram::OnPointerMoved(const FScreenPointerEvent& Event)
 {
-    const float TotalWidth = TaskButtonWidth + ButtonSpacing + ExitButtonWidth;
-    const float StartX = (InScreenSize.X - TotalWidth) * 0.5f;
-    const float CenterY = InScreenSize.Y * 0.5f;
-
-    // Task Button
-    FVector2D TaskMin(StartX, CenterY - TaskButtonHeight * 0.5f);
-    FVector2D TaskMax(StartX + TaskButtonWidth, CenterY + TaskButtonHeight * 0.5f);
-    OutTaskRect = FBox2D(TaskMin, TaskMax);
-
-    // Exit Button
-    FVector2D ExitMin(StartX + TaskButtonWidth + ButtonSpacing, CenterY - ExitButtonHeight * 0.5f);
-    FVector2D ExitMax(ExitMin.X + ExitButtonWidth, ExitMin.Y + ExitButtonHeight);
-    OutExitRect = FBox2D(ExitMin, ExitMax);
+    ApplyCursorPosition(Event.ProgramNormalizedPosition);
 }
 
-void FSimpleButtonProgram::UpdateCursor(const FVector2D& NormalizedPosition)
+void FSimpleButtonProgram::OnPointerPressed(const FScreenPointerEvent& Event)
 {
-    CursorPosition = NormalizedPosition;
+    ApplyCursorPosition(Event.ProgramNormalizedPosition);
 
-    const FVector2D PixelPos = CursorPosition * ScreenSize;
-    
-    FBox2D TaskRect, ExitRect;
-    GetButtonRects(ScreenSize, TaskRect, ExitRect);
+    if (CurrentState != EInteractionState::Idle)
+    {
+        UpdateCursorStyle();
+        return;
+    }
 
-    bTaskButtonHovered = TaskRect.IsInside(PixelPos);
-    bExitButtonHovered = ExitRect.IsInside(PixelPos);
+    const FVector2D PixelPos = CursorPosition * ProgramSize;
+
+    if (IsCursorOverResizeHandle())
+    {
+        CurrentState = EInteractionState::Resizing;
+        ActivePointerKey = Event.TriggerKey;
+    }
+    else if (IsCursorOverTitleBar())
+    {
+        CurrentState = EInteractionState::Dragging;
+        DragOffset = PixelPos - Window.Position;
+        ActivePointerKey = Event.TriggerKey;
+    }
+    else
+    {
+        ActivePointerKey = EKeys::Invalid;
+    }
+
+    UpdateCursorStyle();
 }
 
-bool FSimpleButtonProgram::HandleClick()
+void FSimpleButtonProgram::OnPointerReleased(const FScreenPointerEvent& Event)
 {
-    bool bHandled = false;
+    ApplyCursorPosition(Event.ProgramNormalizedPosition);
 
-    if (bTaskButtonHovered)
+    if (!ActivePointerKey.IsValid())
     {
-        bTaskComplete = true;
-        bHandled = true;
+        return;
     }
 
-    if (bExitButtonHovered)
+    if (Event.TriggerKey.IsValid() && ActivePointerKey != Event.TriggerKey)
     {
-        RequestExit();
-        bHandled = true;
+        return;
     }
 
-    return bHandled;
+    CurrentState = EInteractionState::Idle;
+    ActivePointerKey = EKeys::Invalid;
+    UpdateCursorStyle();
 }
 
 void FSimpleButtonProgram::OnScreenResized(const FVector2D& NewSize)
 {
-    ScreenSize.X = FMath::Max(NewSize.X, 1.0f);
-    ScreenSize.Y = FMath::Max(NewSize.Y, 1.0f);
-    UpdateCursor(CursorPosition);
+    ProgramSize.X = FMath::Max(NewSize.X, 1.0f);
+    ProgramSize.Y = FMath::Max(NewSize.Y, 1.0f);
+    ApplyCursorPosition(CursorPosition);
 }
 
-FSlateColor FSimpleButtonProgram::GetTaskButtonColor() const
+FVector2D FSimpleButtonProgram::GetWindowPosition() const
 {
-    return FSlateColor(FLinearColor::Green); // Always green
+    return Window.Position;
 }
 
-FSlateColor FSimpleButtonProgram::GetExitButtonColor() const
+FVector2D FSimpleButtonProgram::GetWindowSize() const
 {
-    return FSlateColor(FLinearColor::Green); // Always green
+    return Window.Size;
 }
 
-FText FSimpleButtonProgram::GetTaskStatusText() const
+bool FSimpleButtonProgram::IsCursorOverTitleBar() const
 {
-    return bTaskComplete ? FText::FromString(TEXT("Task Complete")) : FText::FromString(TEXT("Task Pending"));
+    const FVector2D PixelPos = CursorPosition * ProgramSize;
+    
+    // Title bar rect relative to screen
+    FBox2D TitleRect(Window.Position, Window.Position + FVector2D(Window.Size.X, TitleBarHeight));
+    
+    return TitleRect.IsInside(PixelPos);
+}
+
+bool FSimpleButtonProgram::IsCursorOverResizeHandle() const
+{
+    const FVector2D PixelPos = CursorPosition * ProgramSize;
+    
+    // Bottom right corner
+    FVector2D WindowBottomRight = Window.Position + Window.Size;
+    FBox2D HandleRect(WindowBottomRight - FVector2D(ResizeHandleSize, ResizeHandleSize), WindowBottomRight);
+    
+    return HandleRect.IsInside(PixelPos);
+}
+
+void FSimpleButtonProgram::ApplyCursorPosition(const FVector2D& NormalizedPosition)
+{
+    CursorPosition.X = FMath::Clamp(NormalizedPosition.X, 0.0f, 1.0f);
+    CursorPosition.Y = FMath::Clamp(NormalizedPosition.Y, 0.0f, 1.0f);
+
+    const FVector2D PixelPos = CursorPosition * ProgramSize;
+
+    if (CurrentState == EInteractionState::Dragging)
+    {
+        Window.Position = PixelPos - DragOffset;
+
+        Window.Position.X = FMath::Clamp(Window.Position.X, 0.0f, ProgramSize.X - Window.Size.X);
+        Window.Position.Y = FMath::Clamp(Window.Position.Y, 0.0f, ProgramSize.Y - Window.Size.Y);
+    }
+    else if (CurrentState == EInteractionState::Resizing)
+    {
+        const FVector2D NewSize = PixelPos - Window.Position;
+        Window.Size.X = FMath::Max(NewSize.X, MinWindowSize);
+        Window.Size.Y = FMath::Max(NewSize.Y, MinWindowSize);
+    }
+
+    UpdateCursorStyle();
+}
+
+void FSimpleButtonProgram::UpdateCursorStyle()
+{
+    if (CurrentState == EInteractionState::Resizing || IsCursorOverResizeHandle())
+    {
+        ActiveCursor = EMouseCursor::ResizeSouthEast;
+    }
+    else if (CurrentState == EInteractionState::Dragging)
+    {
+        ActiveCursor = EMouseCursor::GrabHand;
+    }
+    else if (IsCursorOverTitleBar())
+    {
+        ActiveCursor = EMouseCursor::Hand;
+    }
+    else
+    {
+        ActiveCursor = EMouseCursor::Default;
+    }
 }

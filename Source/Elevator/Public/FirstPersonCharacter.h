@@ -35,7 +35,8 @@ protected:
     void StartJump();
     void StopJump();
     void Interact();
-    void HandleWorkstationClick();
+    void HandleWorkstationPointerPressed();
+    void HandleWorkstationPointerReleased();
 
 private:
     UPROPERTY(VisibleAnywhere, Category = "Components")
