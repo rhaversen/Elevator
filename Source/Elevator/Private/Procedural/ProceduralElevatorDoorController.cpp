@@ -3,21 +3,6 @@
 #include "Procedural/DoorInterpolationFunctions.h"
 #include "Math/UnrealMathUtility.h"
 
-namespace
-{
-    constexpr EProceduralElevatorDoorSlot GDoorSlots[FProceduralElevatorDoorController::DoorSlotCount] = {
-        EProceduralElevatorDoorSlot::FrontLeft,
-        EProceduralElevatorDoorSlot::FrontRight,
-        EProceduralElevatorDoorSlot::BackLeft,
-        EProceduralElevatorDoorSlot::BackRight
-    };
-
-    constexpr int32 ToDoorIndex(EProceduralElevatorDoorSlot Slot)
-    {
-        return static_cast<int32>(Slot);
-    }
-}
-
 static_assert(FProceduralElevatorDoorController::DoorSlotCount == AProceduralElevator::DoorSlotCount, "Door slot definitions must stay in sync.");
 
 void FProceduralElevatorDoorController::Initialize(AProceduralElevator *InOwner)
@@ -65,7 +50,7 @@ void FProceduralElevatorDoorController::Tick(float DeltaSeconds)
             Motion.Duration = 0.0f;
         }
 
-        Owner->ApplyDoorOffset(GDoorSlots[Index]);
+        Owner->ApplyDoorOffset(static_cast<EProceduralElevatorDoorSlot>(Index));
     }
 }
 
@@ -81,7 +66,7 @@ void FProceduralElevatorDoorController::CloseDoors()
 
 void FProceduralElevatorDoorController::SetDoorFractionImmediate(EProceduralElevatorDoorSlot Slot, float Fraction)
 {
-    const int32 Index = ToDoorIndex(Slot);
+    const int32 Index = static_cast<int32>(Slot);
     if (Index < 0 || Index >= DoorSlotCount)
     {
         return;
@@ -103,7 +88,7 @@ void FProceduralElevatorDoorController::SetDoorFractionImmediate(EProceduralElev
 
 float FProceduralElevatorDoorController::GetDoorFraction(EProceduralElevatorDoorSlot Slot) const
 {
-    const int32 Index = ToDoorIndex(Slot);
+    const int32 Index = static_cast<int32>(Slot);
     if (Index < 0 || Index >= DoorSlotCount)
     {
         return 0.0f;
@@ -125,7 +110,7 @@ void FProceduralElevatorDoorController::SetTargetFraction(float Target)
 
         if (Owner)
         {
-            Owner->ApplyDoorOffset(GDoorSlots[Index]);
+            Owner->ApplyDoorOffset(static_cast<EProceduralElevatorDoorSlot>(Index));
         }
     }
 }
