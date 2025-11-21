@@ -19,7 +19,7 @@ FSimpleButtonProgram::FSimpleButtonProgram()
 
 
 
-TSharedRef<SWidget> FSimpleButtonProgram::CreateWidget(const FVector2D& Size)
+TSharedRef<SWidget> FSimpleButtonProgram::CreateWidget(const FVector2D& Size, const FScreenProgramStyle& Style)
 {
     ProgramSize = FVector2D(FMath::Max(Size.X, 1.0f), FMath::Max(Size.Y, 1.0f));
     ApplyCursorPosition(CursorPosition);
@@ -37,7 +37,7 @@ TSharedRef<SWidget> FSimpleButtonProgram::CreateWidget(const FVector2D& Size)
             SNew(SBorder)
             .BorderImage(Brush)
             .BorderBackgroundColor(Green)
-            .Padding(2.0f)
+            .Padding(Style.LineThickness)
             [
                 SNew(SBorder)
                 .BorderImage(Brush)
@@ -56,7 +56,7 @@ TSharedRef<SWidget> FSimpleButtonProgram::CreateWidget(const FVector2D& Size)
                         [
                             SNew(STextBlock)
                             .Text(FText::FromString(Window.Title))
-                            .Font(FCoreStyle::GetDefaultFontStyle("Bold", 12))
+                            .Font(FCoreStyle::GetDefaultFontStyle("Bold", Style.TextSize))
                             .ColorAndOpacity(Green)
                         ]
                     ]
@@ -65,7 +65,7 @@ TSharedRef<SWidget> FSimpleButtonProgram::CreateWidget(const FVector2D& Size)
                     .AutoHeight()
                     [
                         SNew(SBox)
-                        .HeightOverride(2.0f)
+                        .HeightOverride(Style.LineThickness)
                         [
                             SNew(SImage)
                             .Image(Brush)
@@ -89,6 +89,7 @@ TSharedRef<SWidget> FSimpleButtonProgram::CreateWidget(const FVector2D& Size)
                             [
                                 SNew(STextBlock)
                                 .Text(FText::FromString(TEXT("Welcome to Mock OS v0.1\n\n- Drag title bar to move\n- Drag bottom-right to resize\n- Click Complete to finish task")))
+                                .Font(FCoreStyle::GetDefaultFontStyle("Regular", Style.TextSize))
                                 .ColorAndOpacity(Green)
                             ]
                             // Complete button in center
@@ -99,7 +100,8 @@ TSharedRef<SWidget> FSimpleButtonProgram::CreateWidget(const FVector2D& Size)
                                 SlateWidgetHelpers::CreateOutlinedButton(
                                     FVector2D(CompleteButtonWidth, CompleteButtonHeight),
                                     FText::FromString(TEXT("Complete")),
-                                    16,
+                                    Style.TextSize,
+                                    Style.LineThickness,
                                     TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateSP(this, &FSimpleButtonProgram::GetCompleteButtonBorderColor)),
                                     TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateSP(this, &FSimpleButtonProgram::GetCompleteButtonFillColor)),
                                     TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateSP(this, &FSimpleButtonProgram::GetCompleteButtonTextColor)))

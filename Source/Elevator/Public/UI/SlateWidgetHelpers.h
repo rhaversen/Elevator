@@ -15,6 +15,7 @@ namespace SlateWidgetHelpers
 	 * @param Size - The fixed size of the button
 	 * @param ButtonText - Text to display in the center of the button
 	 * @param FontSize - Size of the font for the button text
+	 * @param BorderThickness - Thickness of the border in pixels
 	 * @param BorderColorAttr - Attribute for the border color (can be dynamic)
 	 * @param FillColorAttr - Attribute for the background fill color (can be dynamic)
 	 * @param TextColorAttr - Attribute for the text color (can be dynamic)
@@ -24,6 +25,7 @@ namespace SlateWidgetHelpers
 		const FVector2D& Size,
 		const FText& ButtonText,
 		int32 FontSize,
+		float BorderThickness,
 		TAttribute<FSlateColor> BorderColorAttr,
 		TAttribute<FSlateColor> FillColorAttr,
 		TAttribute<FSlateColor> TextColorAttr);

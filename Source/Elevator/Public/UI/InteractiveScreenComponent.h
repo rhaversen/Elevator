@@ -85,6 +85,14 @@ private:
     UPROPERTY(EditAnywhere, Category = "Interactive Screen")
     TObjectPtr<UTextureRenderTarget2D> ScreenRenderTarget;
 
+    /** Thickness of lines (borders, dividers) in pixels */
+    UPROPERTY(EditAnywhere, Category = "Interactive Screen", meta = (ClampMin = "1.0", ClampMax = "10.0"))
+    float LineThickness = 2.0f;
+
+    /** Base font size for UI text */
+    UPROPERTY(EditAnywhere, Category = "Interactive Screen", meta = (ClampMin = "8", ClampMax = "48"))
+    int32 TextSize = 16;
+
     TSharedPtr<IScreenProgram> CurrentProgram;
     TSharedPtr<SWidget> RootWidget;
     TSharedPtr<SWidget> ProgramWidget;

@@ -13,7 +13,7 @@ public:
     FSimpleButtonProgram();
     virtual ~FSimpleButtonProgram() override = default;
 
-    virtual TSharedRef<SWidget> CreateWidget(const FVector2D& Size) override;
+    virtual TSharedRef<SWidget> CreateWidget(const FVector2D& Size, const FScreenProgramStyle& Style) override;
     virtual void OnPointerMoved(const FScreenPointerEvent& Event) override;
     virtual void OnPointerPressed(const FScreenPointerEvent& Event) override;
     virtual void OnPointerReleased(const FScreenPointerEvent& Event) override;

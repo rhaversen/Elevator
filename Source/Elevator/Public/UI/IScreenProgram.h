@@ -9,6 +9,23 @@
  * Interface for screen programs that can be displayed on interactive screens.
  * Programs should be lightweight and report back when their task is completed.
  */
+
+/**
+ * Style parameters for screen programs
+ */
+struct ELEVATOR_API FScreenProgramStyle
+{
+    /** Thickness of lines (borders, dividers) in pixels */
+    float LineThickness = 2.0f;
+    
+    /** Base font size for UI text */
+    int32 TextSize = 16;
+
+    FScreenProgramStyle() = default;
+    FScreenProgramStyle(float InLineThickness, int32 InTextSize)
+        : LineThickness(InLineThickness), TextSize(InTextSize) {}
+};
+
 /**
  * Pointer input payload passed to screen programs. Positions are already normalized to the
  * program content area; the host may provide multiple pressed keys for combo interactions.
@@ -43,9 +60,10 @@ public:
     /**
      * Create the Slate widget for this program.
      * @param Size The size of the screen in pixels
+     * @param Style Style parameters including line thickness and text size
      * @return The root widget for this program
      */
-    virtual TSharedRef<SWidget> CreateWidget(const FVector2D& Size) = 0;
+    virtual TSharedRef<SWidget> CreateWidget(const FVector2D& Size, const FScreenProgramStyle& Style) = 0;
 
     /**
      * Called whenever the pointer moves inside the program content area.

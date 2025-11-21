@@ -12,11 +12,11 @@ namespace SlateWidgetHelpers
 		const FVector2D& Size,
 		const FText& ButtonText,
 		int32 FontSize,
+		float BorderThickness,
 		TAttribute<FSlateColor> BorderColorAttr,
 		TAttribute<FSlateColor> FillColorAttr,
 		TAttribute<FSlateColor> TextColorAttr)
 	{
-		const float BorderThickness = 2.0f;
 		const FSlateBrush* Brush = FCoreStyle::Get().GetBrush("WhiteBrush");
 
 		return SNew(SBox)

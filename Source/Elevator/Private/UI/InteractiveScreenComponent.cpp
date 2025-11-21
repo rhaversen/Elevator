@@ -291,7 +291,7 @@ void UInteractiveScreenComponent::CreateInterfaceIfNeeded()
             .AutoHeight()
             [
                 SNew(SBox)
-                .HeightOverride(2.0f)
+                .HeightOverride(LineThickness)
                 [
                     SNew(SImage)
                     .Image(FCoreStyle::Get().GetBrush("WhiteBrush"))
@@ -316,7 +316,7 @@ void UInteractiveScreenComponent::CreateInterfaceIfNeeded()
                         [
                             SNew(STextBlock)
                             .Text_Lambda([this]() { return GetFooterWeekdayText(); })
-                            .Font(FCoreStyle::GetDefaultFontStyle("Regular", 16))
+                            .Font(FCoreStyle::GetDefaultFontStyle("Regular", TextSize))
                             .ColorAndOpacity(FSlateColor(FLinearColor::Green))
                         ]
                         + SHorizontalBox::Slot()
@@ -326,7 +326,7 @@ void UInteractiveScreenComponent::CreateInterfaceIfNeeded()
                         [
                             SNew(STextBlock)
                             .Text_Lambda([this]() { return GetFooterDateText(); })
-                            .Font(FCoreStyle::GetDefaultFontStyle("Regular", 16))
+                            .Font(FCoreStyle::GetDefaultFontStyle("Regular", TextSize))
                             .ColorAndOpacity(FSlateColor(FLinearColor::Green))
                         ]
                         + SHorizontalBox::Slot()
@@ -336,7 +336,7 @@ void UInteractiveScreenComponent::CreateInterfaceIfNeeded()
                         [
                             SNew(STextBlock)
                             .Text_Lambda([this]() { return GetFooterTimeText(); })
-                            .Font(FCoreStyle::GetDefaultFontStyle("Regular", 16))
+                            .Font(FCoreStyle::GetDefaultFontStyle("Regular", TextSize))
                             .ColorAndOpacity(FSlateColor(FLinearColor::Green))
                         ]
                         + SHorizontalBox::Slot()
@@ -346,7 +346,7 @@ void UInteractiveScreenComponent::CreateInterfaceIfNeeded()
                         [
                             SNew(STextBlock)
                             .Text_Lambda([this]() { return GetFooterTaskStatusText(); })
-                            .Font(FCoreStyle::GetDefaultFontStyle("Bold", 16))
+                            .Font(FCoreStyle::GetDefaultFontStyle("Bold", TextSize))
                             .ColorAndOpacity_Lambda([this]() { return GetFooterTaskStatusColor(); })
                         ]
                         + SHorizontalBox::Slot()
@@ -362,7 +362,8 @@ void UInteractiveScreenComponent::CreateInterfaceIfNeeded()
                             SlateWidgetHelpers::CreateOutlinedButton(
                                 ExitButtonSize,
                                 FText::FromString(TEXT("Exit")),
-                                14,
+                                TextSize,
+                                LineThickness,
                                 TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateUObject(this, &UInteractiveScreenComponent::GetExitButtonBorderColor)),
                                 TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateUObject(this, &UInteractiveScreenComponent::GetExitButtonFillColor)),
                                 TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateUObject(this, &UInteractiveScreenComponent::GetExitButtonTextColor)))
@@ -418,7 +419,9 @@ void UInteractiveScreenComponent::UpdateProgramContent()
     }
 
     CurrentProgram->OnScreenResized(ProgramAreaSize);
-    ProgramWidget = CurrentProgram->CreateWidget(ProgramAreaSize);
+    
+    FScreenProgramStyle Style(LineThickness, TextSize);
+    ProgramWidget = CurrentProgram->CreateWidget(ProgramAreaSize, Style);
 
     if (ProgramWidget.IsValid())
     {
