@@ -128,7 +128,7 @@ void FSimpleButtonProgram::OnPointerPressed(const FScreenPointerEvent& Event)
 
     const FVector2D PixelPos = CursorPosition * ProgramSize;
 
-    if (IsCursorOverCompleteButton())
+    if (IsCursorOverCompleteButton() && !bTaskCompleted)
     {
         bCompleteButtonPressed = true;
         ActivePointerKey = Event.TriggerKey;
@@ -239,14 +239,14 @@ bool FSimpleButtonProgram::IsCursorOverCompleteButton() const
 
 FSlateColor FSimpleButtonProgram::GetCompleteButtonBorderColor() const
 {
-    return bTaskCompleted ? FSlateColor(FLinearColor(0.5f, 0.5f, 0.5f)) : FSlateColor(FLinearColor::Green);
+    return bTaskCompleted ? FSlateColor(FLinearColor::Green) : FSlateColor(FLinearColor::Green);
 }
 
 FSlateColor FSimpleButtonProgram::GetCompleteButtonFillColor() const
 {
     if (bTaskCompleted)
     {
-        return FSlateColor(FLinearColor(0.2f, 0.2f, 0.2f));
+        return FSlateColor(FLinearColor::Transparent);
     }
     return bCompleteButtonHovered ? FSlateColor(FLinearColor::Green) : FSlateColor(FLinearColor::Transparent);
 }
@@ -255,7 +255,7 @@ FSlateColor FSimpleButtonProgram::GetCompleteButtonTextColor() const
 {
     if (bTaskCompleted)
     {
-        return FSlateColor(FLinearColor(0.5f, 0.5f, 0.5f));
+        return FSlateColor(FLinearColor::Green);
     }
     return bCompleteButtonHovered ? FSlateColor(FLinearColor::Black) : FSlateColor(FLinearColor::Green);
 }
@@ -286,7 +286,8 @@ void FSimpleButtonProgram::ApplyCursorPosition(const FVector2D& NormalizedPositi
 
 void FSimpleButtonProgram::UpdateCursorStyle()
 {
-    bCompleteButtonHovered = IsCursorOverCompleteButton();
+    // Only detect hover state if task is not completed
+    bCompleteButtonHovered = !bTaskCompleted && IsCursorOverCompleteButton();
 
     if (CurrentState == EInteractionState::Resizing || IsCursorOverResizeHandle())
     {

@@ -2,6 +2,7 @@
 
 #include "Procedural/ProceduralElevatorDoorController.h"
 #include "Procedural/DoorInterpolationFunctions.h"
+#include "System/ElevatorGameManagerSubsystem.h"
 
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -366,6 +367,11 @@ bool AProceduralElevator::EvaluateInteractionFocus_Implementation(APawn* PlayerP
         ButtonComponent = FindClosestButtonWithinRadius(SearchOrigin, AssistRadius);
     }
 
+    if (ButtonComponent && !IsButtonInteractionEnabled(ButtonComponent))
+    {
+        ButtonComponent = nullptr;
+    }
+
     if (ButtonComponent)
     {
         OutHighlightComponent = ButtonComponent;
@@ -399,6 +405,11 @@ UPrimitiveComponent* AProceduralElevator::FindClosestButtonWithinRadius(const FV
             continue;
         }
 
+        if (!IsButtonInteractionEnabled(Button))
+        {
+            continue;
+        }
+
         FVector ClosestPoint;
         const float DistanceToCollision = Button->GetClosestPointOnCollision(Point, ClosestPoint);
         const bool bHasClosestPoint = DistanceToCollision >= 0.0f;
@@ -423,33 +434,63 @@ bool AProceduralElevator::HandleButtonPressed(UPrimitiveComponent* ButtonCompone
         return false;
     }
 
+    const FName ButtonId = GetButtonId(ButtonComponent);
+
+    if (!IsButtonInteractionEnabled(ButtonComponent))
+    {
+        if (const UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
+        {
+            UE_LOG(LogTemp, Log, TEXT("[Elevator] Ignoring press on %s because it is disabled (Day=%d TaskComplete=%s)."),
+                *ButtonId.ToString(),
+                Manager->GetCurrentDay(),
+                Manager->IsTaskComplete() ? TEXT("true") : TEXT("false"));
+        }
+        return false;
+    }
+
     if (ButtonComponent == ButtonDoorOpen)
     {
         RequestOpenDoors();
+        if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
+        {
+            Manager->HandleElevatorButtonPressed(ButtonId);
+        }
         return true;
     }
 
     if (ButtonComponent == ButtonDoorClose)
     {
         RequestCloseDoors(true);
+        if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
+        {
+            Manager->HandleElevatorButtonPressed(ButtonId);
+        }
         return true;
     }
 
     if (ButtonComponent == ButtonCallDown || ButtonComponent == ButtonCallUp)
     {
         UnlockDoorsAndOpen();
+        if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
+        {
+            Manager->HandleElevatorButtonPressed(ButtonId);
+        }
         return true;
     }
 
     if (ButtonComponent == ButtonAlarm)
     {
+        if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
+        {
+            Manager->HandleElevatorButtonPressed(ButtonId);
+        }
         return true;
     }
 
     if (IsFloorButtonComponent(ButtonComponent))
     {
-        HandleFloorButtonPressed();
-        return true;
+        UE_LOG(LogTemp, Log, TEXT("[Elevator] Floor button %s pressed."), *ButtonId.ToString());
+        return HandleFloorButtonPressed(ButtonId);
     }
 
     return false;
@@ -530,23 +571,32 @@ bool AProceduralElevator::IsFloorButtonComponent(const UPrimitiveComponent* Comp
            Component == Button8 || Component == Button9;
 }
 
-void AProceduralElevator::HandleFloorButtonPressed()
+bool AProceduralElevator::HandleFloorButtonPressed(FName ButtonId)
 {
     CancelDoorUnlockTimer();
     bDoorsLocked = true;
 
     RequestCloseDoors(true);
 
+    UE_LOG(LogTemp, Log, TEXT("[Elevator] Handling floor selection %s. Doors locked until timer expires."), *ButtonId.ToString());
+
+    if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
+    {
+        Manager->HandleElevatorButtonPressed(ButtonId);
+    }
+
     if (FloorSelectionDoorHoldTime <= KINDA_SMALL_NUMBER)
     {
         HandleDoorUnlockTimerElapsed();
-        return;
+        return true;
     }
 
     if (UWorld* World = GetWorld())
     {
         World->GetTimerManager().SetTimer(DoorUnlockTimerHandle, this, &AProceduralElevator::HandleDoorUnlockTimerElapsed, FloorSelectionDoorHoldTime, false);
     }
+
+    return true;
 }
 
 void AProceduralElevator::HandleDoorUnlockTimerElapsed()
@@ -562,6 +612,59 @@ void AProceduralElevator::CancelDoorUnlockTimer()
     {
         World->GetTimerManager().ClearTimer(DoorUnlockTimerHandle);
     }
+}
+
+FName AProceduralElevator::GetButtonId(const UPrimitiveComponent* Component) const
+{
+    if (!Component)
+    {
+        return NAME_None;
+    }
+
+    if (Component == Button0) { static const FName Floor0Id(TEXT("Floor0")); return Floor0Id; }
+    if (Component == Button1) { static const FName Floor1Id(TEXT("Floor1")); return Floor1Id; }
+    if (Component == Button2) { static const FName Floor2Id(TEXT("Floor2")); return Floor2Id; }
+    if (Component == Button3) { static const FName Floor3Id(TEXT("Floor3")); return Floor3Id; }
+    if (Component == Button4) { static const FName Floor4Id(TEXT("Floor4")); return Floor4Id; }
+    if (Component == Button5) { static const FName Floor5Id(TEXT("Floor5")); return Floor5Id; }
+    if (Component == Button6) { static const FName Floor6Id(TEXT("Floor6")); return Floor6Id; }
+    if (Component == Button7) { static const FName Floor7Id(TEXT("Floor7")); return Floor7Id; }
+    if (Component == Button8) { static const FName Floor8Id(TEXT("Floor8")); return Floor8Id; }
+    if (Component == Button9) { static const FName Floor9Id(TEXT("Floor9")); return Floor9Id; }
+    if (Component == ButtonAlarm) { static const FName AlarmId(TEXT("Alarm")); return AlarmId; }
+    if (Component == ButtonCallDown) { static const FName CallDownId(TEXT("CallDown")); return CallDownId; }
+    if (Component == ButtonCallUp) { static const FName CallUpId(TEXT("CallUp")); return CallUpId; }
+    if (Component == ButtonDoorClose) { static const FName DoorCloseId(TEXT("DoorClose")); return DoorCloseId; }
+    if (Component == ButtonDoorOpen) { static const FName DoorOpenId(TEXT("DoorOpen")); return DoorOpenId; }
+
+    return Component->GetFName();
+}
+
+bool AProceduralElevator::IsButtonInteractionEnabled(const UPrimitiveComponent* Component) const
+{
+    if (!Component)
+    {
+        return false;
+    }
+
+    const FName ButtonId = GetButtonId(Component);
+    if (ButtonId.IsNone())
+    {
+        return true;
+    }
+
+    if (const UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
+    {
+        const FString ButtonIdString = ButtonId.ToString();
+        if (ButtonIdString.StartsWith(TEXT("Floor")))
+        {
+            return Manager->IsTaskComplete();
+        }
+
+        return Manager->IsElevatorButtonEnabled(ButtonId);
+    }
+
+    return true;
 }
 
 void AProceduralElevator::UnlockDoorsAndOpen()

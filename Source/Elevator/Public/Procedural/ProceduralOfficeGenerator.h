@@ -562,6 +562,7 @@ protected:
 
 private:
     void InitializeMonitorScreen();
+    void HandleActiveProgramChanged(FName ProgramId);
     
     UInstancedStaticMeshComponent* ResolveComputerMeshComponent();
     void HideComputerHighlight();
@@ -590,6 +591,8 @@ private:
 
     int32 HoveredComputerInstanceIndex = INDEX_NONE;
     int32 CurrentInteractionInstanceIndex = INDEX_NONE;
+
+    FDelegateHandle ProgramChangedHandle;
 
     void NotifyComputerLookedAt(const UPrimitiveComponent* Component, int32 InstanceIndex);
 };

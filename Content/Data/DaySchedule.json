@@ -1,0 +1,15 @@
+{
+  "DefaultProgramId": "SimpleButton",
+  "DefaultLockedButtons": [
+    "Alarm",
+    "CallUp"
+  ],
+  "Days": [
+    {
+      "ProgramId": "SimpleButton"
+    },
+    {
+      "ProgramId": "SimpleButton"
+    }
+  ]
+}

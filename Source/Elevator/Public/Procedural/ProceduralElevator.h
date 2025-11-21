@@ -215,10 +215,12 @@ private:
     void RequestOpenDoors(bool bForce = false);
     void RequestCloseDoors(bool bForce = false);
     bool IsFloorButtonComponent(const UPrimitiveComponent* Component) const;
-    void HandleFloorButtonPressed();
+    bool HandleFloorButtonPressed(FName ButtonId);
     void HandleDoorUnlockTimerElapsed();
     void CancelDoorUnlockTimer();
     void UnlockDoorsAndOpen();
+    FName GetButtonId(const UPrimitiveComponent* Component) const;
+    bool IsButtonInteractionEnabled(const UPrimitiveComponent* Component) const;
 
     UStaticMeshComponent *FrontLeftDoorMesh;
     UStaticMeshComponent *FrontRightDoorMesh;

@@ -4,6 +4,7 @@
 #include "Procedural/ProceduralElevator.h"
 #include "UI/InteractiveScreenComponent.h"
 #include "UI/Programs/SimpleButtonProgram.h"
+#include "System/ElevatorGameManagerSubsystem.h"
 #include "FirstPersonCharacter.h"
 
 #include "Components/ChildActorComponent.h"
@@ -77,10 +78,31 @@ void AProceduralOfficeGenerator::BeginPlay()
     }
 
     InitializeMonitorScreen();
+
+    if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
+    {
+        if (!ProgramChangedHandle.IsValid())
+        {
+            ProgramChangedHandle = Manager->OnProgramChanged().AddUObject(this, &AProceduralOfficeGenerator::HandleActiveProgramChanged);
+            UE_LOG(LogProceduralOffice, Log, TEXT("[Workstation] Subscribed to program change notifications."));
+        }
+
+        HandleActiveProgramChanged(Manager->GetActiveProgramId());
+    }
 }
 
 void AProceduralOfficeGenerator::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    if (ProgramChangedHandle.IsValid())
+    {
+        if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
+        {
+            Manager->OnProgramChanged().Remove(ProgramChangedHandle);
+        }
+        ProgramChangedHandle.Reset();
+        UE_LOG(LogProceduralOffice, Log, TEXT("[Workstation] Unsubscribed from program change notifications."));
+    }
+
     DestroySpawnedComponents();
     Super::EndPlay(EndPlayReason);
 }
@@ -93,9 +115,19 @@ void AProceduralOfficeGenerator::InitializeMonitorScreen()
     }
 
     MonitorScreenComponent->SetRenderTarget(ScreenRenderTarget);
-    
-    // Set the default program for the office monitor
-    MonitorScreenComponent->SetProgram(MakeShared<FSimpleButtonProgram>());
+
+    if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
+    {
+        UE_LOG(LogProceduralOffice, Log, TEXT("[Workstation] Initializing monitor with manager-selected program %s (Day %d)."),
+            *Manager->GetActiveProgramId().ToString(),
+            Manager->GetCurrentDay());
+        MonitorScreenComponent->SetProgram(Manager->CreateActiveProgramInstance());
+    }
+    else
+    {
+        UE_LOG(LogProceduralOffice, Log, TEXT("[Workstation] Manager unavailable; using fallback SimpleButton program."));
+        MonitorScreenComponent->SetProgram(MakeShared<FSimpleButtonProgram>());
+    }
     
     MonitorScreenComponent->InitializeScreen();
 
@@ -106,6 +138,25 @@ void AProceduralOfficeGenerator::InitializeMonitorScreen()
     else if (!ScreenRenderTarget)
     {
         UE_LOG(LogProceduralOffice, Warning, TEXT("ScreenRenderTarget is not set. Please assign RT_ScreenInterface in the details panel."));
+    }
+}
+
+void AProceduralOfficeGenerator::HandleActiveProgramChanged(FName ProgramId)
+{
+    if (!MonitorScreenComponent)
+    {
+        return;
+    }
+
+    if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
+    {
+        const FName EffectiveProgramId = ProgramId.IsNone() ? Manager->GetActiveProgramId() : ProgramId;
+        UE_LOG(LogProceduralOffice, Log, TEXT("[Workstation] Switching monitor to program %s for Day %d."),
+            *EffectiveProgramId.ToString(),
+            Manager->GetCurrentDay());
+        MonitorScreenComponent->SetProgram(Manager->CreateProgramInstanceForId(ProgramId));
+        MonitorScreenComponent->InitializeScreen();
+        MonitorScreenComponent->ResetCursor();
     }
 }
 
@@ -595,8 +646,18 @@ void AProceduralOfficeGenerator::OnInteractionPointerReleased_Implementation(APa
 
     MonitorScreenComponent->ProcessPointerReleased(PointerKey);
 
+    if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
+    {
+        if (MonitorScreenComponent->IsProgramTaskComplete())
+        {
+            UE_LOG(LogProceduralOffice, Log, TEXT("[Workstation] Program task marked complete on Day %d."), Manager->GetCurrentDay());
+            Manager->SetTaskComplete(true);
+        }
+    }
+
     if (MonitorScreenComponent->ShouldExit())
     {
+        UE_LOG(LogProceduralOffice, Log, TEXT("[Workstation] Program requested exit; closing workstation view."));
         if (AFirstPersonCharacter* Character = Cast<AFirstPersonCharacter>(PlayerPawn))
         {
             Character->CancelWorkstationInteraction();
