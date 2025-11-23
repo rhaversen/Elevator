@@ -123,3 +123,55 @@ float FProceduralElevatorDoorController::ApplyInterpolation(float Alpha) const
     }
     return DoorInterpolation::Linear(Alpha);
 }
+
+bool FProceduralElevatorDoorController::IsAnimating() const
+{
+    for (const FDoorMotion& Motion : DoorMotions)
+    {
+        if (Motion.Duration > KINDA_SMALL_NUMBER && Motion.ProgressAlpha < 1.0f)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool FProceduralElevatorDoorController::AreDoorsFullyOpen() const
+{
+    for (const FDoorMotion& Motion : DoorMotions)
+    {
+        if (Motion.CurrentFraction < 0.99f)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool FProceduralElevatorDoorController::AreDoorsFullyClosed() const
+{
+    for (const FDoorMotion& Motion : DoorMotions)
+    {
+        if (Motion.CurrentFraction > 0.01f)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+float FProceduralElevatorDoorController::GetMaxRemainingDuration() const
+{
+    float MaxRemaining = 0.0f;
+    for (const FDoorMotion& Motion : DoorMotions)
+    {
+        if (Motion.Duration <= KINDA_SMALL_NUMBER)
+        {
+            continue;
+        }
+
+        const float Remaining = Motion.Duration * (1.0f - Motion.ProgressAlpha);
+        MaxRemaining = FMath::Max(MaxRemaining, Remaining);
+    }
+    return MaxRemaining;
+}

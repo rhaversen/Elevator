@@ -450,6 +450,26 @@ bool AProceduralElevator::HandleButtonPressed(UPrimitiveComponent* ButtonCompone
 
     if (ButtonComponent == ButtonDoorOpen)
     {
+        // Check if we can open doors before triggering motion
+        if (DoorController)
+        {
+            if (bDoorsLocked)
+            {
+                UE_LOG(LogTemp, Log, TEXT("[Elevator] Door open button ignored - doors locked."));
+                return true; // Consume input while locked
+            }
+            if (DoorController->AreDoorsFullyOpen())
+            {
+                UE_LOG(LogTemp, Log, TEXT("[Elevator] Door open button ignored - doors already fully open."));
+                return true; // Consume input so we do not toggle via fallback interact
+            }
+            if (DoorController->IsAnimating())
+            {
+                UE_LOG(LogTemp, Log, TEXT("[Elevator] Door open button ignored - doors still animating."));
+                return true; // Consume input so we do not toggle via fallback interact
+            }
+        }
+
         RequestOpenDoors();
         if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
         {
@@ -460,7 +480,27 @@ bool AProceduralElevator::HandleButtonPressed(UPrimitiveComponent* ButtonCompone
 
     if (ButtonComponent == ButtonDoorClose)
     {
-        RequestCloseDoors(true);
+        // Check if we can close doors before triggering motion
+        if (DoorController)
+        {
+            if (bDoorsLocked)
+            {
+                UE_LOG(LogTemp, Log, TEXT("[Elevator] Door close button ignored - doors locked."));
+                return true; // Consume input while locked
+            }
+            if (DoorController->AreDoorsFullyClosed())
+            {
+                UE_LOG(LogTemp, Log, TEXT("[Elevator] Door close button ignored - doors already fully closed."));
+                return true; // Consume input so we do not toggle via fallback interact
+            }
+            if (DoorController->IsAnimating())
+            {
+                UE_LOG(LogTemp, Log, TEXT("[Elevator] Door close button ignored - doors still animating."));
+                return true; // Consume input so we do not toggle via fallback interact
+            }
+        }
+
+        RequestCloseDoors(false);
         if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
         {
             Manager->HandleElevatorButtonPressed(ButtonId);
@@ -546,6 +586,19 @@ void AProceduralElevator::RequestOpenDoors(bool bForce)
         return;
     }
 
+    // Don't open if already fully open or animating
+    if (DoorController->AreDoorsFullyOpen())
+    {
+        UE_LOG(LogTemp, Log, TEXT("[Elevator] Doors are already fully open."));
+        return;
+    }
+
+    if (DoorController->IsAnimating())
+    {
+        UE_LOG(LogTemp, Log, TEXT("[Elevator] Doors are still animating."));
+        return;
+    }
+
     DoorController->OpenDoors();
 }
 
@@ -559,6 +612,22 @@ void AProceduralElevator::RequestCloseDoors(bool bForce)
     if (!bForce && bDoorsLocked)
     {
         return;
+    }
+
+    // Don't close if already fully closed or animating (unless forced)
+    if (!bForce)
+    {
+        if (DoorController->AreDoorsFullyClosed())
+        {
+            UE_LOG(LogTemp, Log, TEXT("[Elevator] Doors are already fully closed."));
+            return;
+        }
+
+        if (DoorController->IsAnimating())
+        {
+            UE_LOG(LogTemp, Log, TEXT("[Elevator] Doors are still animating."));
+            return;
+        }
     }
 
     DoorController->CloseDoors();
@@ -578,6 +647,9 @@ bool AProceduralElevator::HandleFloorButtonPressed(FName ButtonId)
 
     RequestCloseDoors(true);
 
+    const float DoorCloseDuration = DoorController ? DoorController->GetMaxRemainingDuration() : 0.0f;
+    const float RideStartDelay = DoorCloseDuration;
+
     UE_LOG(LogTemp, Log, TEXT("[Elevator] Handling floor selection %s. Doors locked until timer expires."), *ButtonId.ToString());
 
     if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
@@ -585,7 +657,9 @@ bool AProceduralElevator::HandleFloorButtonPressed(FName ButtonId)
         Manager->HandleElevatorButtonPressed(ButtonId);
     }
 
-    if (FloorSelectionDoorHoldTime <= KINDA_SMALL_NUMBER)
+    const float UnlockDelay = DoorCloseDuration + ElevatorRideDuration;
+
+    if (UnlockDelay <= KINDA_SMALL_NUMBER)
     {
         HandleDoorUnlockTimerElapsed();
         return true;
@@ -593,7 +667,7 @@ bool AProceduralElevator::HandleFloorButtonPressed(FName ButtonId)
 
     if (UWorld* World = GetWorld())
     {
-        World->GetTimerManager().SetTimer(DoorUnlockTimerHandle, this, &AProceduralElevator::HandleDoorUnlockTimerElapsed, FloorSelectionDoorHoldTime, false);
+        World->GetTimerManager().SetTimer(DoorUnlockTimerHandle, this, &AProceduralElevator::HandleDoorUnlockTimerElapsed, UnlockDelay, false);
     }
 
     return true;

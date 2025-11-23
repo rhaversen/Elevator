@@ -31,6 +31,18 @@ public:
 
     float GetDoorFraction(EProceduralElevatorDoorSlot Slot) const;
 
+    /** Check if any door is currently animating */
+    bool IsAnimating() const;
+
+    /** Check if all doors are fully open (fraction >= 0.99) */
+    bool AreDoorsFullyOpen() const;
+
+    /** Check if all doors are fully closed (fraction <= 0.01) */
+    bool AreDoorsFullyClosed() const;
+
+    /** Maximum remaining time (seconds) until all doors reach their targets. */
+    float GetMaxRemainingDuration() const;
+
 private:
     struct FDoorMotion
     {

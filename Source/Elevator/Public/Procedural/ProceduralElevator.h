@@ -198,8 +198,9 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
     FText InteractionPrompt = FText::FromString(TEXT("Press E to toggle doors"));
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction", meta = (ClampMin = "0.0"))
-    float FloorSelectionDoorHoldTime = 10.0f;
+    /** Duration the elevator remains in transit after the doors finish closing. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction", meta = (ClampMin = "0.0", DisplayName = "Elevator Ride Duration"))
+    float ElevatorRideDuration = 24.0f;
 
 private:
     friend class FProceduralElevatorDoorController;
