@@ -14,6 +14,12 @@ struct ELEVATOR_API FProceduralAudioRegistry
 {
     GENERATED_BODY()
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio|Workstation")
+    TObjectPtr<USoundBase> WorkstationMousePress = nullptr;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio|Workstation")
+    TObjectPtr<USoundBase> WorkstationMouseRelease = nullptr;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio|Ambience")
     TObjectPtr<USoundBase> OfficeRoomTone = nullptr;
 

@@ -16,6 +16,7 @@
 #include "Sound/SoundBase.h"
 #include "Engine/EngineTypes.h"
 #include "GameFramework/PlayerStart.h"
+#include "Kismet/GameplayStatics.h"
 #include "JsonObjectConverter.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -644,6 +645,14 @@ void AProceduralOfficeGenerator::OnInteractionPointerPressed_Implementation(APaw
         return;
     }
 
+    if (USoundBase* MousePressSound = AudioRegistry.WorkstationMousePress)
+    {
+        if (UWorld* World = GetWorld())
+        {
+            UGameplayStatics::SpawnSoundAtLocation(World, MousePressSound, Hit.Location, FRotator::ZeroRotator, 0.5f);
+        }
+    }
+
     MonitorScreenComponent->ProcessPointerPressed(PointerKey);
 }
 
@@ -652,6 +661,14 @@ void AProceduralOfficeGenerator::OnInteractionPointerReleased_Implementation(APa
     if (!MonitorScreenComponent || !MonitorScreenComponent->IsReady())
     {
         return;
+    }
+
+    if (USoundBase* MouseReleaseSound = AudioRegistry.WorkstationMouseRelease)
+    {
+        if (UWorld* World = GetWorld())
+        {
+            UGameplayStatics::SpawnSoundAtLocation(World, MouseReleaseSound, Hit.Location, FRotator::ZeroRotator, 0.3f);
+        }
     }
 
     MonitorScreenComponent->ProcessPointerReleased(PointerKey);
