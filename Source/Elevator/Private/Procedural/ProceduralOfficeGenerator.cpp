@@ -12,6 +12,8 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/RectLightComponent.h"
 #include "Components/ArrowComponent.h"
+#include "Components/AudioComponent.h"
+#include "Sound/SoundBase.h"
 #include "Engine/EngineTypes.h"
 #include "GameFramework/PlayerStart.h"
 #include "JsonObjectConverter.h"
@@ -401,10 +403,59 @@ void AProceduralOfficeGenerator::BuildElement(const FOfficeElementDefinition &El
         case EOfficeElementType::Elevator:
             PlaceElevator(Element);
             break;
+        case EOfficeElementType::RoomTone:
+            PlaceRoomTone(Element);
+            break;
         default:
             UE_LOG(LogProceduralOffice, Warning, TEXT("Unsupported element type encountered."));
             break;
     }
+}
+
+void AProceduralOfficeGenerator::PlaceRoomTone(const FOfficeElementDefinition& Element)
+{
+    USoundBase* Sound = nullptr;
+    if (Element.AudioId == FName("Office")) Sound = AudioRegistry.OfficeRoomTone;
+    else if (Element.AudioId == FName("Annex")) Sound = AudioRegistry.AnnexRoomTone;
+    else if (Element.AudioId == FName("Outside")) Sound = AudioRegistry.OutsideRoomTone;
+
+    if (!Sound)
+    {
+        UE_LOG(LogProceduralOffice, Warning, TEXT("RoomTone audio not found: %s"), *Element.AudioId.ToString());
+        return;
+    }
+
+    Sound->VirtualizationMode = EVirtualizationMode::PlayWhenSilent;
+
+    UAudioComponent* AudioComp = NewObject<UAudioComponent>(this);
+    AudioComp->SetSound(Sound);
+    AudioComp->SetWorldLocation(FVector(Element.Start.X, Element.Start.Y, FloorHeight + Element.HeightOffset));
+    AudioComp->SetVolumeMultiplier(Element.VolumeMultiplier);
+    
+    AudioComp->bAllowSpatialization = true;
+    AudioComp->bOverrideAttenuation = true;
+    AudioComp->AttenuationOverrides.bAttenuate = true;
+    AudioComp->AttenuationOverrides.AttenuationShape = EAttenuationShape::Sphere;
+    AudioComp->AttenuationOverrides.AttenuationShapeExtents = FVector(Element.AttenuationRadius);
+    AudioComp->AttenuationOverrides.FalloffDistance = Element.AttenuationRadius;
+    AudioComp->AttenuationOverrides.dBAttenuationAtMax = -60.0f;
+    
+    if (Element.bOmnidirectional)
+    {
+        // Omnidirectional: sound comes equally from all directions (no spatial positioning)
+        AudioComp->AttenuationOverrides.bSpatialize = false;
+    }
+    else
+    {
+        // Directional: sound comes from a specific location in 3D space
+        AudioComp->AttenuationOverrides.bSpatialize = true;
+    }
+    
+    AudioComp->SetupAttachment(Root);
+    AudioComp->RegisterComponent();
+    AudioComp->Play();
+    
+    SpawnedAudioComponents.Add(AudioComp);
 }
 
 UInstancedStaticMeshComponent *AProceduralOfficeGenerator::GetOrCreateISMC(UStaticMesh *Mesh, const FName &ComponentName, UMaterialInterface *OverrideMaterial)

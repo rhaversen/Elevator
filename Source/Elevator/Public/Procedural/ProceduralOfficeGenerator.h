@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "Interactable.h"
 #include "InteractionFocusProvider.h"
+#include "Audio/ProceduralAudioSettings.h"
 #include "ProceduralOfficeGenerator.generated.h"
 
 class UChildActorComponent;
@@ -26,7 +27,8 @@ enum class EOfficeElementType : uint8
     Cubicle,
     CeilingLight,
     Door,
-    Elevator
+    Elevator,
+    RoomTone
 };
 
 USTRUCT(BlueprintType)
@@ -66,6 +68,18 @@ struct FOfficeElementDefinition
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout", meta = (ClampMin = "1.0"))
     float Height = 200.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
+    FName AudioId = NAME_None;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
+    bool bOmnidirectional = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
+    float VolumeMultiplier = 1.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
+    float AttenuationRadius = 0.0f;
 };
 
 USTRUCT(BlueprintType)
@@ -130,6 +144,7 @@ protected:
     void PlaceCeilingLights(const FVector2D& Start, const FVector2D& End, const FVector2D& Spacing, const FVector2D& Padding, float DirectionYawDegrees);
     void PlaceDoor(const FOfficeElementDefinition& Element);
     void PlaceElevator(const FOfficeElementDefinition& Element);
+    void PlaceRoomTone(const FOfficeElementDefinition& Element);
 
     UInstancedStaticMeshComponent* GetOrCreateISMC(UStaticMesh* Mesh, const FName& ComponentName, UMaterialInterface* OverrideMaterial = nullptr);
     void DestroySpawnedComponents();
@@ -545,7 +560,7 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Layout")
     FName SpawnPointTag = FName(TEXT("ProceduralSpawn"));
 
-    UPROPERTY(Transient)
+    UPROPERTY()
     TArray<TObjectPtr<class UChildActorComponent>> SpawnedChildActors;
 
     UPROPERTY(Transient)
@@ -557,10 +572,15 @@ protected:
     UPROPERTY(EditAnywhere, Category = "UI")
     TObjectPtr<UTextureRenderTarget2D> ScreenRenderTarget;
 
+    UPROPERTY(EditAnywhere, Category = "Audio")
+    FProceduralAudioRegistry AudioRegistry;
+
+    UPROPERTY()
+    TArray<TObjectPtr<class UAudioComponent>> SpawnedAudioComponents;
+
     UPROPERTY(VisibleAnywhere, Category = "UI")
     TObjectPtr<UInteractiveScreenComponent> MonitorScreenComponent;
 
-private:
     void InitializeMonitorScreen();
     void HandleActiveProgramChanged(FName ProgramId);
     
@@ -571,7 +591,7 @@ private:
     int32 FindClosestComputerInstance(const FVector& WorldPoint, float Radius) const;
     UStaticMeshComponent* GetOrCreateComputerHighlightProxy(UInstancedStaticMeshComponent* SourceComponent);
 
-    UPROPERTY(Transient)
+    UPROPERTY()
     TMap<FName, TObjectPtr<UInstancedStaticMeshComponent>> InstancedCache;
 
     UPROPERTY(Transient)

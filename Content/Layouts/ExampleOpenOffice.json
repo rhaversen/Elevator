@@ -19,6 +19,33 @@
       "Yaw": 0.0
     },
     {
+      "Type": "RoomTone",
+      "Start": { "X": 0.0, "Y": 0.0 },
+      "HeightOffset": 150.0,
+      "AudioId": "Office",
+      "bOmnidirectional": true,
+      "AttenuationRadius": 1200.0,
+      "VolumeMultiplier": 1.0
+    },
+    {
+      "Type": "RoomTone",
+      "Start": { "X": -2050.0, "Y": 200.0 },
+      "HeightOffset": 150.0,
+      "AudioId": "Annex",
+      "bOmnidirectional": true,
+      "AttenuationRadius": 400.0,
+      "VolumeMultiplier": 0.8
+    },
+    {
+      "Type": "RoomTone",
+      "Start": { "X": -2050.0, "Y": 950.0 },
+      "HeightOffset": 150.0,
+      "AudioId": "Outside",
+      "bOmnidirectional": false,
+      "AttenuationRadius": 200.0,
+      "VolumeMultiplier": 0.1
+    },
+    {
       "Type": "Cubicle",
       "Start": { "X": 600.0, "Y": -300.0 },
       "Dimensions": { "X": 300.0, "Y": 250.0 },
