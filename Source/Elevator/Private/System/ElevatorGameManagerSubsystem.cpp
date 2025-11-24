@@ -7,12 +7,11 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Templates/SharedPointer.h"
-#include "UI/Programs/SimpleButtonProgram.h"
+#include "UI/ScreenProgramIds.h"
+#include "UI/ScreenProgramRegistry.h"
 
 namespace
 {
-    const FName SimpleButtonProgramId(TEXT("SimpleButton"));
-
     FString JoinNames(const TArray<FName>& Names)
     {
         if (Names.Num() == 0)
@@ -142,20 +141,28 @@ TSharedPtr<IScreenProgram> UElevatorGameManagerSubsystem::CreateProgramInstanceF
 {
     const FName RequestedId = ProgramId.IsNone() ? ActiveProgramId : ProgramId;
     const FName ResolvedId = RequestedId.IsNone() ? Schedule.DefaultProgramId : RequestedId;
-    const FName FinalId = ResolvedId.IsNone() ? SimpleButtonProgramId : ResolvedId;
+    const FName FallbackId = ScreenProgramIds::SimpleButton;
+    const FName FinalId = ResolvedId.IsNone() ? FallbackId : ResolvedId;
 
     UE_LOG(LogTemp, Log, TEXT("[Manager] Creating program instance. Requested=%s Resolved=%s Final=%s"),
         *RequestedId.ToString(),
         *ResolvedId.ToString(),
         *FinalId.ToString());
 
-    if (FinalId == SimpleButtonProgramId)
+    TSharedPtr<IScreenProgram> Instance = FScreenProgramRegistry::Get().CreateProgram(FinalId);
+
+    if (!Instance.IsValid() && FinalId != FallbackId)
     {
-        return MakeShared<FSimpleButtonProgram>();
+        UE_LOG(LogTemp, Warning, TEXT("Unknown workstation program '%s'. Attempting fallback '%s'."), *FinalId.ToString(), *FallbackId.ToString());
+        Instance = FScreenProgramRegistry::Get().CreateProgram(FallbackId);
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("Unknown workstation program '%s'. Falling back to SimpleButton."), *FinalId.ToString());
-    return MakeShared<FSimpleButtonProgram>();
+    if (!Instance.IsValid())
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create workstation program for id '%s'. No fallback available."), *FinalId.ToString());
+    }
+
+    return Instance;
 }
 
 void UElevatorGameManagerSubsystem::HandleElevatorButtonPressed(FName ButtonId)
@@ -189,7 +196,7 @@ void UElevatorGameManagerSubsystem::HandleElevatorButtonPressed(FName ButtonId)
 void UElevatorGameManagerSubsystem::LoadSchedule()
 {
     Schedule = FElevatorDaySchedule();
-    Schedule.DefaultProgramId = SimpleButtonProgramId;
+    Schedule.DefaultProgramId = ScreenProgramIds::SimpleButton;
 
     const FString SchedulePath = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Data/DaySchedule.json"));
     FString FileContents;
@@ -275,7 +282,7 @@ void UElevatorGameManagerSubsystem::LoadSchedule()
 
     if (Schedule.DefaultProgramId.IsNone())
     {
-        Schedule.DefaultProgramId = SimpleButtonProgramId;
+        Schedule.DefaultProgramId = ScreenProgramIds::SimpleButton;
     }
 
     if (Schedule.Days.Num() == 0)
@@ -298,7 +305,7 @@ void UElevatorGameManagerSubsystem::ApplyCurrentDayConfig(bool bBroadcast)
     ActiveProgramId = ActiveDayConfig.ProgramId.IsNone() ? Schedule.DefaultProgramId : ActiveDayConfig.ProgramId;
     if (ActiveProgramId.IsNone())
     {
-        ActiveProgramId = SimpleButtonProgramId;
+        ActiveProgramId = ScreenProgramIds::SimpleButton;
     }
 
     CurrentLockedButtons = BuildLockedButtonSet(ActiveDayConfig);
@@ -319,7 +326,7 @@ FElevatorDayProgramEntry UElevatorGameManagerSubsystem::MakeDefaultEntry(int32 D
 {
     FElevatorDayProgramEntry Entry;
     Entry.DayNumber = DayIndex;
-    Entry.ProgramId = Schedule.DefaultProgramId.IsNone() ? SimpleButtonProgramId : Schedule.DefaultProgramId;
+    Entry.ProgramId = Schedule.DefaultProgramId.IsNone() ? ScreenProgramIds::SimpleButton : Schedule.DefaultProgramId;
     Entry.LockedButtons = Schedule.DefaultLockedButtons;
     return Entry;
 }

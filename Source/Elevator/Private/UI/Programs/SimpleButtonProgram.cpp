@@ -1,318 +1,243 @@
 #include "UI/Programs/SimpleButtonProgram.h"
+
+#include "UI/ScreenProgramIds.h"
+#include "UI/ScreenProgramRegistry.h"
 #include "UI/SlateWidgetHelpers.h"
-#include "Widgets/SOverlay.h"
-#include "Widgets/Images/SImage.h"
-#include "Widgets/Layout/SBox.h"
-#include "Widgets/Text/STextBlock.h"
-#include "Widgets/SBoxPanel.h"
-#include "Widgets/SCanvas.h"
-#include "Widgets/Layout/SBorder.h"
+
 #include "Styling/CoreStyle.h"
+#include "Widgets/Images/SImage.h"
+#include "Widgets/Layout/SBorder.h"
+#include "Widgets/Layout/SBox.h"
+#include "Widgets/SOverlay.h"
+#include "Widgets/Text/STextBlock.h"
+
+namespace
+{
+	struct FSimpleButtonProgramRegistrar
+	{
+		FSimpleButtonProgramRegistrar()
+		{
+			FScreenProgramRegistry::Get().RegisterProgram(
+				ScreenProgramIds::SimpleButton,
+				[]() { return MakeShared<FSimpleButtonProgram>(); });
+		}
+	};
+
+	static FSimpleButtonProgramRegistrar GSimpleButtonProgramRegistrar;
+}
+
+const FName FSimpleButtonProgram::PrimaryWindowId(TEXT("PrimaryWindow"));
 
 FSimpleButtonProgram::FSimpleButtonProgram()
+	: ActiveButtonPointerKey(EKeys::Invalid)
 {
-    // Initialize a default window
-    Window.Position = FVector2D(400.0f, 300.0f);
-    Window.Size = FVector2D(600.0f, 400.0f);
-    Window.Title = TEXT("My Computer");
 }
 
-
-
-TSharedRef<SWidget> FSimpleButtonProgram::CreateWidget(const FVector2D& Size, const FScreenProgramStyle& Style)
+void FSimpleButtonProgram::BuildWindowLayout(FScreenProgramWindowBuilder& Builder)
 {
-    ProgramSize = FVector2D(FMath::Max(Size.X, 1.0f), FMath::Max(Size.Y, 1.0f));
-    ApplyCursorPosition(CursorPosition);
+	FScreenProgramWindowConfig Config;
+	Config.WindowId = PrimaryWindowId;
+	Config.Title = FText::FromString(TEXT("My Computer"));
+	Config.InitialPosition = FVector2D(400.0f, 300.0f);
+	Config.InitialSize = FVector2D(600.0f, 400.0f);
+	Config.MinimumSize = FVector2D(MinWindowSize, MinWindowSize);
+	Config.TitleBarHeight = TitleBarHeight;
+	Config.ResizeHandleSize = ResizeHandleSize;
 
-    const FSlateBrush* Brush = FCoreStyle::Get().GetBrush("WhiteBrush");
-    const FLinearColor Black = FLinearColor::Black;
-    const FLinearColor Green = FLinearColor::Green;
+	FScreenProgramWindowChrome Chrome;
+	Chrome.BorderColor = FLinearColor::Green;
+	Chrome.BackgroundColor = FLinearColor::Black;
+	Chrome.TitleBarColor = FLinearColor::Black;
+	Chrome.TitleTextColor = FLinearColor::Green;
+	Chrome.ContentPadding = FMargin(10.0f);
 
-    return SNew(SCanvas)
-        // The Window
-        + SCanvas::Slot()
-        .Position(TAttribute<FVector2D>::Create(TAttribute<FVector2D>::FGetter::CreateSP(this, &FSimpleButtonProgram::GetWindowPosition)))
-        .Size(TAttribute<FVector2D>::Create(TAttribute<FVector2D>::FGetter::CreateSP(this, &FSimpleButtonProgram::GetWindowSize)))
-        [
-            SNew(SBorder)
-            .BorderImage(Brush)
-            .BorderBackgroundColor(Green)
-            .Padding(Style.LineThickness)
-            [
-                SNew(SBorder)
-                .BorderImage(Brush)
-                .BorderBackgroundColor(Black)
-                .Padding(0.0f)
-                [
-                    SNew(SVerticalBox)
-                    // Title Bar
-                    + SVerticalBox::Slot()
-                    .AutoHeight()
-                    [
-                        SNew(SBorder)
-                        .BorderImage(Brush)
-                        .BorderBackgroundColor(Black)
-                        .Padding(FMargin(10.0f, 8.0f))
-                        [
-                            SNew(STextBlock)
-                            .Text(FText::FromString(Window.Title))
-                            .Font(FCoreStyle::GetDefaultFontStyle("Bold", Style.TextSize))
-                            .ColorAndOpacity(Green)
-                        ]
-                    ]
-                    // Divider
-                    + SVerticalBox::Slot()
-                    .AutoHeight()
-                    [
-                        SNew(SBox)
-                        .HeightOverride(Style.LineThickness)
-                        [
-                            SNew(SImage)
-                            .Image(Brush)
-                            .ColorAndOpacity(Green)
-                        ]
-                    ]
-                    // Content Area
-                    + SVerticalBox::Slot()
-                    .FillHeight(1.0f)
-                    [
-                        SNew(SBorder)
-                        .BorderImage(Brush)
-                        .BorderBackgroundColor(Black)
-                        .Padding(10.0f)
-                        [
-                            SNew(SOverlay)
-                            // Instructions text
-                            + SOverlay::Slot()
-                            .HAlign(HAlign_Left)
-                            .VAlign(VAlign_Top)
-                            [
-                                SNew(STextBlock)
-                                .Text(FText::FromString(TEXT("Welcome to Mock OS v0.1\n\n- Drag title bar to move\n- Drag bottom-right to resize\n- Click Complete to finish task")))
-                                .Font(FCoreStyle::GetDefaultFontStyle("Regular", Style.TextSize))
-                                .ColorAndOpacity(Green)
-                            ]
-                            // Complete button in center
-                            + SOverlay::Slot()
-                            .HAlign(HAlign_Center)
-                            .VAlign(VAlign_Center)
-                            [
-                                SlateWidgetHelpers::CreateOutlinedButton(
-                                    FVector2D(CompleteButtonWidth, CompleteButtonHeight),
-                                    FText::FromString(TEXT("Complete")),
-                                    Style.TextSize,
-                                    Style.LineThickness,
-                                    TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateSP(this, &FSimpleButtonProgram::GetCompleteButtonBorderColor)),
-                                    TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateSP(this, &FSimpleButtonProgram::GetCompleteButtonFillColor)),
-                                    TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateSP(this, &FSimpleButtonProgram::GetCompleteButtonTextColor)))
-                            ]
-                        ]
-                    ]
-                ]
-            ]
-        ];
+	Builder.AddWindow(
+		Config,
+		Chrome,
+		[this](const FScreenProgramWindowConfig& WindowConfig)
+		{
+			return BuildPrimaryWindowContent(WindowConfig);
+		});
 }
 
-void FSimpleButtonProgram::OnPointerMoved(const FScreenPointerEvent& Event)
+void FSimpleButtonProgram::HandlePointerMoved(const FScreenPointerEvent& Event, bool bHandledByChrome)
 {
-    ApplyCursorPosition(Event.ProgramNormalizedPosition);
+	if (GetTaskComplete())
+	{
+		bCompleteButtonHovered = false;
+	}
+	else
+	{
+		bCompleteButtonHovered = !bHandledByChrome && IsCursorOverCompleteButton(Event.ProgramPixelPosition);
+	}
+
+	UpdateCursorVisual();
 }
 
-void FSimpleButtonProgram::OnPointerPressed(const FScreenPointerEvent& Event)
+void FSimpleButtonProgram::HandlePointerPressed(const FScreenPointerEvent& Event, bool bHandledByChrome)
 {
-    ApplyCursorPosition(Event.ProgramNormalizedPosition);
+	if (bHandledByChrome)
+	{
+		bCompleteButtonPressed = false;
+		UpdateCursorVisual();
+		return;
+	}
 
-    if (CurrentState != EInteractionState::Idle)
-    {
-        UpdateCursorStyle();
-        return;
-    }
+	if (GetTaskComplete())
+	{
+		bCompleteButtonPressed = false;
+		UpdateCursorVisual();
+		return;
+	}
 
-    const FVector2D PixelPos = CursorPosition * ProgramSize;
+	if (IsCursorOverCompleteButton(Event.ProgramPixelPosition))
+	{
+		bCompleteButtonPressed = true;
+		ActiveButtonPointerKey = Event.TriggerKey;
+	}
+	else
+	{
+		bCompleteButtonPressed = false;
+		ActiveButtonPointerKey = EKeys::Invalid;
+	}
 
-    if (IsCursorOverCompleteButton() && !bTaskCompleted)
-    {
-        bCompleteButtonPressed = true;
-        ActivePointerKey = Event.TriggerKey;
-    }
-    else if (IsCursorOverResizeHandle())
-    {
-        CurrentState = EInteractionState::Resizing;
-        ActivePointerKey = Event.TriggerKey;
-    }
-    else if (IsCursorOverTitleBar())
-    {
-        CurrentState = EInteractionState::Dragging;
-        DragOffset = PixelPos - Window.Position;
-        ActivePointerKey = Event.TriggerKey;
-    }
-    else
-    {
-        ActivePointerKey = EKeys::Invalid;
-    }
-
-    UpdateCursorStyle();
+	UpdateCursorVisual();
 }
 
-void FSimpleButtonProgram::OnPointerReleased(const FScreenPointerEvent& Event)
+void FSimpleButtonProgram::HandlePointerReleased(const FScreenPointerEvent& Event, bool bHandledByChrome)
 {
-    ApplyCursorPosition(Event.ProgramNormalizedPosition);
+	const bool bMatchesPointer = !ActiveButtonPointerKey.IsValid() || !Event.TriggerKey.IsValid() || ActiveButtonPointerKey == Event.TriggerKey;
+	const bool bWasPressed = bCompleteButtonPressed;
 
-    if (!ActivePointerKey.IsValid())
-    {
-        return;
-    }
+	bCompleteButtonPressed = false;
+	ActiveButtonPointerKey = EKeys::Invalid;
 
-    if (Event.TriggerKey.IsValid() && ActivePointerKey != Event.TriggerKey)
-    {
-        return;
-    }
+	if (!GetTaskComplete() && !bHandledByChrome && bMatchesPointer && bWasPressed && IsCursorOverCompleteButton(Event.ProgramPixelPosition))
+	{
+		SetTaskComplete(true);
+	}
 
-    const bool bWasPressedOnComplete = bCompleteButtonPressed;
-    const bool bIsReleasingOverComplete = IsCursorOverCompleteButton();
+	if (GetTaskComplete())
+	{
+		bCompleteButtonHovered = false;
+	}
+	else
+	{
+		bCompleteButtonHovered = !bHandledByChrome && IsCursorOverCompleteButton(Event.ProgramPixelPosition);
+	}
 
-    if (bWasPressedOnComplete && bIsReleasingOverComplete && !bTaskCompleted)
-    {
-        bTaskCompleted = true;
-    }
-
-    bCompleteButtonPressed = false;
-    CurrentState = EInteractionState::Idle;
-    ActivePointerKey = EKeys::Invalid;
-    UpdateCursorStyle();
+	UpdateCursorVisual();
 }
 
-void FSimpleButtonProgram::OnScreenResized(const FVector2D& NewSize)
+void FSimpleButtonProgram::HandleScreenResized(const FVector2D& NewSize)
 {
-    ProgramSize.X = FMath::Max(NewSize.X, 1.0f);
-    ProgramSize.Y = FMath::Max(NewSize.Y, 1.0f);
-    ApplyCursorPosition(CursorPosition);
 }
 
-FVector2D FSimpleButtonProgram::GetWindowPosition() const
+void FSimpleButtonProgram::HandleTaskCompletionChanged(bool bCompleted)
 {
-    return Window.Position;
+	bCompleteButtonHovered = false;
+	bCompleteButtonPressed = false;
+	UpdateCursorVisual();
 }
 
-FVector2D FSimpleButtonProgram::GetWindowSize() const
+TSharedRef<SWidget> FSimpleButtonProgram::BuildPrimaryWindowContent(const FScreenProgramWindowConfig& WindowConfig)
 {
-    return Window.Size;
+	const FScreenProgramStyle& Style = GetProgramStyle();
+	const FLinearColor Green = FLinearColor::Green;
+
+	return SNew(SOverlay)
+		// Instructions text
+		+ SOverlay::Slot()
+		.HAlign(HAlign_Left)
+		.VAlign(VAlign_Top)
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString(TEXT("Welcome to Mock OS v0.1\n\n- Drag title bar to move\n- Drag bottom-right to resize\n- Click Complete to finish task")))
+			.Font(FCoreStyle::GetDefaultFontStyle("Regular", Style.TextSize))
+			.ColorAndOpacity(Green)
+		]
+		// Complete button in center
+		+ SOverlay::Slot()
+		.HAlign(HAlign_Center)
+		.VAlign(VAlign_Center)
+		[
+			SlateWidgetHelpers::CreateOutlinedButton(
+				FVector2D(CompleteButtonWidth, CompleteButtonHeight),
+				FText::FromString(TEXT("Complete")),
+				Style.TextSize,
+				Style.LineThickness,
+				TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateSP(this, &FSimpleButtonProgram::GetCompleteButtonBorderColor)),
+				TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateSP(this, &FSimpleButtonProgram::GetCompleteButtonFillColor)),
+				TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateSP(this, &FSimpleButtonProgram::GetCompleteButtonTextColor)))
+		];
 }
 
-bool FSimpleButtonProgram::IsCursorOverTitleBar() const
+bool FSimpleButtonProgram::IsCursorOverCompleteButton(const FVector2D& ProgramPixel) const
 {
-    const FVector2D PixelPos = CursorPosition * ProgramSize;
-    
-    // Title bar rect relative to screen
-    FBox2D TitleRect(Window.Position, Window.Position + FVector2D(Window.Size.X, TitleBarHeight));
-    
-    return TitleRect.IsInside(PixelPos);
+	FScreenProgramWindowMetrics Metrics;
+	if (!TryGetWindowMetrics(PrimaryWindowId, Metrics))
+	{
+		return false;
+	}
+
+	const FVector2D WindowPos = Metrics.Position;
+	const FVector2D WindowSize = Metrics.Size;
+	const FScreenProgramStyle& Style = GetProgramStyle();
+
+	const FVector2D ContentPos = WindowPos + FVector2D(Style.LineThickness, Style.LineThickness + Metrics.TitleBarHeight + Style.LineThickness);
+	const FVector2D ContentSize = FVector2D(
+		FMath::Max(WindowSize.X - Style.LineThickness * 2.0f, 0.0f),
+		FMath::Max(WindowSize.Y - (Metrics.TitleBarHeight + Style.LineThickness * 2.0f), 0.0f));
+
+	const FVector2D ButtonPos(
+		ContentPos.X + (ContentSize.X - CompleteButtonWidth) * 0.5f,
+		ContentPos.Y + (ContentSize.Y - CompleteButtonHeight) * 0.5f);
+
+	const FBox2D ButtonRect(ButtonPos, ButtonPos + FVector2D(CompleteButtonWidth, CompleteButtonHeight));
+	return ButtonRect.IsInside(ProgramPixel);
 }
 
-bool FSimpleButtonProgram::IsCursorOverResizeHandle() const
+void FSimpleButtonProgram::UpdateCursorVisual()
 {
-    const FVector2D PixelPos = CursorPosition * ProgramSize;
-    
-    // Bottom right corner
-    FVector2D WindowBottomRight = Window.Position + Window.Size;
-    FBox2D HandleRect(WindowBottomRight - FVector2D(ResizeHandleSize, ResizeHandleSize), WindowBottomRight);
-    
-    return HandleRect.IsInside(PixelPos);
-}
+	if (GetTaskComplete())
+	{
+		SetCursorOverride(TOptional<EMouseCursor::Type>());
+		return;
+	}
 
-bool FSimpleButtonProgram::IsCursorOverCompleteButton() const
-{
-    const FVector2D PixelPos = CursorPosition * ProgramSize;
-    
-    // Calculate the content area (inside the window, below title bar)
-    const FVector2D ContentPos = Window.Position + FVector2D(0.0f, TitleBarHeight + 2.0f);
-    const FVector2D ContentSize = FVector2D(Window.Size.X, Window.Size.Y - TitleBarHeight - 2.0f);
-    
-    // Button is centered in content area
-    const FVector2D ButtonPos(
-        ContentPos.X + (ContentSize.X - CompleteButtonWidth) * 0.5f,
-        ContentPos.Y + (ContentSize.Y - CompleteButtonHeight) * 0.5f
-    );
-    
-    FBox2D ButtonRect(ButtonPos, ButtonPos + FVector2D(CompleteButtonWidth, CompleteButtonHeight));
-    
-    return ButtonRect.IsInside(PixelPos);
+	if (bCompleteButtonPressed)
+	{
+		SetCursorOverride(EMouseCursor::GrabHand);
+	}
+	else if (bCompleteButtonHovered)
+	{
+		SetCursorOverride(EMouseCursor::Hand);
+	}
+	else
+	{
+		SetCursorOverride(TOptional<EMouseCursor::Type>());
+	}
 }
 
 FSlateColor FSimpleButtonProgram::GetCompleteButtonBorderColor() const
 {
-    return bTaskCompleted ? FSlateColor(FLinearColor::Green) : FSlateColor(FLinearColor::Green);
+	return FSlateColor(FLinearColor::Green);
 }
 
 FSlateColor FSimpleButtonProgram::GetCompleteButtonFillColor() const
 {
-    if (bTaskCompleted)
-    {
-        return FSlateColor(FLinearColor::Transparent);
-    }
-    return bCompleteButtonHovered ? FSlateColor(FLinearColor::Green) : FSlateColor(FLinearColor::Transparent);
+	if (GetTaskComplete())
+	{
+		return FSlateColor(FLinearColor::Transparent);
+	}
+	return bCompleteButtonHovered ? FSlateColor(FLinearColor::Green) : FSlateColor(FLinearColor::Transparent);
 }
 
 FSlateColor FSimpleButtonProgram::GetCompleteButtonTextColor() const
 {
-    if (bTaskCompleted)
-    {
-        return FSlateColor(FLinearColor::Green);
-    }
-    return bCompleteButtonHovered ? FSlateColor(FLinearColor::Black) : FSlateColor(FLinearColor::Green);
-}
-
-void FSimpleButtonProgram::ApplyCursorPosition(const FVector2D& NormalizedPosition)
-{
-    CursorPosition.X = FMath::Clamp(NormalizedPosition.X, 0.0f, 1.0f);
-    CursorPosition.Y = FMath::Clamp(NormalizedPosition.Y, 0.0f, 1.0f);
-
-    const FVector2D PixelPos = CursorPosition * ProgramSize;
-
-    if (CurrentState == EInteractionState::Dragging)
-    {
-        Window.Position = PixelPos - DragOffset;
-
-        Window.Position.X = FMath::Clamp(Window.Position.X, 0.0f, ProgramSize.X - Window.Size.X);
-        Window.Position.Y = FMath::Clamp(Window.Position.Y, 0.0f, ProgramSize.Y - Window.Size.Y);
-    }
-    else if (CurrentState == EInteractionState::Resizing)
-    {
-        const FVector2D NewSize = PixelPos - Window.Position;
-        Window.Size.X = FMath::Max(NewSize.X, MinWindowSize);
-        Window.Size.Y = FMath::Max(NewSize.Y, MinWindowSize);
-    }
-
-    UpdateCursorStyle();
-}
-
-void FSimpleButtonProgram::UpdateCursorStyle()
-{
-    // Only detect hover state if task is not completed
-    bCompleteButtonHovered = !bTaskCompleted && IsCursorOverCompleteButton();
-
-    if (CurrentState == EInteractionState::Resizing || IsCursorOverResizeHandle())
-    {
-        ActiveCursor = EMouseCursor::ResizeSouthEast;
-    }
-    else if (CurrentState == EInteractionState::Dragging)
-    {
-        ActiveCursor = EMouseCursor::GrabHand;
-    }
-    else if (bCompleteButtonPressed && !bTaskCompleted)
-    {
-        ActiveCursor = EMouseCursor::GrabHand;
-    }
-    else if (bCompleteButtonHovered && !bTaskCompleted)
-    {
-        ActiveCursor = EMouseCursor::Hand;
-    }
-    else if (IsCursorOverTitleBar())
-    {
-        ActiveCursor = EMouseCursor::Hand;
-    }
-    else
-    {
-        ActiveCursor = EMouseCursor::Default;
-    }
+	if (GetTaskComplete())
+	{
+		return FSlateColor(FLinearColor::Green);
+	}
+	return bCompleteButtonHovered ? FSlateColor(FLinearColor::Black) : FSlateColor(FLinearColor::Green);
 }
