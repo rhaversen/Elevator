@@ -353,6 +353,7 @@ bool AProceduralElevator::IsInteractiveButton(UPrimitiveComponent* Component) co
 bool AProceduralElevator::EvaluateInteractionFocus_Implementation(APawn* PlayerPawn, const FHitResult& Hit, float AssistRadius, UPrimitiveComponent*& OutHighlightComponent)
 {
     OutHighlightComponent = nullptr;
+    LastHighlightedButton = nullptr;
 
     UPrimitiveComponent* ButtonComponent = nullptr;
     if (UPrimitiveComponent* HitComponent = Hit.GetComponent())
@@ -369,14 +370,19 @@ bool AProceduralElevator::EvaluateInteractionFocus_Implementation(APawn* PlayerP
         ButtonComponent = FindClosestButtonWithinRadius(SearchOrigin, AssistRadius);
     }
 
-    if (ButtonComponent && !IsButtonInteractionEnabled(ButtonComponent))
+    if (ButtonComponent)
     {
-        ButtonComponent = nullptr;
+        const FElevatorButtonInteractionState ButtonState = GetButtonInteractionState(ButtonComponent);
+        if (!ButtonState.bIsInteractable)
+        {
+            ButtonComponent = nullptr;
+        }
     }
 
     if (ButtonComponent)
     {
         OutHighlightComponent = ButtonComponent;
+        LastHighlightedButton = ButtonComponent;
         return true;
     }
 
@@ -407,7 +413,8 @@ UPrimitiveComponent* AProceduralElevator::FindClosestButtonWithinRadius(const FV
             continue;
         }
 
-        if (!IsButtonInteractionEnabled(Button))
+        const FElevatorButtonInteractionState ButtonState = GetButtonInteractionState(Button);
+        if (!ButtonState.bIsInteractable)
         {
             continue;
         }
@@ -447,16 +454,36 @@ bool AProceduralElevator::HandleButtonPressed(UPrimitiveComponent* ButtonCompone
 
     const FName ButtonId = GetButtonId(ButtonComponent);
 
-    if (!IsButtonInteractionEnabled(ButtonComponent))
+    const FElevatorButtonInteractionState ButtonState = GetButtonInteractionState(ButtonComponent);
+    if (!ButtonState.bIsInteractable)
     {
-        if (const UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
+        switch (ButtonState.LockReason)
         {
-            UE_LOG(LogTemp, Log, TEXT("[Elevator] Ignoring press on %s because it is disabled (Day=%d TaskComplete=%s)."),
-                *ButtonId.ToString(),
-                Manager->GetCurrentDay(),
-                Manager->IsTaskComplete() ? TEXT("true") : TEXT("false"));
+        case AProceduralElevator::EElevatorButtonLockReason::RequiresTaskCompletion:
+            if (const UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
+            {
+                UE_LOG(LogTemp, Log, TEXT("[Elevator] Ignoring press on %s until current task completes (Day=%d TaskComplete=%s)."),
+                    *ButtonId.ToString(),
+                    Manager->GetCurrentDay(),
+                    Manager->IsTaskComplete() ? TEXT("true") : TEXT("false"));
+            }
+            else
+            {
+                UE_LOG(LogTemp, Log, TEXT("[Elevator] Ignoring press on %s until current task completes."), *ButtonId.ToString());
+            }
+            break;
+        case AProceduralElevator::EElevatorButtonLockReason::ManagerDisabled:
+            UE_LOG(LogTemp, Log, TEXT("[Elevator] Ignoring press on %s because it is disabled by scenario rules."), *ButtonId.ToString());
+            break;
+        case AProceduralElevator::EElevatorButtonLockReason::InvalidComponent:
+            UE_LOG(LogTemp, Warning, TEXT("[Elevator] Ignoring press on invalid elevator button component."));
+            break;
+        default:
+            UE_LOG(LogTemp, Log, TEXT("[Elevator] Ignoring press on %s because it is disabled."), *ButtonId.ToString());
+            break;
         }
-        return false;
+
+        return ButtonState.bConsumesPress;
     }
 
     if (ButtonComponent == ButtonDoorOpen)
@@ -549,17 +576,26 @@ bool AProceduralElevator::HandleButtonPressed(UPrimitiveComponent* ButtonCompone
 
 bool AProceduralElevator::CanInteract_Implementation(APawn* PlayerPawn) const
 {
-    return DoorController != nullptr;
+    (void)PlayerPawn;
+
+    if (!DoorController)
+    {
+        return false;
+    }
+
+    UPrimitiveComponent* const HighlightedButton = LastHighlightedButton.Get();
+    if (!IsValid(HighlightedButton))
+    {
+        return false;
+    }
+
+    return GetButtonInteractionState(HighlightedButton).bIsInteractable;
 }
 
 void AProceduralElevator::OnInteract_Implementation(APawn* PlayerPawn)
 {
-    if (!DoorController)
-    {
-        return;
-    }
-
-    ToggleDoors();
+    (void)PlayerPawn;
+    // Elevator interaction is routed exclusively through button components.
 }
 
 FText AProceduralElevator::GetInteractionPrompt_Implementation() const
@@ -756,17 +792,30 @@ FName AProceduralElevator::GetButtonId(const UPrimitiveComponent* Component) con
     return Component->GetFName();
 }
 
-bool AProceduralElevator::IsButtonInteractionEnabled(const UPrimitiveComponent* Component) const
+AProceduralElevator::FElevatorButtonInteractionState AProceduralElevator::GetButtonInteractionState(const UPrimitiveComponent* Component) const
 {
+    FElevatorButtonInteractionState State;
+
     if (!Component)
     {
-        return false;
+        State.bIsInteractable = false;
+        State.bConsumesPress = false;
+        State.LockReason = AProceduralElevator::EElevatorButtonLockReason::InvalidComponent;
+        return State;
+    }
+
+    if (!IsInteractiveButton(const_cast<UPrimitiveComponent*>(Component)))
+    {
+        State.bIsInteractable = false;
+        State.bConsumesPress = false;
+        State.LockReason = AProceduralElevator::EElevatorButtonLockReason::InvalidComponent;
+        return State;
     }
 
     const FName ButtonId = GetButtonId(Component);
     if (ButtonId.IsNone())
     {
-        return true;
+        return State;
     }
 
     if (const UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
@@ -774,13 +823,27 @@ bool AProceduralElevator::IsButtonInteractionEnabled(const UPrimitiveComponent* 
         const FString ButtonIdString = ButtonId.ToString();
         if (ButtonIdString.StartsWith(TEXT("Floor")))
         {
-            return Manager->IsTaskComplete();
+            const bool bTaskComplete = Manager->IsTaskComplete();
+            State.bIsInteractable = bTaskComplete;
+            State.bConsumesPress = true;
+            if (!bTaskComplete)
+            {
+                State.LockReason = AProceduralElevator::EElevatorButtonLockReason::RequiresTaskCompletion;
+            }
+            return State;
         }
 
-        return Manager->IsElevatorButtonEnabled(ButtonId);
+        const bool bEnabled = Manager->IsElevatorButtonEnabled(ButtonId);
+        State.bIsInteractable = bEnabled;
+        State.bConsumesPress = true;
+        if (!bEnabled)
+        {
+            State.LockReason = AProceduralElevator::EElevatorButtonLockReason::ManagerDisabled;
+        }
+        return State;
     }
 
-    return true;
+    return State;
 }
 
 void AProceduralElevator::UnlockDoorsAndOpen()

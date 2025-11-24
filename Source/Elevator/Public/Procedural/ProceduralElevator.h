@@ -8,6 +8,7 @@
 #include "Procedural/ProceduralElevatorDoorController.h"
 #include "Audio/ProceduralAudioSettings.h"
 #include "TimerManager.h"
+#include "UObject/WeakObjectPtrTemplates.h"
 #include "ProceduralElevator.generated.h"
 
 class USceneComponent;
@@ -208,6 +209,21 @@ protected:
     float ElevatorRideDuration = 24.0f;
 
 private:
+    enum class EElevatorButtonLockReason : uint8
+    {
+        None,
+        InvalidComponent,
+        RequiresTaskCompletion,
+        ManagerDisabled
+    };
+
+    struct FElevatorButtonInteractionState
+    {
+        bool bIsInteractable = true;
+        bool bConsumesPress = true;
+        EElevatorButtonLockReason LockReason = EElevatorButtonLockReason::None;
+    };
+
     friend class FProceduralElevatorDoorController;
 
     void RefreshDoorTransforms();
@@ -226,7 +242,7 @@ private:
     void CancelDoorUnlockTimer();
     void UnlockDoorsAndOpen();
     FName GetButtonId(const UPrimitiveComponent* Component) const;
-    bool IsButtonInteractionEnabled(const UPrimitiveComponent* Component) const;
+    FElevatorButtonInteractionState GetButtonInteractionState(const UPrimitiveComponent* Component) const;
 
     UStaticMeshComponent *FrontLeftDoorMesh;
     UStaticMeshComponent *FrontRightDoorMesh;
@@ -237,4 +253,5 @@ private:
 
     bool bDoorsLocked = false;
     FTimerHandle DoorUnlockTimerHandle;
+    mutable TWeakObjectPtr<UPrimitiveComponent> LastHighlightedButton;
 };
