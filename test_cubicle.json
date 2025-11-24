@@ -1,0 +1,20 @@
+{
+  "Elements": [
+    {
+      "Type": "Cubicle",
+      "Start": { "X": 600.0, "Y": 250.0 },
+      "Yaw": 0.0
+    },
+    {
+      "Type": "Cubicle",
+      "Start": { "X": 0.0, "Y": -300.0 },
+      "Yaw": 90.0
+    },
+    {
+      "Type": "Wall",
+      "Start": { "X": 0.0, "Y": 0.0 },
+      "End": { "X": 1000.0, "Y": 0.0 },
+      "Thickness": 20.0
+    }
+  ]
+}

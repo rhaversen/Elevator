@@ -43,7 +43,12 @@ class FloorplanEditor:
         self.grid_size = tk.DoubleVar(value=100.0)
         self.show_lamps = tk.BooleanVar(value=True)  # for CeilingLight visualization
         self.lock_floor_ceiling = tk.BooleanVar(value=True)  # Lock Floor/Ceiling from accidental editing
+        # Cubicle display dimensions (UI only, not saved to JSON)
+        self.cubicle_display_width = tk.DoubleVar(value=300.0)
+        self.cubicle_display_depth = tk.DoubleVar(value=250.0)
         self.grid_size.trace_add("write", self.on_grid_setting_changed)
+        self.cubicle_display_width.trace_add("write", self.on_cubicle_display_changed)
+        self.cubicle_display_depth.trace_add("write", self.on_cubicle_display_changed)
         self.show_grid.trace_add("write", self.on_grid_setting_changed)
         self.canvas_grid_ids = []
 
@@ -135,6 +140,14 @@ class FloorplanEditor:
           tk.Checkbutton(display_frame, text="Lock Floor/Ceiling", variable=self.lock_floor_ceiling,
                      bg=toolbar_bg, activebackground=toolbar_bg,
                      selectcolor=accent_color).pack(side=tk.LEFT, padx=2)
+          
+          # Cubicle display size controls
+          tk.Label(display_frame, text="Cubicle W:", bg=toolbar_bg).pack(side=tk.LEFT, padx=(8, 2))
+          tk.Spinbox(display_frame, from_=50, to=1000, increment=10,
+                 width=5, textvariable=self.cubicle_display_width).pack(side=tk.LEFT, padx=2)
+          tk.Label(display_frame, text="D:", bg=toolbar_bg).pack(side=tk.LEFT, padx=(2, 2))
+          tk.Spinbox(display_frame, from_=50, to=1000, increment=10,
+                 width=5, textvariable=self.cubicle_display_depth).pack(side=tk.LEFT, padx=2)
           
           # Properties panel on the right with modern styling
           self.props_frame = tk.Frame(self.root, width=280, relief=tk.FLAT, bd=1, bg="#fafafa")
@@ -236,6 +249,10 @@ class FloorplanEditor:
         return x, y
 
     # ---------- Grid & snapping ----------
+    
+    def on_cubicle_display_changed(self, *args):
+        """Rebuild canvas when cubicle display dimensions change"""
+        self.rebuild_canvas()
 
     def get_grid_size(self):
         try:
@@ -498,10 +515,10 @@ class FloorplanEditor:
 
             if t == "Cubicle":
                 start = item.get("Start", {})
-                dim = item.get("Dimensions", {})
                 yaw = float(item.get("Yaw", 0.0))
-                w = float(dim.get("X", 0.0))
-                h = float(dim.get("Y", 0.0))
+                # Use display dimensions for bounding box
+                w = float(self.cubicle_display_width.get())
+                h = float(self.cubicle_display_depth.get())
                 # cubicles are axis-aligned, optionally rotated 90 degrees
                 if abs(yaw) % 180 == 90:
                     w, h = h, w
@@ -760,9 +777,14 @@ class FloorplanEditor:
 
         elif t == "Cubicle":
             start = item.get("Start", {})
-            dim = item.get("Dimensions", {})
             yaw = self.normalize_yaw(float(item.get("Yaw", 0.0)))
             item["Yaw"] = yaw
+            
+            # Use display dimensions (UI-only, not saved)
+            display_width = float(self.cubicle_display_width.get())
+            display_depth = float(self.cubicle_display_depth.get())
+            dim = {"X": display_width, "Y": display_depth}
+            
             w_world, h_world = self.get_axis_size(dim, yaw)
             x0_world = float(start.get("X", 0.0))
             y0_world = float(start.get("Y", 0.0))
@@ -813,13 +835,11 @@ class FloorplanEditor:
                 anchors.append(anchor_id)
                 canvas_ids.append(anchor_id)
             
-            # Add dimension text label (always visible)
+            # Add dimension text label showing display dimensions
             center_x = (x0_world + x1_world) / 2
             center_y = (y0_world + y1_world) / 2
             cx, cy = self.world_to_screen(center_x, center_y)
-            dim_x = float(dim.get("X", 0.0))
-            dim_y = float(dim.get("Y", 0.0))
-            dim_text = f"{dim_x:.0f}×{dim_y:.0f}"
+            dim_text = f"{display_width:.0f}×{display_depth:.0f}"
             text_id = self.canvas.create_text(cx, cy, text=dim_text,
                                              fill="#555555", font=("Arial", 9))
             canvas_ids.append(text_id)
@@ -1121,8 +1141,7 @@ class FloorplanEditor:
         
         # Type-specific properties
         if item_type == "Cubicle":
-            if "Dimensions" in item:
-                self._add_property_section("Dimensions", item["Dimensions"], ["X", "Y"])
+            # Cubicles only have Yaw (no Dimensions - they're just points)
             if "Yaw" in item:
                 self._add_yaw_property(item)
         
@@ -1470,9 +1489,12 @@ class FloorplanEditor:
         yaw_new = self.normalize_yaw(yaw_old + delta_deg)
         item["Yaw"] = yaw_new
 
-        if item.get("Type") == "Cubicle" and "Start" in item and "Dimensions" in item:
+        if item.get("Type") == "Cubicle" and "Start" in item:
             start = item["Start"]
-            dim = item["Dimensions"]
+            # Use display dimensions for rotation adjustment
+            display_width = float(self.cubicle_display_width.get())
+            display_depth = float(self.cubicle_display_depth.get())
+            dim = {"X": display_width, "Y": display_depth}
             width_old, height_old = self.get_axis_size(dim, yaw_old)
             start_x = float(start.get("X", 0.0))
             start_y = float(start.get("Y", 0.0))
@@ -1618,7 +1640,6 @@ class FloorplanEditor:
         item = {
             "Type": "Cubicle",
             "Start": {"X": wx, "Y": wy},
-            "Dimensions": {"X": 300.0, "Y": 250.0},
             "Yaw": 0.0
         }
         self.data.append(item)
