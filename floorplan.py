@@ -79,7 +79,8 @@ class FloorplanEditor:
           
           for text, value in [("Select", "select"), ("Cubicle", "add_cubicle"), 
                              ("Wall", "add_wall"), ("Door", "add_door"), 
-                             ("Window", "add_window"), ("Spawn", "add_spawn")]:
+                             ("Window", "add_window"), ("Spawn", "add_spawn"),
+                             ("RoomTone", "add_roomtone")]:
               tk.Radiobutton(mode_frame, text=text, variable=self.mode,
                          value=value, bg=toolbar_bg, activebackground=toolbar_bg,
                          selectcolor=accent_color).pack(side=tk.LEFT, padx=2)
@@ -961,6 +962,69 @@ class FloorplanEditor:
             anchor_id = self.create_anchor_marker(x_world, y_world, color="#00ff00")
             anchors.append(anchor_id)
             canvas_ids.append(anchor_id)
+        
+        elif t == "RoomTone":
+            # Draw RoomTone as a speaker icon with attenuation radius
+            start = item.get("Start", {})
+            x_world = float(start.get("X", 0.0))
+            y_world = float(start.get("Y", 0.0))
+            
+            sx, sy = self.world_to_screen(x_world, y_world)
+            
+            # Get properties
+            is_omni = item.get("bOmnidirectional", True)
+            attenuation_radius = float(item.get("AttenuationRadius", 1000.0))
+            source_radius = float(item.get("SourceRadius", 100.0))
+            
+            # Draw attenuation radius circle (light blue, dashed)
+            if attenuation_radius > 0:
+                # Convert radius to screen coordinates
+                ar_x0, ar_y0 = self.world_to_screen(x_world - attenuation_radius, y_world - attenuation_radius)
+                ar_x1, ar_y1 = self.world_to_screen(x_world + attenuation_radius, y_world + attenuation_radius)
+                ar_circle = self.canvas.create_oval(ar_x0, ar_y0, ar_x1, ar_y1,
+                                                    outline="#87ceeb", dash=(4, 4), width=1)
+                canvas_ids.append(ar_circle)
+            
+            # Draw source radius circle (darker blue)
+            if source_radius > 0:
+                sr_x0, sr_y0 = self.world_to_screen(x_world - source_radius, y_world - source_radius)
+                sr_x1, sr_y1 = self.world_to_screen(x_world + source_radius, y_world + source_radius)
+                sr_circle = self.canvas.create_oval(sr_x0, sr_y0, sr_x1, sr_y1,
+                                                    outline="#4169e1", dash=(2, 2), width=2)
+                canvas_ids.append(sr_circle)
+            
+            # Draw speaker icon at center
+            speaker_size = 10
+            if is_omni:
+                # Omnidirectional: solid circle with waves
+                speaker = self.canvas.create_oval(sx - speaker_size, sy - speaker_size,
+                                                  sx + speaker_size, sy + speaker_size,
+                                                  fill="#ff6b6b", outline="#c92a2a", width=2)
+                canvas_ids.append(speaker)
+                
+                # Draw sound waves (3 arcs)
+                for i in range(1, 4):
+                    wave_radius = speaker_size + i * 6
+                    arc = self.canvas.create_arc(sx - wave_radius, sy - wave_radius,
+                                                 sx + wave_radius, sy + wave_radius,
+                                                 start=45, extent=90, style=tk.ARC,
+                                                 outline="#ff6b6b", width=1)
+                    canvas_ids.append(arc)
+            else:
+                # Directional: cone shape
+                cone_points = [
+                    sx, sy,  # tip
+                    sx - speaker_size, sy - speaker_size * 1.5,
+                    sx - speaker_size, sy + speaker_size * 1.5
+                ]
+                cone = self.canvas.create_polygon(cone_points,
+                                                  fill="#ff6b6b", outline="#c92a2a", width=2)
+                canvas_ids.append(cone)
+            
+            # Add anchor
+            anchor_id = self.create_anchor_marker(x_world, y_world, color="#ff6b6b")
+            anchors.append(anchor_id)
+            canvas_ids.append(anchor_id)
 
         if canvas_ids:
             obj = {"data": item, "canvas_ids": canvas_ids, "anchors": anchors}
@@ -1068,6 +1132,20 @@ class FloorplanEditor:
                 # Add Yaw if it doesn't exist (default to 0)
                 item["Yaw"] = 0.0
                 self._add_yaw_property(item)
+        
+        elif item_type == "RoomTone":
+            if "HeightOffset" in item:
+                self._add_float_property("HeightOffset", item, "HeightOffset")
+            if "AudioId" in item:
+                self._add_string_property("AudioId", item, "AudioId")
+            if "bOmnidirectional" in item:
+                self._add_bool_property("Omnidirectional", item, "bOmnidirectional")
+            if "AttenuationRadius" in item:
+                self._add_float_property("AttenuationRadius", item, "AttenuationRadius")
+            if "SourceRadius" in item:
+                self._add_float_property("SourceRadius", item, "SourceRadius")
+            if "VolumeMultiplier" in item:
+                self._add_float_property("VolumeMultiplier", item, "VolumeMultiplier")
     
     def _add_property_section(self, title, data_dict, keys):
         """Add a property section with multiple fields"""
@@ -1185,6 +1263,65 @@ class FloorplanEditor:
         
         var.trace_add("write", callback)
     
+    def _add_string_property(self, label, item, key):
+        """Add a single string property"""
+        frame = tk.Frame(self.props_inner, bg="#fafafa")
+        frame.pack(fill=tk.X, padx=8, pady=3)
+        tk.Label(frame, text=f"{label}:", width=10, anchor="w", bg="#fafafa",
+                font=("Segoe UI", 9)).pack(side=tk.LEFT)
+        
+        var = tk.StringVar(value=str(item.get(key, "")))
+        entry = tk.Entry(frame, textvariable=var, width=15)
+        entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # Debounce to avoid excessive saves
+        timer_id = [None]
+        
+        def callback(*args):
+            # Cancel previous timer
+            if timer_id[0] is not None:
+                self.root.after_cancel(timer_id[0])
+            
+            # Set new timer for 300ms delay
+            def apply_change():
+                try:
+                    old_val = item.get(key, "")
+                    new_val = var.get()
+                    if old_val != new_val:  # Only if actually changed
+                        self.save_state()
+                        item[key] = new_val
+                        self.rebuild_canvas(preserve_selection=True)
+                except (ValueError, tk.TclError):
+                    pass
+                timer_id[0] = None
+            
+            timer_id[0] = self.root.after(300, apply_change)
+        
+        var.trace_add("write", callback)
+    
+    def _add_bool_property(self, label, item, key):
+        """Add a single boolean property"""
+        frame = tk.Frame(self.props_inner, bg="#fafafa")
+        frame.pack(fill=tk.X, padx=8, pady=3)
+        
+        var = tk.BooleanVar(value=bool(item.get(key, False)))
+        
+        def callback():
+            try:
+                old_val = item.get(key, False)
+                new_val = var.get()
+                if old_val != new_val:  # Only if actually changed
+                    self.save_state()
+                    item[key] = new_val
+                    self.rebuild_canvas(preserve_selection=True)
+            except (ValueError, tk.TclError):
+                pass
+        
+        checkbutton = tk.Checkbutton(frame, text=label, variable=var, command=callback,
+                                     bg="#fafafa", activebackground="#fafafa",
+                                     selectcolor="#0078d7", font=("Segoe UI", 9))
+        checkbutton.pack(side=tk.LEFT)
+    
     def _add_yaw_property(self, item):
         """Add yaw property with rotation buttons"""
         frame = tk.LabelFrame(self.props_inner, text="Rotation (Yaw)", padx=8, pady=6, bg="#fafafa",
@@ -1275,6 +1412,13 @@ class FloorplanEditor:
                     self.canvas.itemconfig(cid, outline=outline)
                 except tk.TclError:
                     pass
+            elif t == "RoomTone":
+                outline = "red" if selected else "#c92a2a"
+                fill = "#ffcccc" if selected else "#ff6b6b"
+                try:
+                    self.canvas.itemconfig(cid, outline=outline, fill=fill)
+                except tk.TclError:
+                    pass
 
     def can_rotate(self, item):
         return "Yaw" in item
@@ -1328,7 +1472,7 @@ class FloorplanEditor:
             obj = self.id_to_obj.get(cid)
             if obj is not None:
                 t = obj["data"].get("Type")
-                if t in ("Wall", "Door", "Window", "Cubicle", "Floor", "SpawnPoint", "CeilingLight"):
+                if t in ("Wall", "Door", "Window", "Cubicle", "Floor", "SpawnPoint", "CeilingLight", "RoomTone"):
                     return obj
         return None
 
@@ -1352,6 +1496,8 @@ class FloorplanEditor:
             self.add_cubicle_at(wx, wy)
         elif mode == "add_spawn":
             self.add_spawn_at(wx, wy)
+        elif mode == "add_roomtone":
+            self.add_roomtone_at(wx, wy)
         elif mode in ("add_wall", "add_door", "add_window"):
             self.handle_line_press(mode, event)
 
@@ -1479,6 +1625,24 @@ class FloorplanEditor:
             if obj["data"] is item:
                 self.set_selected(obj)
                 break
+    
+    def add_roomtone_at(self, wx, wy):
+        self.save_state()  # Save state for undo
+        wx, wy = self.snap_point(wx, wy)
+        item = {
+            "Type": "RoomTone",
+            "Start": {"X": wx, "Y": wy},
+            "HeightOffset": 150.0,
+            "AudioId": "NewRoomTone",
+            "bOmnidirectional": True,
+            "AttenuationRadius": 1000.0,
+            "SourceRadius": 100.0,
+            "VolumeMultiplier": 1.0
+        }
+        self.data.append(item)
+        obj = self.draw_item(item)
+        if obj is not None:
+            self.set_selected(obj)
 
     def line_mode_color(self, mode):
         return {
@@ -1700,7 +1864,7 @@ class FloorplanEditor:
         for obj in self.objects:
             item_type = obj["data"].get("Type")
             # Only select editable objects
-            if item_type in ("Wall", "Door", "Window", "Cubicle", "SpawnPoint", "CeilingLight"):
+            if item_type in ("Wall", "Door", "Window", "Cubicle", "SpawnPoint", "CeilingLight", "RoomTone"):
                 self.selected_objects.append(obj)
                 self.style_object(obj, selected=True)
         
