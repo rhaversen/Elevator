@@ -503,64 +503,23 @@ void AProceduralOfficeGenerator::DestroySpawnedComponents()
     SpawnedInstancedComponents.Empty();
     InstancedCache.Empty();
 
-    ComputerMeshComponent = nullptr;
-    PendingWorkstationViewTransform = FTransform::Identity;
-    bHasPendingWorkstationViewTransform = false;
-    HoveredComputerInstanceIndex = INDEX_NONE;
-
-    if (IsValid(ComputerHighlightProxy))
+    for (UChildActorComponent *Component : SpawnedChildActors)
     {
-        ComputerHighlightProxy->DestroyComponent();
-        ComputerHighlightProxy = nullptr;
-    }
-
-#if WITH_EDITOR
-    for (UArrowComponent* Arrow : WorkstationTargetVisualizers)
-    {
-        if (Arrow)
+        if (Component)
         {
-            Arrow->DestroyComponent();
+            Component->DestroyComponent();
         }
-    }
-    WorkstationTargetVisualizers.Empty();
-#endif
-
-    for (UChildActorComponent *ChildComponent : SpawnedChildActors)
-    {
-        if (!ChildComponent)
-        {
-            continue;
-        }
-
-        ChildComponent->DestroyChildActor();
-
-        if (ChildComponent->IsRegistered())
-        {
-            ChildComponent->UnregisterComponent();
-        }
-
-        ChildComponent->DestroyComponent();
     }
     SpawnedChildActors.Empty();
 
-    for (URectLightComponent *LightComponent : SpawnedCeilingLights)
+    for (UAudioComponent *Component : SpawnedAudioComponents)
     {
-        if (LightComponent)
+        if (Component)
         {
-            LightComponent->DestroyComponent();
+            Component->DestroyComponent();
         }
     }
-    SpawnedCeilingLights.Empty();
-
-    for (URectLightComponent *LightComponent : SpawnedElevatorLights)
-    {
-        if (LightComponent)
-        {
-            LightComponent->DestroyComponent();
-        }
-    }
-    SpawnedElevatorLights.Empty();
-
+    SpawnedAudioComponents.Empty();
 }
 
 bool AProceduralOfficeGenerator::EvaluateInteractionFocus_Implementation(APawn *PlayerPawn, const FHitResult &Hit, float AssistRadius, UPrimitiveComponent *&OutHighlightComponent)
