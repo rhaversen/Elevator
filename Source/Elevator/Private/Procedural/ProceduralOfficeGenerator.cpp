@@ -14,6 +14,7 @@
 #include "Components/ArrowComponent.h"
 #include "Components/AudioComponent.h"
 #include "Sound/SoundBase.h"
+#include "Sound/SoundAttenuation.h"
 #include "Engine/EngineTypes.h"
 #include "GameFramework/PlayerStart.h"
 #include "Kismet/GameplayStatics.h"
@@ -80,6 +81,13 @@ void AProceduralOfficeGenerator::BeginPlay()
         GenerateFromData();
     }
 
+    BootedComputerIndicesThisDay.Empty();
+
+    if (AudioRegistry.WorkstationBoot)
+    {
+        AudioRegistry.WorkstationBoot->VirtualizationMode = EVirtualizationMode::PlayWhenSilent;
+    }
+
     // Pass AudioRegistry to all spawned elevators now that child actors are fully initialized
     for (UChildActorComponent* ChildComp : SpawnedChildActors)
     {
@@ -102,6 +110,12 @@ void AProceduralOfficeGenerator::BeginPlay()
             UE_LOG(LogProceduralOffice, Log, TEXT("[Workstation] Subscribed to program change notifications."));
         }
 
+        if (!DayChangedHandle.IsValid())
+        {
+            DayChangedHandle = Manager->OnDayChanged().AddUObject(this, &AProceduralOfficeGenerator::HandleDayChanged);
+            UE_LOG(LogProceduralOffice, Log, TEXT("[Workstation] Subscribed to day change notifications."));
+        }
+
         HandleActiveProgramChanged(Manager->GetActiveProgramId());
     }
 }
@@ -116,6 +130,16 @@ void AProceduralOfficeGenerator::EndPlay(const EEndPlayReason::Type EndPlayReaso
         }
         ProgramChangedHandle.Reset();
         UE_LOG(LogProceduralOffice, Log, TEXT("[Workstation] Unsubscribed from program change notifications."));
+    }
+
+    if (DayChangedHandle.IsValid())
+    {
+        if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
+        {
+            Manager->OnDayChanged().Remove(DayChangedHandle);
+        }
+        DayChangedHandle.Reset();
+        UE_LOG(LogProceduralOffice, Log, TEXT("[Workstation] Unsubscribed from day change notifications."));
     }
 
     DestroySpawnedComponents();
@@ -172,6 +196,59 @@ void AProceduralOfficeGenerator::HandleActiveProgramChanged(FName ProgramId)
         MonitorScreenComponent->SetProgram(Manager->CreateProgramInstanceForId(ProgramId));
         MonitorScreenComponent->InitializeScreen();
         MonitorScreenComponent->ResetCursor();
+    }
+    else
+    {
+        UE_LOG(LogProceduralOffice, Warning, TEXT("[Workstation] Manager unavailable during program switch; using fallback program."));
+        MonitorScreenComponent->SetProgram(MakeShared<FSimpleButtonProgram>());
+        MonitorScreenComponent->InitializeScreen();
+        MonitorScreenComponent->ResetCursor();
+    }
+}
+
+void AProceduralOfficeGenerator::HandleDayChanged(int32 DayIndex, const FElevatorDayProgramEntry& Config)
+{
+    BootedComputerIndicesThisDay.Empty();
+    CurrentInteractionInstanceIndex = INDEX_NONE;
+    bBootPendingForCurrentInteraction = false;
+
+    if (MonitorScreenComponent)
+    {
+        MonitorScreenComponent->SetProgram(TSharedPtr<IScreenProgram>());
+        MonitorScreenComponent->InitializeScreen();
+        MonitorScreenComponent->ResetCursor();
+    }
+}
+
+void AProceduralOfficeGenerator::PlayWorkstationBootSound(const FVector& Location)
+{
+    if (!AudioRegistry.WorkstationBoot)
+    {
+        return;
+    }
+
+    if (UWorld* World = GetWorld())
+    {
+        USoundAttenuation* BootAttenuation = NewObject<USoundAttenuation>(this);
+        if (BootAttenuation)
+        {
+            BootAttenuation->Attenuation.bAttenuate = true;
+            BootAttenuation->Attenuation.bSpatialize = true;
+            BootAttenuation->Attenuation.AttenuationShape = EAttenuationShape::Sphere;
+            BootAttenuation->Attenuation.AttenuationShapeExtents = FVector(50.0f);
+            BootAttenuation->Attenuation.FalloffDistance = 150.0f;
+            BootAttenuation->Attenuation.dBAttenuationAtMax = -20.0f;
+        }
+
+        UGameplayStatics::SpawnSoundAtLocation(
+            World,
+            AudioRegistry.WorkstationBoot,
+            Location,
+            FRotator::ZeroRotator,
+            0.8f,
+            1.0f,
+            0.0f,
+            BootAttenuation);
     }
 }
 
@@ -617,6 +694,8 @@ void AProceduralOfficeGenerator::OnInteract_Implementation(APawn *PlayerPawn)
         return;
     }
 
+    const int32 ActiveIndex = HoveredComputerInstanceIndex;
+
     if (AFirstPersonCharacter* FirstPersonCharacter = Cast<AFirstPersonCharacter>(PlayerPawn))
     {
         FirstPersonCharacter->BeginWorkstationInteraction(PendingWorkstationViewTransform, WorkstationInteractionMoveDuration, WorkstationInteractionArcHeight, WorkstationInteractionCurveBias, this);
@@ -627,12 +706,37 @@ void AProceduralOfficeGenerator::OnInteract_Implementation(APawn *PlayerPawn)
         MonitorScreenComponent->ResetCursor();
     }
 
-    UE_LOG(LogProceduralOffice, Display, TEXT("Workstation monitor interaction triggered on instance %d."), HoveredComputerInstanceIndex);
+    const bool bShouldBoot = ActiveIndex != INDEX_NONE && !BootedComputerIndicesThisDay.Contains(ActiveIndex);
+    bBootPendingForCurrentInteraction = bShouldBoot;
 
-    CurrentInteractionInstanceIndex = HoveredComputerInstanceIndex;
+    CurrentInteractionInstanceIndex = ActiveIndex;
     HoveredComputerInstanceIndex = INDEX_NONE;
     bHasPendingWorkstationViewTransform = false;
     HideComputerHighlight();
+
+    if (bShouldBoot && AudioRegistry.WorkstationBoot)
+    {
+        FVector SoundLocation = GetActorLocation();
+
+        UInstancedStaticMeshComponent* ComputerComponent = ComputerMeshComponent.Get();
+        if (!ComputerComponent)
+        {
+            ComputerComponent = ResolveComputerMeshComponent();
+        }
+
+        if (ComputerComponent)
+        {
+            FTransform InstanceTransform;
+            if (ComputerComponent->GetInstanceTransform(CurrentInteractionInstanceIndex, InstanceTransform, true))
+            {
+                SoundLocation = InstanceTransform.TransformPosition(MonitorScreenOffset);
+            }
+        }
+
+        PlayWorkstationBootSound(SoundLocation);
+    }
+
+    UE_LOG(LogProceduralOffice, Display, TEXT("Workstation monitor interaction triggered on instance %d (boot sound=%s)."), CurrentInteractionInstanceIndex, bShouldBoot ? TEXT("true") : TEXT("false"));
 }
 
 FText AProceduralOfficeGenerator::GetInteractionPrompt_Implementation() const
@@ -643,11 +747,35 @@ FText AProceduralOfficeGenerator::GetInteractionPrompt_Implementation() const
 void AProceduralOfficeGenerator::OnInteractionCanceled_Implementation(APawn* PlayerPawn)
 {
     CurrentInteractionInstanceIndex = INDEX_NONE;
+    bBootPendingForCurrentInteraction = false;
 
     if (MonitorScreenComponent)
     {
         MonitorScreenComponent->ResetCursor();
     }
+}
+
+void AProceduralOfficeGenerator::OnInteractionViewOpened_Implementation(APawn* PlayerPawn)
+{
+    if (!MonitorScreenComponent)
+    {
+        return;
+    }
+
+    const int32 ActiveIndex = CurrentInteractionInstanceIndex;
+    const bool bValidIndex = ActiveIndex != INDEX_NONE;
+
+    bool bShouldBoot = bBootPendingForCurrentInteraction && bValidIndex;
+    bBootPendingForCurrentInteraction = false;
+
+    if (bShouldBoot)
+    {
+        BootedComputerIndicesThisDay.Add(ActiveIndex);
+    }
+
+    UE_LOG(LogProceduralOffice, Log, TEXT("[Workstation] View opened on instance %d (boot=%s)."), ActiveIndex, bShouldBoot ? TEXT("true") : TEXT("false"));
+
+    MonitorScreenComponent->ActivatePendingProgram(bShouldBoot);
 }
 
 void AProceduralOfficeGenerator::OnInteractionPointerPressed_Implementation(APawn* PlayerPawn, const FHitResult& Hit, FKey PointerKey)

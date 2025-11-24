@@ -287,6 +287,15 @@ void UWorkstationInteractionComponent::FinalizeEntry()
     bIsExiting = false;
 
     ToggleCursor(true);
+
+    if (AActor* Actor = WorkstationActor.Get())
+    {
+        if (Actor->Implements<UInteractable>() && CachedCharacter.IsValid())
+        {
+            IInteractable::Execute_OnInteractionViewOpened(Actor, CachedCharacter.Get());
+        }
+    }
+
     SetComponentTickEnabled(false);
 }
 

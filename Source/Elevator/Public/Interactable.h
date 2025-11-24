@@ -53,6 +53,14 @@ public:
     virtual void OnInteractionCanceled_Implementation(APawn* PlayerPawn) { /* Override in derived classes */ }
 
     /**
+     * Called when the player finishes transitioning into the interaction view (e.g. seated at a workstation).
+     * @param PlayerPawn The pawn that completed the transition
+     */
+    UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+    void OnInteractionViewOpened(APawn* PlayerPawn);
+    virtual void OnInteractionViewOpened_Implementation(APawn* PlayerPawn) { /* Override in derived classes */ }
+
+    /**
      * Called when the player provides input while interacting (e.g. moving mouse in workstation view).
      * @param PlayerPawn The pawn providing input
      * @param InputDelta The input delta (X = Yaw/Turn, Y = Pitch/LookUp)

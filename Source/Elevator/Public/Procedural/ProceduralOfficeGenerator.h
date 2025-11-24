@@ -15,6 +15,8 @@ class UStaticMeshComponent;
 class UPrimitiveComponent;
 class UArrowComponent;
 class UInteractiveScreenComponent;
+class UAudioComponent;
+struct FElevatorDayProgramEntry;
 
 UENUM(BlueprintType)
 enum class EOfficeElementType : uint8
@@ -125,6 +127,7 @@ public:
     virtual void OnInteract_Implementation(APawn* PlayerPawn) override;
     virtual FText GetInteractionPrompt_Implementation() const override;
     virtual void OnInteractionCanceled_Implementation(APawn* PlayerPawn) override;
+    virtual void OnInteractionViewOpened_Implementation(APawn* PlayerPawn) override;
     virtual void OnInteractionPointerPressed_Implementation(APawn* PlayerPawn, const FHitResult& Hit, FKey PointerKey) override;
     virtual void OnInteractionPointerReleased_Implementation(APawn* PlayerPawn, const FHitResult& Hit, FKey PointerKey) override;
     virtual void OnInteractionHover_Implementation(const FHitResult& Hit) override;
@@ -583,6 +586,8 @@ protected:
 
     void InitializeMonitorScreen();
     void HandleActiveProgramChanged(FName ProgramId);
+    void HandleDayChanged(int32 DayIndex, const struct FElevatorDayProgramEntry& Config);
+    void PlayWorkstationBootSound(const FVector& Location);
     
     UInstancedStaticMeshComponent* ResolveComputerMeshComponent();
     void HideComputerHighlight();
@@ -613,6 +618,13 @@ protected:
     int32 CurrentInteractionInstanceIndex = INDEX_NONE;
 
     FDelegateHandle ProgramChangedHandle;
+    FDelegateHandle DayChangedHandle;
+
+    UPROPERTY(Transient)
+    TSet<int32> BootedComputerIndicesThisDay;
+
+    UPROPERTY(Transient)
+    bool bBootPendingForCurrentInteraction = false;
 
     void NotifyComputerLookedAt(const UPrimitiveComponent* Component, int32 InstanceIndex);
 };

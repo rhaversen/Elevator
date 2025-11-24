@@ -3,19 +3,95 @@
 #include "UI/IScreenProgram.h"
 #include "UI/SlateWidgetHelpers.h"
 
+#include "Engine/World.h"
+#include "Math/UnrealMathUtility.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Misc/DateTime.h"
+#include "TimerManager.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Images/SImage.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SSpacer.h"
+#include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/SNullWidget.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
+
+class SBootAnimationWidget : public SCompoundWidget
+{
+public:
+    SLATE_BEGIN_ARGS(SBootAnimationWidget)
+        : _TextSize(16)
+    {}
+        SLATE_ARGUMENT(int32, TextSize)
+    SLATE_END_ARGS()
+
+    void Construct(const FArguments& InArgs)
+    {
+        const int32 ResolvedTextSize = FMath::Max(8, InArgs._TextSize);
+        FontInfo = FCoreStyle::GetDefaultFontStyle(TEXT("Mono"), ResolvedTextSize);
+
+        ChildSlot
+        [
+            SNew(SBorder)
+            .BorderImage(FCoreStyle::Get().GetBrush(TEXT("NoBrush")))
+            .Padding(FMargin(0.0f))
+            [
+                SAssignNew(ScrollBox, SScrollBox)
+                .ScrollBarVisibility(EVisibility::Collapsed)
+                + SScrollBox::Slot()
+                [
+                    SAssignNew(LineContainer, SVerticalBox)
+                ]
+            ]
+        ];
+    }
+
+    void Reset()
+    {
+        if (LineContainer.IsValid())
+        {
+            LineContainer->ClearChildren();
+        }
+
+        if (ScrollBox.IsValid())
+        {
+            ScrollBox->ScrollToStart();
+        }
+    }
+
+    void AppendLine(const FString& Line)
+    {
+        if (!LineContainer.IsValid())
+        {
+            return;
+        }
+
+        LineContainer->AddSlot()
+        .AutoHeight()
+        .Padding(FMargin(0.0f, 4.0f))
+        [
+            SNew(STextBlock)
+            .Text(FText::FromString(Line))
+            .Font(FontInfo)
+            .ColorAndOpacity(FSlateColor(FLinearColor::Green))
+        ];
+
+        if (ScrollBox.IsValid())
+        {
+            ScrollBox->ScrollToEnd();
+        }
+    }
+
+private:
+    TSharedPtr<SScrollBox> ScrollBox;
+    TSharedPtr<SVerticalBox> LineContainer;
+    FSlateFontInfo FontInfo;
+};
 
 namespace
 {
@@ -33,6 +109,25 @@ namespace
 UInteractiveScreenComponent::UInteractiveScreenComponent()
 {
     PrimaryComponentTick.bCanEverTick = false;
+
+    BootMessages = {
+        TEXT("init: shadow kernel remap OK"),
+        TEXT("pci: probing ghost bridge @ 0x00d4"),
+        TEXT("mmu: remapping stale office segment"),
+        TEXT("cryptd: seeded entropy pool from /dev/random"),
+        TEXT("systemd[1]: mounting /var/log/mirror"),
+        TEXT("audit: service ghost@tunnel.service queued"),
+        TEXT("daemon.try: handshake with //terminal/29 accepted"),
+        TEXT("rtc: calibrating office-cycle oscillator"),
+        TEXT("mapper: phantom-volume mapped at 0x7ffe1200"),
+        TEXT("kernel: dram ECC scrub pass 1 complete"),
+        TEXT("net.ifup: waiting on uplink (eth0) ..."),
+        TEXT("boot-notify: stale session traces recovered"),
+        TEXT("watch: stray process 'mirror-ghost' acknowledged"),
+        TEXT("audit: integrity of /etc/tasks.d verified"),
+        TEXT("displayd: binding RT_ScreenInterface to surface"),
+        TEXT("init: handing off control to workstation session")
+    };
 }
 
 UInteractiveScreenComponent::~UInteractiveScreenComponent()
@@ -52,6 +147,11 @@ void UInteractiveScreenComponent::OnComponentDestroyed(bool bDestroyingHierarchy
         DispatchSyntheticPointerReleases();
         CurrentProgram->OnDeactivated();
     }
+
+    StopBootSequence();
+    PendingProgram.Reset();
+    BootWidget.Reset();
+
     ClearPointerState();
     SlateWidgetRenderer.Reset();
     RootWidget.Reset();
@@ -69,7 +169,6 @@ void UInteractiveScreenComponent::SetRenderTarget(UTextureRenderTarget2D* InRend
 
 void UInteractiveScreenComponent::InitializeScreen()
 {
-    CreateInterfaceIfNeeded();
     UpdateWidgetSizeFromRenderTarget();
     UpdateCursorInternal(VirtualCursorPosition);
     RefreshRender();
@@ -98,24 +197,73 @@ void UInteractiveScreenComponent::SetProgram(TSharedPtr<IScreenProgram> InProgra
         CurrentProgram->OnDeactivated();
     }
 
-    CurrentProgram = InProgram;
+    StopBootSequence();
+
+    CurrentProgram.Reset();
+    PendingProgram = InProgram;
     ProgramWidget.Reset();
+    BootWidget.Reset();
     bWidgetInitialized = false;
     bExitRequested = false;
     bExitButtonHovered = false;
+    NextBootLineIndex = 0;
     ClearPointerState();
     CachedCursorType = EMouseCursor::Default;
 
-    CreateInterfaceIfNeeded();
-
-    if (CurrentProgram.IsValid())
-    {
-        CurrentProgram->OnActivated();
-    }
+    SetDisplayState(EDisplayState::Idle);
 
     UpdateWidgetSizeFromRenderTarget();
     UpdateCursorInternal(VirtualCursorPosition);
     RefreshRender();
+    UpdateHardwareCursor();
+}
+
+void UInteractiveScreenComponent::ActivatePendingProgram(bool bShouldBoot)
+{
+    if (DisplayState == EDisplayState::Booting || DisplayState == EDisplayState::ShowingProgram)
+    {
+        RefreshRender();
+        return;
+    }
+
+    if (!PendingProgram.IsValid())
+    {
+        return;
+    }
+
+    CurrentProgram = PendingProgram;
+    PendingProgram.Reset();
+
+    bExitRequested = false;
+    ClearPointerState();
+
+    const bool bPlayBoot = bShouldBoot && BootMessages.Num() > 0;
+    SetDisplayState(bPlayBoot ? EDisplayState::Booting : EDisplayState::ShowingProgram);
+
+    ProgramWidget.Reset();
+
+    CreateInterfaceIfNeeded();
+    UpdateWidgetSizeFromRenderTarget();
+
+    if (CurrentProgram.IsValid())
+    {
+        if (DisplayState == EDisplayState::ShowingProgram)
+        {
+            CurrentProgram->OnScreenResized(ProgramAreaSize);
+        }
+        CurrentProgram->OnActivated();
+    }
+
+    if (DisplayState == EDisplayState::Booting)
+    {
+        BeginBootSequence();
+    }
+    else
+    {
+        UpdateProgramContent();
+        RefreshRender();
+    }
+
     UpdateHardwareCursor();
 }
 
@@ -135,7 +283,7 @@ void UInteractiveScreenComponent::ProcessPointerPressed(const FKey& PointerKey)
         return;
     }
 
-    if (!CurrentProgram.IsValid())
+    if (DisplayState != EDisplayState::ShowingProgram || !CurrentProgram.IsValid() || !ProgramWidget.IsValid())
     {
         RefreshRender();
         UpdateHardwareCursor();
@@ -172,7 +320,7 @@ void UInteractiveScreenComponent::ProcessPointerReleased(const FKey& PointerKey)
         return;
     }
 
-    if (!CurrentProgram.IsValid())
+    if (DisplayState != EDisplayState::ShowingProgram || !CurrentProgram.IsValid() || !ProgramWidget.IsValid())
     {
         RefreshRender();
         UpdateHardwareCursor();
@@ -200,12 +348,19 @@ bool UInteractiveScreenComponent::ShouldExit()
 
 void UInteractiveScreenComponent::RefreshRender()
 {
-    if (!ScreenRenderTarget || !RootWidget.IsValid())
+    if (!ScreenRenderTarget)
     {
         return;
     }
 
     UpdateWidgetSizeFromRenderTarget();
+
+    if (DisplayState == EDisplayState::Idle || !RootWidget.IsValid())
+    {
+        UKismetRenderingLibrary::ClearRenderTarget2D(this, ScreenRenderTarget, FLinearColor::Black);
+        return;
+    }
+
     if (!IsReady())
     {
         return;
@@ -251,24 +406,31 @@ void UInteractiveScreenComponent::CreateInterfaceIfNeeded()
     }
 
     ProgramContainer.Reset();
+    ProgramRootWidget.Reset();
+    BootContainer.Reset();
 
     const FSlateBrush* NoBrush = FCoreStyle::Get().GetBrush("NoBrush");
 
     TSharedRef<SOverlay> Root = SNew(SOverlay)
-        // Background
+        // Boot overlay layer
         + SOverlay::Slot()
         .HAlign(HAlign_Fill)
         .VAlign(VAlign_Fill)
         [
-            SNew(SImage)
-            .ColorAndOpacity(FLinearColor::Black)
+            SAssignNew(BootContainer, SBorder)
+            .BorderImage(NoBrush)
+            .BorderBackgroundColor(FLinearColor::Black)
+            .Padding(FMargin(ProgramContentPadding))
+            [
+                SNullWidget::NullWidget
+            ]
         ]
-        // Outer chrome and footer
+        // Background + program chrome and footer
         + SOverlay::Slot()
         .HAlign(HAlign_Fill)
         .VAlign(VAlign_Fill)
         [
-            SNew(SVerticalBox)
+            SAssignNew(ProgramRootWidget, SVerticalBox)
             + SVerticalBox::Slot()
             .Padding(FMargin(ProgramPaddingX, ProgramPaddingTop, ProgramPaddingX, ProgramPaddingBottom))
             .HAlign(HAlign_Fill)
@@ -374,12 +536,11 @@ void UInteractiveScreenComponent::CreateInterfaceIfNeeded()
         ];
 
     RootWidget = Root;
+    SetDisplayState(DisplayState);
 }
 
 void UInteractiveScreenComponent::UpdateWidgetSizeFromRenderTarget()
 {
-    CreateInterfaceIfNeeded();
-
     if (!ScreenRenderTarget)
     {
         return;
@@ -392,13 +553,22 @@ void UInteractiveScreenComponent::UpdateWidgetSizeFromRenderTarget()
     }
 
     const bool bSizeChanged = !Size.Equals(WidgetSize);
+    WidgetSize = Size;
+
+    CreateInterfaceIfNeeded();
+
+    if (!RootWidget.IsValid())
+    {
+        return;
+    }
+
     if (!bWidgetInitialized || bSizeChanged)
     {
         UpdateLayout(Size);
         bWidgetInitialized = true;
         UpdateCursorInternal(VirtualCursorPosition);
     }
-    else if (CurrentProgram.IsValid() && !ProgramWidget.IsValid())
+    else if (DisplayState == EDisplayState::ShowingProgram && CurrentProgram.IsValid() && !ProgramWidget.IsValid())
     {
         UpdateProgramContent();
     }
@@ -408,6 +578,26 @@ void UInteractiveScreenComponent::UpdateProgramContent()
 {
     if (!ProgramContainer.IsValid())
     {
+        return;
+    }
+
+    if (DisplayState == EDisplayState::Booting)
+    {
+        if (BootWidget.IsValid())
+        {
+            ProgramContainer->SetContent(BootWidget.ToSharedRef());
+        }
+        else
+        {
+            ProgramContainer->SetContent(SNullWidget::NullWidget);
+        }
+        return;
+    }
+
+    if (DisplayState != EDisplayState::ShowingProgram)
+    {
+        ProgramWidget.Reset();
+        ProgramContainer->SetContent(SNullWidget::NullWidget);
         return;
     }
 
@@ -447,7 +637,7 @@ void UInteractiveScreenComponent::UpdateCursorInternal(const FVector2D& Normaliz
 
     bExitButtonHovered = ExitButtonRect.bIsValid && ExitButtonRect.IsInside(PixelPos);
 
-    if (CurrentProgram.IsValid())
+    if (DisplayState == EDisplayState::ShowingProgram && CurrentProgram.IsValid() && ProgramWidget.IsValid())
     {
         const FVector2D ProgramCursor = ConvertPixelToProgramNormalized(PixelPos);
         if (!bExitButtonPressed)
@@ -585,7 +775,7 @@ void UInteractiveScreenComponent::UpdateHardwareCursor()
     {
         DesiredCursor = EMouseCursor::Hand;
     }
-    else if (CurrentProgram.IsValid())
+    else if (DisplayState == EDisplayState::ShowingProgram && CurrentProgram.IsValid())
     {
         DesiredCursor = CurrentProgram->GetCursorType();
     }
@@ -599,6 +789,147 @@ void UInteractiveScreenComponent::UpdateHardwareCursor()
     }
 
     CachedCursorType = DesiredCursor;
+}
+
+void UInteractiveScreenComponent::SetDisplayState(UInteractiveScreenComponent::EDisplayState NewState)
+{
+    DisplayState = NewState;
+
+    if (BootContainer.IsValid())
+    {
+        BootContainer->SetVisibility(DisplayState == EDisplayState::Booting ? EVisibility::Visible : EVisibility::Collapsed);
+    }
+
+    if (ProgramRootWidget.IsValid())
+    {
+        ProgramRootWidget->SetVisibility(DisplayState == EDisplayState::ShowingProgram ? EVisibility::Visible : EVisibility::Collapsed);
+    }
+}
+
+void UInteractiveScreenComponent::BeginBootSequence()
+{
+    StopBootSequence();
+
+    if (!ProgramContainer.IsValid())
+    {
+        return;
+    }
+
+    if (!BootWidget.IsValid())
+    {
+        BootWidget = SNew(SBootAnimationWidget).TextSize(TextSize);
+    }
+    else
+    {
+        BootWidget->Reset();
+    }
+
+    BootContainer->SetContent(BootWidget.ToSharedRef());
+    NextBootLineIndex = 0;
+
+    const float RangeMin = FMath::Max(0.0f, FMath::Min(BootInitialTimestampMin, BootInitialTimestampMax));
+    const float RangeMax = FMath::Max(RangeMin, FMath::Max(BootInitialTimestampMin, BootInitialTimestampMax));
+    BootElapsedSeconds = BootMessages.Num() > 0 ? FMath::FRandRange(RangeMin, RangeMax) : 0.0f;
+
+    RefreshRender();
+
+    if (BootMessages.Num() == 0)
+    {
+        HandleBootSequenceFinished();
+        return;
+    }
+
+    AdvanceBootSequence();
+}
+
+void UInteractiveScreenComponent::AdvanceBootSequence()
+{
+    if (DisplayState != EDisplayState::Booting)
+    {
+        return;
+    }
+
+    if (!BootWidget.IsValid())
+    {
+        HandleBootSequenceFinished();
+        return;
+    }
+
+    if (!BootMessages.IsValidIndex(NextBootLineIndex))
+    {
+        HandleBootSequenceFinished();
+        return;
+    }
+
+    const FString& Message = BootMessages[NextBootLineIndex];
+    const FString FormattedLine = FString::Printf(TEXT("[ %05.3f] %s"), BootElapsedSeconds, *Message);
+    BootWidget->AppendLine(FormattedLine);
+    ++NextBootLineIndex;
+
+    RefreshRender();
+
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        return;
+    }
+
+    const float BaseDelay = FMath::Max(0.01f, BootLineBaseDelay);
+    const float RandomDelay = BootLineDelayJitter > 0.0f ? FMath::FRandRange(0.0f, BootLineDelayJitter) : 0.0f;
+    const float Delay = BaseDelay + RandomDelay;
+
+    BootElapsedSeconds += Delay;
+
+    if (NextBootLineIndex >= BootMessages.Num())
+    {
+        const float HoldDelay = FMath::Max(0.01f, BootCompletionHoldDelay);
+        World->GetTimerManager().SetTimer(BootTimerHandle, this, &UInteractiveScreenComponent::HandleBootSequenceFinished, HoldDelay, false);
+        return;
+    }
+
+    World->GetTimerManager().SetTimer(BootTimerHandle, this, &UInteractiveScreenComponent::AdvanceBootSequence, Delay, false);
+}
+
+void UInteractiveScreenComponent::HandleBootSequenceFinished()
+{
+    if (DisplayState != EDisplayState::Booting)
+    {
+        return;
+    }
+
+    StopBootSequence();
+
+    SetDisplayState(EDisplayState::ShowingProgram);
+
+    if (CurrentProgram.IsValid())
+    {
+        CurrentProgram->OnScreenResized(ProgramAreaSize);
+    }
+
+    UpdateProgramContent();
+    RefreshRender();
+    UpdateHardwareCursor();
+}
+
+void UInteractiveScreenComponent::StopBootSequence()
+{
+    if (UWorld* World = GetWorld())
+    {
+        World->GetTimerManager().ClearTimer(BootTimerHandle);
+    }
+
+    NextBootLineIndex = 0;
+    BootElapsedSeconds = 0.0f;
+
+    if (BootContainer.IsValid())
+    {
+        BootContainer->SetContent(SNullWidget::NullWidget);
+    }
+
+    if (ProgramContainer.IsValid())
+    {
+        ProgramContainer->SetContent(SNullWidget::NullWidget);
+    }
 }
 
 FSlateColor UInteractiveScreenComponent::GetExitButtonBorderColor() const

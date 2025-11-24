@@ -8,8 +8,11 @@
 #include "UI/IScreenProgram.h"
 #include "InteractiveScreenComponent.generated.h"
 
+struct FTimerHandle;
 class UTextureRenderTarget2D;
 class SBox;
+class SBootAnimationWidget;
+class SBorder;
 
 /**
  * Component that manages rendering of a Slate monitor widget to a texture render target
@@ -42,6 +45,9 @@ public:
     /** Redraw the widget using the current cursor state. */
     void RefreshRender();
 
+    /** Activate the pending program, optionally playing the boot animation first. */
+    void ActivatePendingProgram(bool bShouldBoot);
+
     /** Process a pointer press at the current cursor position. */
     void ProcessPointerPressed(const FKey& PointerKey);
 
@@ -60,6 +66,13 @@ public:
     bool IsProgramTaskComplete() const;
 
 private:
+    enum class EDisplayState : uint8
+    {
+        Idle,
+        Booting,
+        ShowingProgram
+    };
+
     void EnsureRenderer();
     void CreateInterfaceIfNeeded();
     void UpdateWidgetSizeFromRenderTarget();
@@ -72,6 +85,11 @@ private:
     void ClearPointerState();
     FScreenPointerEvent BuildPointerEvent(const FVector2D& ProgramNormalized, const FVector2D& PixelPosition, const FKey& TriggerKey) const;
     void UpdateHardwareCursor();
+    void SetDisplayState(EDisplayState NewState);
+    void BeginBootSequence();
+    void AdvanceBootSequence();
+    void HandleBootSequenceFinished();
+    void StopBootSequence();
 
     FSlateColor GetExitButtonBorderColor() const;
     FSlateColor GetExitButtonTextColor() const;
@@ -93,15 +111,47 @@ private:
     UPROPERTY(EditAnywhere, Category = "Interactive Screen", meta = (ClampMin = "8", ClampMax = "48"))
     int32 TextSize = 16;
 
+    /** Boot log lines to display during startup. */
+    UPROPERTY(EditAnywhere, Category = "Interactive Screen|Boot")
+    TArray<FString> BootMessages;
+
+    /** Minimum initial timestamp for the first boot log line (seconds). */
+    UPROPERTY(EditAnywhere, Category = "Interactive Screen|Boot", meta = (ClampMin = "0.0"))
+    float BootInitialTimestampMin = 0.004f;
+
+    /** Maximum initial timestamp for the first boot log line (seconds). */
+    UPROPERTY(EditAnywhere, Category = "Interactive Screen|Boot", meta = (ClampMin = "0.0"))
+    float BootInitialTimestampMax = 0.030f;
+
+    /** Base delay between boot log lines (seconds). */
+    UPROPERTY(EditAnywhere, Category = "Interactive Screen|Boot", meta = (ClampMin = "0.01"))
+    float BootLineBaseDelay = 0.20f;
+
+    /** Random jitter added to the base delay between boot log lines (seconds). */
+    UPROPERTY(EditAnywhere, Category = "Interactive Screen|Boot", meta = (ClampMin = "0.0"))
+    float BootLineDelayJitter = 0.35f;
+
+    /** Hold time after the final boot log before switching to the program (seconds). */
+    UPROPERTY(EditAnywhere, Category = "Interactive Screen|Boot", meta = (ClampMin = "0.0"))
+    float BootCompletionHoldDelay = 0.85f;
+
     TSharedPtr<IScreenProgram> CurrentProgram;
+    TSharedPtr<IScreenProgram> PendingProgram;
     TSharedPtr<SWidget> RootWidget;
+    TSharedPtr<SWidget> ProgramRootWidget;
     TSharedPtr<SWidget> ProgramWidget;
     TSharedPtr<SBox> ProgramContainer;
+    TSharedPtr<SBorder> BootContainer;
+    TSharedPtr<SBootAnimationWidget> BootWidget;
     TUniquePtr<FWidgetRenderer> SlateWidgetRenderer;
     FVector2D WidgetSize = FVector2D::ZeroVector;
     FVector2D ProgramAreaSize = FVector2D::ZeroVector;
     FVector2D VirtualCursorPosition = FVector2D::ZeroVector;
     bool bWidgetInitialized = false;
+    EDisplayState DisplayState = EDisplayState::Idle;
+    int32 NextBootLineIndex = 0;
+    FTimerHandle BootTimerHandle;
+    float BootElapsedSeconds = 0.0f;
 
     FBox2D ProgramAreaRect;
     FBox2D ExitButtonRect;
