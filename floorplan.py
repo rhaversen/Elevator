@@ -820,13 +820,16 @@ class FloorplanEditor:
             start = item.get("Start", {})
             yaw = self.normalize_yaw(float(item.get("Yaw", 0.0)))
             item["Yaw"] = yaw
-            
+
             # Use display dimensions (UI-only, not saved)
             display_width = float(self.cubicle_display_width.get())
             display_depth = float(self.cubicle_display_depth.get())
             dim = {"X": display_width, "Y": display_depth}
-            
-            w_world, h_world = self.get_axis_size(dim, yaw)
+
+            # Offset visualization by 90° to match in-game orientation
+            vis_yaw = self.normalize_yaw(yaw + 90.0)
+
+            w_world, h_world = self.get_axis_size(dim, vis_yaw)
             x0_world = float(start.get("X", 0.0))
             y0_world = float(start.get("Y", 0.0))
             x1_world = x0_world + w_world
@@ -841,7 +844,6 @@ class FloorplanEditor:
             canvas_ids.append(cid)
             
             # Add rotation indicator (small triangle showing front/orientation)
-            yaw_normalized = self.normalize_yaw(yaw)
             indicator_size = min(abs(x1 - x0), abs(y1 - y0)) * 0.12
             
             # Calculate center for rotation indicator
@@ -849,8 +851,8 @@ class FloorplanEditor:
             cy = (y0 + y1) / 2
             
             # Create arrow pointing in the direction of yaw
-            # Yaw 0 = right, 90 = down, 180 = left, 270 = up (in screen coords)
-            angle_rad = math.radians(-yaw_normalized)  # Negative for screen coords
+            # Yaw 0 now renders facing up to mirror gameplay orientation
+            angle_rad = math.radians(-vis_yaw)  # Negative for screen coords
             arrow_len = indicator_size * 2
             
             # Arrow points from center outward
