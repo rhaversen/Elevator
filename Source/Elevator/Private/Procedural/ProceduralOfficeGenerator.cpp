@@ -80,6 +80,18 @@ void AProceduralOfficeGenerator::BeginPlay()
         GenerateFromData();
     }
 
+    // Pass AudioRegistry to all spawned elevators now that child actors are fully initialized
+    for (UChildActorComponent* ChildComp : SpawnedChildActors)
+    {
+        if (ChildComp && ChildComp->GetChildActor())
+        {
+            if (AProceduralElevator* Elevator = Cast<AProceduralElevator>(ChildComp->GetChildActor()))
+            {
+                Elevator->AudioRegistry = AudioRegistry;
+            }
+        }
+    }
+
     InitializeMonitorScreen();
 
     if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))

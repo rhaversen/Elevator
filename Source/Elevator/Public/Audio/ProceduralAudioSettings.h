@@ -14,6 +14,18 @@ struct ELEVATOR_API FProceduralAudioRegistry
 {
     GENERATED_BODY()
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio|Elevator")
+    TObjectPtr<USoundBase> ElevatorDoorOpen = nullptr;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio|Elevator")
+    TObjectPtr<USoundBase> ElevatorDoorClose = nullptr;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio|Elevator")
+    TObjectPtr<USoundBase> ElevatorRide = nullptr;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio|Elevator")
+    TObjectPtr<USoundBase> ElevatorButtonClick = nullptr;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio|Workstation")
     TObjectPtr<USoundBase> WorkstationMousePress = nullptr;
 

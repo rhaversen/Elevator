@@ -9,7 +9,9 @@
 #include "Engine/EngineTypes.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
+#include "Kismet/GameplayStatics.h"
 #include "Math/UnrealMathUtility.h"
+#include "Sound/SoundBase.h"
 #include "TimerManager.h"
 
 namespace
@@ -434,6 +436,15 @@ bool AProceduralElevator::HandleButtonPressed(UPrimitiveComponent* ButtonCompone
         return false;
     }
 
+    // Play button click sound
+    if (USoundBase* ButtonSound = AudioRegistry.ElevatorButtonClick)
+    {
+        if (UWorld* World = GetWorld())
+        {
+            UGameplayStatics::SpawnSoundAtLocation(World, ButtonSound, ButtonComponent->GetComponentLocation(), FRotator::ZeroRotator, 0.8f);
+        }
+    }
+
     const FName ButtonId = GetButtonId(ButtonComponent);
 
     if (!IsButtonInteractionEnabled(ButtonComponent))
@@ -599,6 +610,15 @@ void AProceduralElevator::RequestOpenDoors(bool bForce)
         return;
     }
 
+    // Play door open sound
+    if (USoundBase* DoorOpenSound = AudioRegistry.ElevatorDoorOpen)
+    {
+        if (UWorld* World = GetWorld())
+        {
+            UGameplayStatics::SpawnSoundAtLocation(World, DoorOpenSound, GetActorLocation(), FRotator::ZeroRotator, 1.0f);
+        }
+    }
+
     DoorController->OpenDoors();
 }
 
@@ -630,6 +650,15 @@ void AProceduralElevator::RequestCloseDoors(bool bForce)
         }
     }
 
+    // Play door close sound
+    if (USoundBase* DoorCloseSound = AudioRegistry.ElevatorDoorClose)
+    {
+        if (UWorld* World = GetWorld())
+        {
+            UGameplayStatics::SpawnSoundAtLocation(World, DoorCloseSound, GetActorLocation(), FRotator::ZeroRotator, 1.0f);
+        }
+    }
+
     DoorController->CloseDoors();
 }
 
@@ -651,6 +680,19 @@ bool AProceduralElevator::HandleFloorButtonPressed(FName ButtonId)
     const float RideStartDelay = DoorCloseDuration;
 
     UE_LOG(LogTemp, Log, TEXT("[Elevator] Handling floor selection %s. Doors locked until timer expires."), *ButtonId.ToString());
+
+    // Play elevator ride sound after doors close (non-looping, plays once)
+    if (USoundBase* RideSound = AudioRegistry.ElevatorRide)
+    {
+        if (UWorld* World = GetWorld())
+        {
+            FTimerHandle RideSoundStartHandle;
+            World->GetTimerManager().SetTimer(RideSoundStartHandle, [this, RideSound, World]()
+            {
+                UGameplayStatics::SpawnSoundAtLocation(World, RideSound, GetActorLocation(), FRotator::ZeroRotator, 0.7f);
+            }, RideStartDelay, false);
+        }
+    }
 
     if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
     {

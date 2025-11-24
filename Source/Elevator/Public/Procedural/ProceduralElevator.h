@@ -6,6 +6,7 @@
 #include "Interactable.h"
 #include "InteractionFocusProvider.h"
 #include "Procedural/ProceduralElevatorDoorController.h"
+#include "Audio/ProceduralAudioSettings.h"
 #include "TimerManager.h"
 #include "ProceduralElevator.generated.h"
 
@@ -80,6 +81,10 @@ public:
 
     // IInteractionFocusProvider interface
     virtual bool EvaluateInteractionFocus_Implementation(APawn* PlayerPawn, const FHitResult& Hit, float AssistRadius, UPrimitiveComponent*& OutHighlightComponent) override;
+
+    /** Audio registry containing sound references for elevator events. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio")
+    FProceduralAudioRegistry AudioRegistry;
 
 protected:
     virtual void BeginPlay() override;
