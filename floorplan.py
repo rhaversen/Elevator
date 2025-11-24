@@ -67,149 +67,196 @@ class FloorplanEditor:
         self._build_ui()
 
     def _build_ui(self):
-          # Modern color scheme
-          bg_color = "#f5f5f5"
-          toolbar_bg = "#ffffff"
-          accent_color = "#0078d7"
-          
-          self.root.configure(bg=bg_color)
-          
-          # Main toolbar with modern styling
-          toolbar = tk.Frame(self.root, bg=toolbar_bg, relief=tk.FLAT, bd=1)
-          toolbar.pack(side=tk.TOP, fill=tk.X, padx=2, pady=2)
+        # Modern color scheme
+        bg_color = "#f5f5f5"
+        toolbar_bg = "#ffffff"
+        accent_color = "#0078d7"
 
-          # Mode selection frame
-          mode_frame = tk.LabelFrame(toolbar, text="Mode", padx=8, pady=4, bg=toolbar_bg, 
+        self.root.configure(bg=bg_color)
+
+        # Main toolbar with modern styling
+        toolbar = tk.Frame(self.root, bg=toolbar_bg, relief=tk.FLAT, bd=1)
+        toolbar.pack(side=tk.TOP, fill=tk.X, padx=2, pady=2)
+
+        toolbar_top = tk.Frame(toolbar, bg=toolbar_bg)
+        toolbar_top.pack(side=tk.TOP, fill=tk.X)
+        toolbar_bottom = tk.Frame(toolbar, bg=toolbar_bg)
+        toolbar_bottom.pack(side=tk.TOP, fill=tk.X)
+
+        # Mode selection frame
+        mode_frame = tk.LabelFrame(toolbar_top, text="Mode", padx=8, pady=4, bg=toolbar_bg,
+                                   relief=tk.GROOVE, bd=1)
+        mode_frame.pack(side=tk.LEFT, padx=5, pady=4)
+
+        for text, value in [("Select", "select"), ("Cubicle", "add_cubicle"),
+                            ("Wall", "add_wall"), ("Door", "add_door"),
+                            ("Window", "add_window"), ("Spawn", "add_spawn"),
+                            ("RoomTone", "add_roomtone"), ("Floor+Ceiling", "add_floor_ceiling")]:
+            tk.Radiobutton(
+                mode_frame,
+                text=text,
+                variable=self.mode,
+                value=value,
+                bg=toolbar_bg,
+                activebackground=toolbar_bg,
+                selectcolor=toolbar_bg,
+            ).pack(side=tk.LEFT, padx=2)
+
+        # View controls frame
+        view_frame = tk.LabelFrame(toolbar_top, text="View", padx=8, pady=4, bg=toolbar_bg,
+                                   relief=tk.GROOVE, bd=1)
+        view_frame.pack(side=tk.LEFT, padx=5, pady=4)
+
+        for text, cmd in [("Reset", self.reset_view), ("Zoom +", self.zoom_in),
+                          ("Zoom −", self.zoom_out)]:
+            tk.Button(view_frame, text=text, command=cmd, bg=toolbar_bg,
+                      activebackground=accent_color, relief=tk.RAISED, bd=1,
+                      padx=8, pady=2).pack(side=tk.LEFT, padx=2)
+
+        # Rotation controls frame
+        rotate_frame = tk.LabelFrame(toolbar_top, text="Rotate", padx=8, pady=4, bg=toolbar_bg,
                                      relief=tk.GROOVE, bd=1)
-          mode_frame.pack(side=tk.LEFT, padx=5, pady=4)
-          
-          for text, value in [("Select", "select"), ("Cubicle", "add_cubicle"), 
-                             ("Wall", "add_wall"), ("Door", "add_door"), 
-                             ("Window", "add_window"), ("Spawn", "add_spawn"),
-                             ("RoomTone", "add_roomtone"), ("Floor+Ceiling", "add_floor_ceiling")]:
-              tk.Radiobutton(mode_frame, text=text, variable=self.mode,
-                         value=value, bg=toolbar_bg, activebackground=toolbar_bg).pack(side=tk.LEFT, padx=2)
-          
-          # View controls frame
-          view_frame = tk.LabelFrame(toolbar, text="View", padx=8, pady=4, bg=toolbar_bg,
-                                     relief=tk.GROOVE, bd=1)
-          view_frame.pack(side=tk.LEFT, padx=5, pady=4)
-          
-          for text, cmd in [("Reset", self.reset_view), ("Zoom +", self.zoom_in), 
-                           ("Zoom −", self.zoom_out)]:
-              tk.Button(view_frame, text=text, command=cmd, bg=toolbar_bg,
-                       activebackground=accent_color, relief=tk.RAISED, bd=1,
-                       padx=8, pady=2).pack(side=tk.LEFT, padx=2)
-          
-          # Rotation controls frame
-          rotate_frame = tk.LabelFrame(toolbar, text="Rotate", padx=8, pady=4, bg=toolbar_bg,
-                                       relief=tk.GROOVE, bd=1)
-          rotate_frame.pack(side=tk.LEFT, padx=5, pady=4)
-          
-          for text, deg in [("⟳ 90°", 90), ("⟲ 90°", -90)]:
-              tk.Button(rotate_frame, text=text, command=lambda d=deg: self.rotate_selection(d),
-                       bg=toolbar_bg, activebackground=accent_color, relief=tk.RAISED, bd=1,
-                       padx=8, pady=2).pack(side=tk.LEFT, padx=2)
+        rotate_frame.pack(side=tk.LEFT, padx=5, pady=4)
 
-          # Grid controls frame
-          grid_frame = tk.LabelFrame(toolbar, text="Grid", padx=8, pady=4, bg=toolbar_bg,
-                                     relief=tk.GROOVE, bd=1)
-          grid_frame.pack(side=tk.LEFT, padx=5, pady=4)
-          
-          tk.Checkbutton(grid_frame, text="Snap", variable=self.snap_to_grid,
-                        bg=toolbar_bg, activebackground=toolbar_bg).pack(side=tk.LEFT, padx=2)
-          tk.Label(grid_frame, text="Size:", bg=toolbar_bg).pack(side=tk.LEFT, padx=(5, 2))
-          tk.Spinbox(grid_frame, from_=10, to=2000, increment=10,
-                 width=6, textvariable=self.grid_size,
-                 command=self.on_grid_setting_changed).pack(side=tk.LEFT, padx=2)
-          tk.Checkbutton(grid_frame, text="Show", variable=self.show_grid, bg=toolbar_bg, activebackground=toolbar_bg).pack(side=tk.LEFT, padx=(5, 2))
-          
-          # Display options frame
-          display_frame = tk.LabelFrame(toolbar, text="Display", padx=8, pady=4, bg=toolbar_bg,
-                                        relief=tk.GROOVE, bd=1)
-          display_frame.pack(side=tk.LEFT, padx=5, pady=4)
-          
-          tk.Checkbutton(display_frame, text="Lamps", variable=self.show_lamps,
-                     command=lambda: self.rebuild_canvas(preserve_selection=True),
-                     bg=toolbar_bg, activebackground=toolbar_bg).pack(side=tk.LEFT, padx=2)
-          tk.Checkbutton(display_frame, text="Lock Floor/Ceiling", variable=self.lock_floor_ceiling,
-                     bg=toolbar_bg, activebackground=toolbar_bg).pack(side=tk.LEFT, padx=2)
-          
-          # Cubicle display size controls
-          tk.Label(display_frame, text="Cubicle W:", bg=toolbar_bg).pack(side=tk.LEFT, padx=(8, 2))
-          tk.Spinbox(display_frame, from_=50, to=1000, increment=10,
-                 width=50, justify="right", textvariable=self.cubicle_display_width).pack(side=tk.LEFT, padx=2)
-          tk.Label(display_frame, text="D:", bg=toolbar_bg).pack(side=tk.LEFT, padx=(2, 2))
-          tk.Spinbox(display_frame, from_=50, to=1000, increment=10,
-                 width=50, justify="right", textvariable=self.cubicle_display_depth).pack(side=tk.LEFT, padx=2)
-          
-          # Properties panel on the right with modern styling
-          self.props_frame = tk.Frame(self.root, width=280, relief=tk.FLAT, bd=1, bg="#fafafa")
-          self.props_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=0, pady=0)
-          self.props_frame.pack_propagate(False)
-          
-          props_header = tk.Frame(self.props_frame, bg="#0078d7", height=35)
-          props_header.pack(fill=tk.X)
-          props_title = tk.Label(props_header, text="Properties", font=("Segoe UI", 11, "bold"),
-                                bg="#0078d7", fg="white")
-          props_title.pack(pady=8)
-          
-          # Scrollable properties area
-          self.props_canvas = tk.Canvas(self.props_frame, highlightthickness=0, bg="#fafafa")
-          props_scrollbar = tk.Scrollbar(self.props_frame, orient="vertical", command=self.props_canvas.yview)
-          self.props_inner = tk.Frame(self.props_canvas, bg="#fafafa")
-          
-          self.props_canvas.configure(yscrollcommand=props_scrollbar.set)
-          props_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-          self.props_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-          
-          self.props_canvas_window = self.props_canvas.create_window((0, 0), window=self.props_inner, anchor="nw")
-          self.props_inner.bind("<Configure>", lambda e: self.props_canvas.configure(scrollregion=self.props_canvas.bbox("all")))
-          
-          # Status bar with modern styling
-          status_frame = tk.Frame(self.root, relief=tk.FLAT, bd=1, bg="#e1e1e1", height=28)
-          status_frame.pack(side=tk.BOTTOM, fill=tk.X)
-          self.status_label = tk.Label(status_frame, 
-                                       text="Pan: Right/Middle drag | Zoom: Wheel | Undo: Ctrl+Z | Redo: Ctrl+Y | Copy/Paste: Ctrl+C/V",
-                                       anchor=tk.W, bg="#e1e1e1", fg="#333333", font=("Segoe UI", 9))
-          self.status_label.pack(side=tk.LEFT, padx=8, pady=4)
+        for text, deg in [("⟳ 90°", 90), ("⟲ 90°", -90)]:
+            tk.Button(rotate_frame, text=text, command=lambda d=deg: self.rotate_selection(d),
+                      bg=toolbar_bg, activebackground=accent_color, relief=tk.RAISED, bd=1,
+                      padx=8, pady=2).pack(side=tk.LEFT, padx=2)
 
-          self.canvas = tk.Canvas(self.root, width=self.canvas_width,
-                          height=self.canvas_height, bg="#ffffff", highlightthickness=0)
-          self.canvas.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+        # Grid controls frame
+        grid_frame = tk.LabelFrame(toolbar_bottom, text="Grid", padx=8, pady=4, bg=toolbar_bg,
+                                   relief=tk.GROOVE, bd=1)
+        grid_frame.pack(side=tk.LEFT, padx=5, pady=4)
 
-          self.canvas.bind("<Button-1>", self.on_left_click)
-          self.canvas.bind("<B1-Motion>", self.on_drag)
-          self.canvas.bind("<ButtonRelease-1>", self.on_release)
-          self.canvas.bind("<ButtonPress-2>", self.on_pan_start)
-          self.canvas.bind("<B2-Motion>", self.on_pan_move)
-          self.canvas.bind("<ButtonRelease-2>", self.on_pan_end)
-          self.canvas.bind("<ButtonPress-3>", self.on_pan_start)
-          self.canvas.bind("<B3-Motion>", self.on_pan_move)
-          self.canvas.bind("<ButtonRelease-3>", self.on_pan_end)
-          self.canvas.bind("<MouseWheel>", self.on_mousewheel)
-          self.canvas.bind("<Button-4>", lambda e: self.on_mousewheel(e, 1))
-          self.canvas.bind("<Button-5>", lambda e: self.on_mousewheel(e, -1))
-          self.canvas.bind("<Configure>", self.on_canvas_configure)
+        tk.Checkbutton(
+            grid_frame,
+            text="Snap",
+            variable=self.snap_to_grid,
+            bg=toolbar_bg,
+            activebackground=toolbar_bg,
+            selectcolor=toolbar_bg,
+        ).pack(side=tk.LEFT, padx=2)
+        tk.Label(grid_frame, text="Size:", bg=toolbar_bg).pack(side=tk.LEFT, padx=(5, 2))
+        tk.Spinbox(grid_frame, from_=10, to=2000, increment=10,
+                   width=6, textvariable=self.grid_size,
+                   command=self.on_grid_setting_changed).pack(side=tk.LEFT, padx=2)
+        tk.Checkbutton(
+            grid_frame,
+            text="Show",
+            variable=self.show_grid,
+            bg=toolbar_bg,
+            activebackground=toolbar_bg,
+            selectcolor=toolbar_bg,
+        ).pack(side=tk.LEFT, padx=(5, 2))
 
-          self.root.bind("<Delete>", self.on_delete)
-          self.root.bind("<BackSpace>", self.on_delete)
-          self.root.bind("<Escape>", lambda e: self.cancel_transient_actions())
-          self.root.bind("<r>", lambda e: self.rotate_selection(90))
-          self.root.bind("<R>", lambda e: self.rotate_selection(-90))
-          self.root.bind("<Control-c>", self.on_copy)
-          self.root.bind("<Control-v>", self.on_paste)
-          self.root.bind("<Control-a>", self.on_select_all)
-          self.root.bind("<Control-z>", self.on_undo)
-          self.root.bind("<Control-y>", self.on_redo)
+        # Display options frame
+        display_frame = tk.LabelFrame(toolbar_bottom, text="Display", padx=8, pady=4, bg=toolbar_bg,
+                                      relief=tk.GROOVE, bd=1)
+        display_frame.pack(side=tk.LEFT, padx=5, pady=4)
 
-          menubar = tk.Menu(self.root)
-          filemenu = tk.Menu(menubar, tearoff=0)
-          filemenu.add_command(label="Open...", command=self.open_file)
-          filemenu.add_command(label="Reload", command=self.reload_file)
-          filemenu.add_command(label="Save As...", command=self.save_file_as)
-          menubar.add_cascade(label="File", menu=filemenu)
-          self.root.config(menu=menubar)
+        tk.Checkbutton(
+            display_frame,
+            text="Lamps",
+            variable=self.show_lamps,
+            command=lambda: self.rebuild_canvas(preserve_selection=True),
+            bg=toolbar_bg,
+            activebackground=toolbar_bg,
+            selectcolor=toolbar_bg,
+        ).pack(side=tk.LEFT, padx=2)
+        tk.Checkbutton(
+            display_frame,
+            text="Lock Floor/Ceiling",
+            variable=self.lock_floor_ceiling,
+            bg=toolbar_bg,
+            activebackground=toolbar_bg,
+            selectcolor=toolbar_bg,
+        ).pack(side=tk.LEFT, padx=2)
+
+        # Cubicle display size controls
+        tk.Label(display_frame, text="Cubicle W:", bg=toolbar_bg).pack(side=tk.LEFT, padx=(8, 2))
+        tk.Spinbox(display_frame, from_=50, to=1000, increment=10,
+                   width=7, justify="right", textvariable=self.cubicle_display_width).pack(side=tk.LEFT, padx=2)
+        tk.Label(display_frame, text="D:", bg=toolbar_bg).pack(side=tk.LEFT, padx=(2, 2))
+        tk.Spinbox(display_frame, from_=50, to=1000, increment=10,
+                   width=7, justify="right", textvariable=self.cubicle_display_depth).pack(side=tk.LEFT, padx=2)
+
+        # Properties panel on the right with modern styling
+        self.props_frame = tk.Frame(self.root, width=280, relief=tk.FLAT, bd=1, bg="#fafafa")
+        self.props_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=0, pady=0)
+        self.props_frame.pack_propagate(False)
+
+        props_header = tk.Frame(self.props_frame, bg="#0078d7", height=35)
+        props_header.pack(fill=tk.X)
+        props_title = tk.Label(props_header, text="Properties", font=("Segoe UI", 11, "bold"),
+                               bg="#0078d7", fg="white")
+        props_title.pack(pady=8)
+
+        # Scrollable properties area
+        self.props_canvas = tk.Canvas(self.props_frame, highlightthickness=0, bg="#fafafa")
+        props_scrollbar = tk.Scrollbar(self.props_frame, orient="vertical", command=self.props_canvas.yview)
+        self.props_inner = tk.Frame(self.props_canvas, bg="#fafafa")
+
+        self.props_canvas.configure(yscrollcommand=props_scrollbar.set)
+        props_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.props_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        self.props_canvas_window = self.props_canvas.create_window((0, 0), window=self.props_inner, anchor="nw")
+        self.props_inner.bind("<Configure>", lambda e: self.props_canvas.configure(scrollregion=self.props_canvas.bbox("all")))
+
+        # Status bar with modern styling
+        status_frame = tk.Frame(self.root, relief=tk.FLAT, bd=1, bg="#e1e1e1", height=28)
+        status_frame.pack(side=tk.BOTTOM, fill=tk.X)
+        self.status_label = tk.Label(
+            status_frame,
+            text="Pan: Right/Middle drag | Zoom: Wheel | Undo: Ctrl+Z | Redo: Ctrl+Y | Copy/Paste: Ctrl+C/V",
+            anchor=tk.W,
+            bg="#e1e1e1",
+            fg="#333333",
+            font=("Segoe UI", 9),
+        )
+        self.status_label.pack(side=tk.LEFT, padx=8, pady=4)
+
+        self.canvas = tk.Canvas(
+            self.root,
+            width=self.canvas_width,
+            height=self.canvas_height,
+            bg="#ffffff",
+            highlightthickness=0,
+        )
+        self.canvas.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+
+        self.canvas.bind("<Button-1>", self.on_left_click)
+        self.canvas.bind("<B1-Motion>", self.on_drag)
+        self.canvas.bind("<ButtonRelease-1>", self.on_release)
+        self.canvas.bind("<ButtonPress-2>", self.on_pan_start)
+        self.canvas.bind("<B2-Motion>", self.on_pan_move)
+        self.canvas.bind("<ButtonRelease-2>", self.on_pan_end)
+        self.canvas.bind("<ButtonPress-3>", self.on_pan_start)
+        self.canvas.bind("<B3-Motion>", self.on_pan_move)
+        self.canvas.bind("<ButtonRelease-3>", self.on_pan_end)
+        self.canvas.bind("<MouseWheel>", self.on_mousewheel)
+        self.canvas.bind("<Button-4>", lambda e: self.on_mousewheel(e, 1))
+        self.canvas.bind("<Button-5>", lambda e: self.on_mousewheel(e, -1))
+        self.canvas.bind("<Configure>", self.on_canvas_configure)
+
+        self.root.bind("<Delete>", self.on_delete)
+        self.root.bind("<BackSpace>", self.on_delete)
+        self.root.bind("<Escape>", lambda e: self.cancel_transient_actions())
+        self.root.bind("<r>", lambda e: self.rotate_selection(90))
+        self.root.bind("<R>", lambda e: self.rotate_selection(-90))
+        self.root.bind("<Control-c>", self.on_copy)
+        self.root.bind("<Control-v>", self.on_paste)
+        self.root.bind("<Control-a>", self.on_select_all)
+        self.root.bind("<Control-z>", self.on_undo)
+        self.root.bind("<Control-y>", self.on_redo)
+
+        menubar = tk.Menu(self.root)
+        filemenu = tk.Menu(menubar, tearoff=0)
+        filemenu.add_command(label="Open...", command=self.open_file)
+        filemenu.add_command(label="Reload", command=self.reload_file)
+        filemenu.add_command(label="Save As...", command=self.save_file_as)
+        menubar.add_cascade(label="File", menu=filemenu)
+        self.root.config(menu=menubar)
 
     # ---------- Coordinate transforms ----------
 
@@ -1343,7 +1390,16 @@ class FloorplanEditor:
             except (ValueError, tk.TclError):
                 pass
         
-        checkbutton = tk.Checkbutton(frame, text=label, variable=var, command=callback, font=("Segoe UI", 9))
+        checkbutton = tk.Checkbutton(
+            frame,
+            text=label,
+            variable=var,
+            command=callback,
+            font=("Segoe UI", 9),
+            bg="#fafafa",
+            activebackground="#fafafa",
+            selectcolor="#fafafa",
+        )
         checkbutton.pack(side=tk.LEFT)
     
     def _add_yaw_property(self, item):
