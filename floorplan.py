@@ -88,8 +88,7 @@ class FloorplanEditor:
                              ("Window", "add_window"), ("Spawn", "add_spawn"),
                              ("RoomTone", "add_roomtone"), ("Floor+Ceiling", "add_floor_ceiling")]:
               tk.Radiobutton(mode_frame, text=text, variable=self.mode,
-                         value=value, bg=toolbar_bg, activebackground=toolbar_bg,
-                         selectcolor=accent_color).pack(side=tk.LEFT, padx=2)
+                         value=value, bg=toolbar_bg, activebackground=toolbar_bg).pack(side=tk.LEFT, padx=2)
           
           # View controls frame
           view_frame = tk.LabelFrame(toolbar, text="View", padx=8, pady=4, bg=toolbar_bg,
@@ -118,15 +117,12 @@ class FloorplanEditor:
           grid_frame.pack(side=tk.LEFT, padx=5, pady=4)
           
           tk.Checkbutton(grid_frame, text="Snap", variable=self.snap_to_grid,
-                        bg=toolbar_bg, activebackground=toolbar_bg,
-                        selectcolor=accent_color).pack(side=tk.LEFT, padx=2)
+                        bg=toolbar_bg, activebackground=toolbar_bg).pack(side=tk.LEFT, padx=2)
           tk.Label(grid_frame, text="Size:", bg=toolbar_bg).pack(side=tk.LEFT, padx=(5, 2))
           tk.Spinbox(grid_frame, from_=10, to=2000, increment=10,
                  width=6, textvariable=self.grid_size,
                  command=self.on_grid_setting_changed).pack(side=tk.LEFT, padx=2)
-          tk.Checkbutton(grid_frame, text="Show", variable=self.show_grid,
-                        bg=toolbar_bg, activebackground=toolbar_bg,
-                        selectcolor=accent_color).pack(side=tk.LEFT, padx=(5, 2))
+          tk.Checkbutton(grid_frame, text="Show", variable=self.show_grid, bg=toolbar_bg, activebackground=toolbar_bg).pack(side=tk.LEFT, padx=(5, 2))
           
           # Display options frame
           display_frame = tk.LabelFrame(toolbar, text="Display", padx=8, pady=4, bg=toolbar_bg,
@@ -135,19 +131,17 @@ class FloorplanEditor:
           
           tk.Checkbutton(display_frame, text="Lamps", variable=self.show_lamps,
                      command=lambda: self.rebuild_canvas(preserve_selection=True),
-                     bg=toolbar_bg, activebackground=toolbar_bg,
-                     selectcolor=accent_color).pack(side=tk.LEFT, padx=2)
+                     bg=toolbar_bg, activebackground=toolbar_bg).pack(side=tk.LEFT, padx=2)
           tk.Checkbutton(display_frame, text="Lock Floor/Ceiling", variable=self.lock_floor_ceiling,
-                     bg=toolbar_bg, activebackground=toolbar_bg,
-                     selectcolor=accent_color).pack(side=tk.LEFT, padx=2)
+                     bg=toolbar_bg, activebackground=toolbar_bg).pack(side=tk.LEFT, padx=2)
           
           # Cubicle display size controls
           tk.Label(display_frame, text="Cubicle W:", bg=toolbar_bg).pack(side=tk.LEFT, padx=(8, 2))
           tk.Spinbox(display_frame, from_=50, to=1000, increment=10,
-                 width=5, textvariable=self.cubicle_display_width).pack(side=tk.LEFT, padx=2)
+                 width=50, justify="right", textvariable=self.cubicle_display_width).pack(side=tk.LEFT, padx=2)
           tk.Label(display_frame, text="D:", bg=toolbar_bg).pack(side=tk.LEFT, padx=(2, 2))
           tk.Spinbox(display_frame, from_=50, to=1000, increment=10,
-                 width=5, textvariable=self.cubicle_display_depth).pack(side=tk.LEFT, padx=2)
+                 width=50, justify="right", textvariable=self.cubicle_display_depth).pack(side=tk.LEFT, padx=2)
           
           # Properties panel on the right with modern styling
           self.props_frame = tk.Frame(self.root, width=280, relief=tk.FLAT, bd=1, bg="#fafafa")
@@ -1349,9 +1343,7 @@ class FloorplanEditor:
             except (ValueError, tk.TclError):
                 pass
         
-        checkbutton = tk.Checkbutton(frame, text=label, variable=var, command=callback,
-                                     bg="#fafafa", activebackground="#fafafa",
-                                     selectcolor="#0078d7", font=("Segoe UI", 9))
+        checkbutton = tk.Checkbutton(frame, text=label, variable=var, command=callback, font=("Segoe UI", 9))
         checkbutton.pack(side=tk.LEFT)
     
     def _add_yaw_property(self, item):
