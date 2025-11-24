@@ -20,6 +20,7 @@ class FloorplanEditor:
 
         self.objects = []      # list of { "data": dict, "canvas_ids": [int, ...] }
         self.id_to_obj = {}    # canvas_id -> object
+        self.anchor_meta = {}  # canvas_id -> anchor metadata for resizing/moving
         
         self.selected_objects = []  # list of selected objects for multi-select
         self.clipboard = []    # clipboard for copy/paste
@@ -60,6 +61,7 @@ class FloorplanEditor:
         self.drag_start_sx = 0
         self.drag_start_sy = 0
         self.drag_saved_state = False  # Track if state was saved for this drag
+        self.dragging_anchor = None    # metadata for active anchor drag
 
         self.mode = tk.StringVar(value="select")
         self.mode.trace_add("write", self.on_mode_changed)
@@ -662,7 +664,7 @@ class FloorplanEditor:
 
         self.canvas.tag_lower("grid")
 
-    def create_anchor_marker(self, wx, wy, color="#ff8844", size=5, state="hidden", tags=("anchor",)):
+    def create_anchor_marker(self, wx, wy, color="#ff8844", size=5, state="hidden", tags=("anchor",), meta=None):
         sx, sy = self.world_to_screen(wx, wy)
         cid = self.canvas.create_rectangle(sx - size, sy - size,
                                            sx + size, sy + size,
@@ -670,6 +672,8 @@ class FloorplanEditor:
                                            tags=tags)
         if state != "normal":
             self.canvas.itemconfigure(cid, state=state)
+        if meta is not None:
+            self.anchor_meta[cid] = dict(meta)
         return cid
 
     def cancel_transient_actions(self):
@@ -679,6 +683,7 @@ class FloorplanEditor:
             if hasattr(self, "canvas"):
                 self.canvas.configure(cursor="")
         self.dragging = False
+        self.dragging_anchor = None
 
     def rebuild_canvas(self, preserve_selection=False):
         self.clear_pending_line()
@@ -694,6 +699,7 @@ class FloorplanEditor:
         self.canvas_grid_ids.clear()
         self.objects.clear()
         self.id_to_obj.clear()
+        self.anchor_meta.clear()
 
         self.draw_background_grid()
 
@@ -728,11 +734,34 @@ class FloorplanEditor:
             cid = self.canvas.create_rectangle(x0, y0, x1, y1,
                                                outline="#cccccc", fill="#f9f9f9")
             canvas_ids.append(cid)
-            for wx, wy in ((x0_world, y0_world), (x1_world, y0_world),
-                           (x0_world, y1_world), (x1_world, y1_world)):
-                anchor_id = self.create_anchor_marker(wx, wy, color="#999999", size=4)
+            floor_corners = [
+                (x0_world, y0_world),
+                (x1_world, y0_world),
+                (x0_world, y1_world),
+                (x1_world, y1_world),
+            ]
+            for idx, (wx, wy) in enumerate(floor_corners):
+                anchor_id = self.create_anchor_marker(
+                    wx,
+                    wy,
+                    color="#999999",
+                    size=4,
+                    meta={"kind": "corner", "corner": idx},
+                )
                 anchors.append(anchor_id)
                 canvas_ids.append(anchor_id)
+
+            center_x = (x0_world + x1_world) / 2.0
+            center_y = (y0_world + y1_world) / 2.0
+            center_anchor = self.create_anchor_marker(
+                center_x,
+                center_y,
+                color="#777777",
+                size=5,
+                meta={"kind": "center", "center": (center_x, center_y)},
+            )
+            anchors.append(center_anchor)
+            canvas_ids.append(center_anchor)
 
         elif t in ("Wall", "Window", "Door"):
             s = item.get("Start", {})
@@ -811,10 +840,32 @@ class FloorplanEditor:
                                                         capstyle=tk.ROUND)
                     canvas_ids.append(tick_line)
 
-            anchor_start = self.create_anchor_marker(sx_world, sy_world, color="#ff8c00")
-            anchor_end = self.create_anchor_marker(ex_world, ey_world, color="#1f78d1")
+            anchor_start = self.create_anchor_marker(
+                sx_world,
+                sy_world,
+                color="#ff8c00",
+                meta={"kind": "endpoint", "endpoint": "start"},
+            )
+            anchor_end = self.create_anchor_marker(
+                ex_world,
+                ey_world,
+                color="#1f78d1",
+                meta={"kind": "endpoint", "endpoint": "end"},
+            )
             anchors.extend([anchor_start, anchor_end])
             canvas_ids.extend([anchor_start, anchor_end])
+
+            center_world_x = (sx_world + ex_world) / 2.0
+            center_world_y = (sy_world + ey_world) / 2.0
+            center_anchor = self.create_anchor_marker(
+                center_world_x,
+                center_world_y,
+                color="#777777",
+                size=5,
+                meta={"kind": "center", "center": (center_world_x, center_world_y)},
+            )
+            anchors.append(center_anchor)
+            canvas_ids.append(center_anchor)
 
         elif t == "Cubicle":
             start = item.get("Start", {})
@@ -873,9 +924,26 @@ class FloorplanEditor:
             ]
             for idx, (wx, wy) in enumerate(corners):
                 color = "#ff8c00" if idx == 0 else ("#1f78d1" if idx == 3 else "#666666")
-                anchor_id = self.create_anchor_marker(wx, wy, color=color)
+                anchor_id = self.create_anchor_marker(
+                    wx,
+                    wy,
+                    color=color,
+                    meta={"kind": "corner", "corner": idx},
+                )
                 anchors.append(anchor_id)
                 canvas_ids.append(anchor_id)
+
+            center_world_x = (x0_world + x1_world) / 2.0
+            center_world_y = (y0_world + y1_world) / 2.0
+            center_anchor = self.create_anchor_marker(
+                center_world_x,
+                center_world_y,
+                color="#777777",
+                size=5,
+                meta={"kind": "center", "center": (center_world_x, center_world_y)},
+            )
+            anchors.append(center_anchor)
+            canvas_ids.append(center_anchor)
             
             # Add dimension text label showing display dimensions
             center_x = (x0_world + x1_world) / 2
@@ -904,11 +972,35 @@ class FloorplanEditor:
                 canvas_ids.append(cid)
                 
                 # Add corner anchors
-                for wx, wy in ((x0_world, y0_world), (x1_world, y0_world),
-                               (x0_world, y1_world), (x1_world, y1_world)):
-                    anchor_id = self.create_anchor_marker(wx, wy, color="#999999", size=4)
+                for idx, (wx, wy) in enumerate(
+                    [
+                        (x0_world, y0_world),
+                        (x1_world, y0_world),
+                        (x0_world, y1_world),
+                        (x1_world, y1_world),
+                    ]
+                ):
+                    anchor_id = self.create_anchor_marker(
+                        wx,
+                        wy,
+                        color="#999999",
+                        size=4,
+                        meta={"kind": "corner", "corner": idx},
+                    )
                     anchors.append(anchor_id)
                     canvas_ids.append(anchor_id)
+
+                center_world_x = (x0_world + x1_world) / 2.0
+                center_world_y = (y0_world + y1_world) / 2.0
+                center_anchor = self.create_anchor_marker(
+                    center_world_x,
+                    center_world_y,
+                    color="#777777",
+                    size=5,
+                    meta={"kind": "center", "center": (center_world_x, center_world_y)},
+                )
+                anchors.append(center_anchor)
+                canvas_ids.append(center_anchor)
             
             elif t == "CeilingLight":
                 s = item.get("Start", {})
@@ -1014,10 +1106,32 @@ class FloorplanEditor:
                                 canvas_ids.append(lamp_id)
                 
                 # Add corner anchors
-                anchor_start = self.create_anchor_marker(x0_world, y0_world, color="#ffa500")
-                anchor_end = self.create_anchor_marker(x1_world, y1_world, color="#ffa500")
+                anchor_start = self.create_anchor_marker(
+                    x0_world,
+                    y0_world,
+                    color="#ffa500",
+                    meta={"kind": "endpoint", "endpoint": "start"},
+                )
+                anchor_end = self.create_anchor_marker(
+                    x1_world,
+                    y1_world,
+                    color="#ffa500",
+                    meta={"kind": "endpoint", "endpoint": "end"},
+                )
                 anchors.extend([anchor_start, anchor_end])
                 canvas_ids.extend([anchor_start, anchor_end])
+
+                center_world_x = (x0_world + x1_world) / 2.0
+                center_world_y = (y0_world + y1_world) / 2.0
+                center_anchor = self.create_anchor_marker(
+                    center_world_x,
+                    center_world_y,
+                    color="#777777",
+                    size=5,
+                    meta={"kind": "center", "center": (center_world_x, center_world_y)},
+                )
+                anchors.append(center_anchor)
+                canvas_ids.append(center_anchor)
         
         elif t == "SpawnPoint":
             # Draw spawn point as a circle with direction indicator
@@ -1046,7 +1160,12 @@ class FloorplanEditor:
             canvas_ids.append(arrow_line)
             
             # Add anchor
-            anchor_id = self.create_anchor_marker(x_world, y_world, color="#00ff00")
+            anchor_id = self.create_anchor_marker(
+                x_world,
+                y_world,
+                color="#00ff00",
+                meta={"kind": "point"},
+            )
             anchors.append(anchor_id)
             canvas_ids.append(anchor_id)
         
@@ -1100,7 +1219,12 @@ class FloorplanEditor:
                 canvas_ids.append(cone)
             
             # Add anchor
-            anchor_id = self.create_anchor_marker(x_world, y_world, color="#ff6b6b")
+            anchor_id = self.create_anchor_marker(
+                x_world,
+                y_world,
+                color="#ff6b6b",
+                meta={"kind": "point"},
+            )
             anchors.append(anchor_id)
             canvas_ids.append(anchor_id)
 
@@ -1599,6 +1723,212 @@ class FloorplanEditor:
                     return obj
         return None
 
+    def find_anchor_at(self, sx, sy):
+        items = self.canvas.find_overlapping(sx, sy, sx, sy)
+        for cid in reversed(items):
+            if "anchor" not in self.canvas.gettags(cid):
+                continue
+            meta = self.anchor_meta.get(cid)
+            if meta is None:
+                continue
+            obj = self.id_to_obj.get(cid)
+            if obj is None:
+                continue
+            t = obj["data"].get("Type")
+            if self.lock_floor_ceiling.get() and t in ("Floor", "Ceiling"):
+                continue
+            return obj, meta
+        return None, None
+
+    def redraw_item(self, item):
+        old_obj = None
+        old_index = None
+        for idx, obj in enumerate(self.objects):
+            if obj["data"] is item:
+                old_obj = obj
+                old_index = idx
+                break
+        if old_obj is None or old_index is None:
+            return
+
+        selected_indices = [i for i, sobj in enumerate(self.selected_objects) if sobj is old_obj]
+        was_primary = self.selected_obj is old_obj
+
+        self.objects.pop(old_index)
+        for cid in old_obj["canvas_ids"]:
+            self.canvas.delete(cid)
+            self.id_to_obj.pop(cid, None)
+            self.anchor_meta.pop(cid, None)
+
+        new_obj = self.draw_item(item)
+        if new_obj is None:
+            return
+
+        # Maintain original ordering
+        self.objects.pop()
+        self.objects.insert(old_index, new_obj)
+
+        if was_primary:
+            self.selected_obj = new_obj
+        for idx in selected_indices:
+            self.selected_objects[idx] = new_obj
+
+        if was_primary or selected_indices:
+            self.style_object(new_obj, selected=True)
+
+    def _get_rectangle_corners(self, item):
+        s = item.get("Start", {})
+        e = item.get("End", {})
+        x0 = float(s.get("X", 0.0))
+        y0 = float(s.get("Y", 0.0))
+        x1 = float(e.get("X", 0.0))
+        y1 = float(e.get("Y", 0.0))
+        return [(x0, y0), (x1, y0), (x0, y1), (x1, y1)]
+
+    def _get_cubicle_corners(self, item):
+        start = item.get("Start", {})
+        yaw = self.normalize_yaw(float(item.get("Yaw", 0.0)))
+        display_width = float(self.cubicle_display_width.get())
+        display_depth = float(self.cubicle_display_depth.get())
+        dim = {"X": display_width, "Y": display_depth}
+        vis_yaw = self.normalize_yaw(yaw + 90.0)
+        w_world, h_world = self.get_axis_size(dim, vis_yaw)
+        x0 = float(start.get("X", 0.0))
+        y0 = float(start.get("Y", 0.0))
+        x1 = x0 + w_world
+        y1 = y0 + h_world
+        return [(x0, y0), (x1, y0), (x0, y1), (x1, y1)]
+
+    def handle_anchor_drag(self, event):
+        if not self.dragging_anchor:
+            return
+
+        item = self.dragging_anchor.get("item")
+        meta = self.dragging_anchor.get("meta", {})
+        if item is None:
+            return
+
+        wx, wy = self.screen_to_world(event.x, event.y)
+        wx, wy = self.snap_point(wx, wy)
+
+        item_type = item.get("Type")
+        kind = meta.get("kind")
+        changed = False
+
+        if kind == "endpoint":
+            endpoint = meta.get("endpoint")
+            target = item.get("Start") if endpoint == "start" else item.get("End")
+            if target is not None:
+                old_x = float(target.get("X", 0.0))
+                old_y = float(target.get("Y", 0.0))
+                if not math.isclose(old_x, wx, abs_tol=1e-6) or not math.isclose(old_y, wy, abs_tol=1e-6):
+                    target["X"] = wx
+                    target["Y"] = wy
+                    changed = True
+
+        elif kind == "corner":
+            corner_index = meta.get("corner")
+            if corner_index is None:
+                return
+
+            if item_type in ("Floor", "Ceiling", "CeilingLight"):
+                start = item.setdefault("Start", {})
+                end = item.setdefault("End", {})
+
+                target_x = start if corner_index in (0, 2) else end
+                target_y = start if corner_index in (0, 1) else end
+
+                old_x = float(target_x.get("X", 0.0))
+                old_y = float(target_y.get("Y", 0.0))
+
+                if not math.isclose(old_x, wx, abs_tol=1e-6):
+                    target_x["X"] = wx
+                    changed = True
+                if not math.isclose(old_y, wy, abs_tol=1e-6):
+                    target_y["Y"] = wy
+                    changed = True
+
+            elif item_type == "Cubicle":
+                corners = self._get_cubicle_corners(item)
+                if 0 <= corner_index < len(corners):
+                    old_corner = corners[corner_index]
+                    dx = wx - old_corner[0]
+                    dy = wy - old_corner[1]
+                    if abs(dx) > 1e-6 or abs(dy) > 1e-6:
+                        start = item.setdefault("Start", {})
+                        start["X"] = float(start.get("X", 0.0)) + dx
+                        start["Y"] = float(start.get("Y", 0.0)) + dy
+                        changed = True
+
+        elif kind == "point":
+            start = item.setdefault("Start", {})
+            old_x = float(start.get("X", 0.0))
+            old_y = float(start.get("Y", 0.0))
+            if not math.isclose(old_x, wx, abs_tol=1e-6) or not math.isclose(old_y, wy, abs_tol=1e-6):
+                start["X"] = wx
+                start["Y"] = wy
+                changed = True
+
+        elif kind == "center":
+            if item_type in ("Wall", "Door", "Window"):
+                start = item.setdefault("Start", {})
+                end = item.setdefault("End", {})
+                sx = float(start.get("X", 0.0))
+                sy = float(start.get("Y", 0.0))
+                ex = float(end.get("X", 0.0))
+                ey = float(end.get("Y", 0.0))
+                cx = (sx + ex) / 2.0
+                cy = (sy + ey) / 2.0
+                dx = wx - cx
+                dy = wy - cy
+                if abs(dx) > 1e-6 or abs(dy) > 1e-6:
+                    start["X"] = sx + dx
+                    start["Y"] = sy + dy
+                    end["X"] = ex + dx
+                    end["Y"] = ey + dy
+                    changed = True
+
+            elif item_type in ("Floor", "Ceiling", "CeilingLight"):
+                start = item.setdefault("Start", {})
+                end = item.setdefault("End", {})
+                sx = float(start.get("X", 0.0))
+                sy = float(start.get("Y", 0.0))
+                ex = float(end.get("X", 0.0))
+                ey = float(end.get("Y", 0.0))
+                cx = (sx + ex) / 2.0
+                cy = (sy + ey) / 2.0
+                dx = wx - cx
+                dy = wy - cy
+                if abs(dx) > 1e-6 or abs(dy) > 1e-6:
+                    start["X"] = sx + dx
+                    start["Y"] = sy + dy
+                    end["X"] = ex + dx
+                    end["Y"] = ey + dy
+                    changed = True
+
+            elif item_type == "Cubicle":
+                start = item.setdefault("Start", {})
+                display_width = float(self.cubicle_display_width.get())
+                display_depth = float(self.cubicle_display_depth.get())
+                yaw = self.normalize_yaw(float(item.get("Yaw", 0.0)))
+                dim = {"X": display_width, "Y": display_depth}
+                vis_yaw = self.normalize_yaw(yaw + 90.0)
+                width_world, height_world = self.get_axis_size(dim, vis_yaw)
+                sx = float(start.get("X", 0.0))
+                sy = float(start.get("Y", 0.0))
+                cx = sx + width_world / 2.0
+                cy = sy + height_world / 2.0
+                dx = wx - cx
+                dy = wy - cy
+                if abs(dx) > 1e-6 or abs(dy) > 1e-6:
+                    start["X"] = sx + dx
+                    start["Y"] = sy + dy
+                    changed = True
+
+        if changed:
+            self.redraw_item(item)
+            self.update_properties_panel()
+
     def on_left_click(self, event):
         mode = self.mode.get()
         wx, wy = self.screen_to_world(event.x, event.y)
@@ -1607,8 +1937,19 @@ class FloorplanEditor:
             self.clear_pending_line()
 
         if mode == "select":
-            obj = self.find_object_at(event.x, event.y)
             ctrl_pressed = (event.state & 0x4) != 0  # Check if Ctrl is pressed
+
+            anchor_obj, anchor_meta = self.find_anchor_at(event.x, event.y)
+            if anchor_obj is not None and anchor_meta is not None:
+                self.set_selected(anchor_obj, multi=False)
+                self.dragging_anchor = {"item": anchor_obj["data"], "meta": anchor_meta}
+                self.drag_saved_state = False
+                self.dragging = True
+                self.drag_start_sx = event.x
+                self.drag_start_sy = event.y
+                return
+
+            obj = self.find_object_at(event.x, event.y)
             self.set_selected(obj, multi=ctrl_pressed)
             if obj is not None:
                 self.dragging = True
@@ -1629,6 +1970,13 @@ class FloorplanEditor:
     def on_drag(self, event):
         if self.pending_line and self.pending_line.get("preview_id") is not None:
             self.update_pending_line(event)
+            return
+
+        if self.dragging_anchor is not None:
+            if not self.drag_saved_state:
+                self.save_state()
+                self.drag_saved_state = True
+            self.handle_anchor_drag(event)
             return
 
         if not self.dragging or not self.selected_objects:
@@ -1676,6 +2024,13 @@ class FloorplanEditor:
             self.dragging = False
             return
 
+        if self.dragging_anchor is not None:
+            self.dragging_anchor = None
+            self.dragging = False
+            self.drag_saved_state = False
+            self.update_properties_panel()
+            return
+
         if self.dragging and self.selected_objects:
             any_snapped = False
             for obj in self.selected_objects:
@@ -1693,12 +2048,15 @@ class FloorplanEditor:
         
         # Save state for undo
         self.save_state()
+
+        self.dragging_anchor = None
         
         # Delete all selected objects
         for obj in self.selected_objects:
             for cid in obj["canvas_ids"]:
                 self.canvas.delete(cid)
                 self.id_to_obj.pop(cid, None)
+                self.anchor_meta.pop(cid, None)
             try:
                 self.data.remove(obj["data"])
             except ValueError:
