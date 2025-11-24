@@ -809,7 +809,6 @@ class FloorplanEditor:
             
             # Create arrow pointing in the direction of yaw
             # Yaw 0 = right, 90 = down, 180 = left, 270 = up (in screen coords)
-            import math
             angle_rad = math.radians(-yaw_normalized)  # Negative for screen coords
             arrow_len = indicator_size * 2
             
@@ -890,7 +889,6 @@ class FloorplanEditor:
                 
                 # Draw lamp positions if enabled - now in lines along rotated axis
                 if self.show_lamps.get():
-                    import math
                     
                     space_along_line = float(spacing.get("X", 300.0))  # Spacing between lights on a line
                     space_between_lines = float(spacing.get("Y", 300.0))  # Spacing between parallel lines
