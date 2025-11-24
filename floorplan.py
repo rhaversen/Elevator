@@ -1406,6 +1406,47 @@ class FloorplanEditor:
                  relief=tk.RAISED, bd=1, padx=10, pady=3,
                  font=("Segoe UI", 9)).pack(side=tk.LEFT, padx=2)
 
+    def _apply_canvas_colors(self, cid, *, fill=None, outline=None):
+        options = {}
+        if fill is not None:
+            options["fill"] = fill
+        if outline is not None:
+            options["outline"] = outline
+        if not options:
+            return
+
+        try:
+            self.canvas.itemconfig(cid, **options)
+            return
+        except tk.TclError:
+            pass
+
+        item_type = self.canvas.type(cid)
+
+        if item_type == "line":
+            if fill is not None:
+                try:
+                    self.canvas.itemconfig(cid, fill=fill)
+                except tk.TclError:
+                    pass
+            return
+
+        fallback = {}
+        if fill is not None:
+            fallback["fill"] = fill
+        if fallback:
+            try:
+                self.canvas.itemconfig(cid, **fallback)
+                return
+            except tk.TclError:
+                pass
+
+        if outline is not None:
+            try:
+                self.canvas.itemconfig(cid, outline=outline)
+            except tk.TclError:
+                pass
+
     def style_object(self, obj, selected=False):
         item = obj["data"]
         t = item.get("Type")
@@ -1423,40 +1464,28 @@ class FloorplanEditor:
                 else:
                     base_color = "#1d6bd6"
                 color = "red" if selected else base_color
-                self.canvas.itemconfig(cid, fill=color, outline=color)
+                self._apply_canvas_colors(cid, fill=color, outline=color)
             elif t == "Cubicle":
                 outline = "red" if selected else "black"
                 fill = "#ffeecc" if selected else "#dddddd"
-                self.canvas.itemconfig(cid, outline=outline, fill=fill)
+                self._apply_canvas_colors(cid, fill=fill, outline=outline)
             elif t == "Floor":
                 outline = "#ffaaaa" if selected else "#cccccc"
-                self.canvas.itemconfig(cid, outline=outline)
+                self._apply_canvas_colors(cid, outline=outline)
             elif t == "Ceiling":
                 outline = "red" if selected else "#cccccc"
-                try:
-                    self.canvas.itemconfig(cid, outline=outline)
-                except tk.TclError:
-                    pass
+                self._apply_canvas_colors(cid, outline=outline)
             elif t == "SpawnPoint":
                 outline = "red" if selected else "#008800"
                 fill = "#ffff00" if selected else "#00ff00"
-                try:
-                    self.canvas.itemconfig(cid, outline=outline, fill=fill)
-                except tk.TclError:
-                    pass  # Some canvas items might not support these config options
+                self._apply_canvas_colors(cid, fill=fill, outline=outline)
             elif t == "CeilingLight":
                 outline = "red" if selected else "#ffa500"
-                try:
-                    self.canvas.itemconfig(cid, outline=outline)
-                except tk.TclError:
-                    pass
+                self._apply_canvas_colors(cid, outline=outline)
             elif t == "RoomTone":
                 outline = "red" if selected else "#c92a2a"
                 fill = "#ffcccc" if selected else "#ff6b6b"
-                try:
-                    self.canvas.itemconfig(cid, outline=outline, fill=fill)
-                except tk.TclError:
-                    pass
+                self._apply_canvas_colors(cid, fill=fill, outline=outline)
 
     def can_rotate(self, item):
         return "Yaw" in item
