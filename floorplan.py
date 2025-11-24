@@ -974,7 +974,6 @@ class FloorplanEditor:
             # Get properties
             is_omni = item.get("bOmnidirectional", True)
             attenuation_radius = float(item.get("AttenuationRadius", 1000.0))
-            source_radius = float(item.get("SourceRadius", 100.0))
             
             # Draw attenuation radius circle (light blue, dashed)
             if attenuation_radius > 0:
@@ -984,14 +983,6 @@ class FloorplanEditor:
                 ar_circle = self.canvas.create_oval(ar_x0, ar_y0, ar_x1, ar_y1,
                                                     outline="#87ceeb", dash=(4, 4), width=1)
                 canvas_ids.append(ar_circle)
-            
-            # Draw source radius circle (darker blue)
-            if source_radius > 0:
-                sr_x0, sr_y0 = self.world_to_screen(x_world - source_radius, y_world - source_radius)
-                sr_x1, sr_y1 = self.world_to_screen(x_world + source_radius, y_world + source_radius)
-                sr_circle = self.canvas.create_oval(sr_x0, sr_y0, sr_x1, sr_y1,
-                                                    outline="#4169e1", dash=(2, 2), width=2)
-                canvas_ids.append(sr_circle)
             
             # Draw speaker icon at center
             speaker_size = 10
@@ -1142,8 +1133,6 @@ class FloorplanEditor:
                 self._add_bool_property("Omnidirectional", item, "bOmnidirectional")
             if "AttenuationRadius" in item:
                 self._add_float_property("AttenuationRadius", item, "AttenuationRadius")
-            if "SourceRadius" in item:
-                self._add_float_property("SourceRadius", item, "SourceRadius")
             if "VolumeMultiplier" in item:
                 self._add_float_property("VolumeMultiplier", item, "VolumeMultiplier")
     
@@ -1636,7 +1625,6 @@ class FloorplanEditor:
             "AudioId": "NewRoomTone",
             "bOmnidirectional": True,
             "AttenuationRadius": 1000.0,
-            "SourceRadius": 100.0,
             "VolumeMultiplier": 1.0
         }
         self.data.append(item)
