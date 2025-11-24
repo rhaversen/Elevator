@@ -4,7 +4,14 @@
 
 RoomTone objects represent audio sources in the floorplan, such as ambient sounds, room tones, or environmental audio. They can be omnidirectional (spreading sound in all directions) or directional (projecting sound in a specific direction).
 
-## Changes Made (Commit 76239b0)
+## Changes Made
+
+### Initial Implementation (Commit 76239b0)
+- Added RoomTone support with visualization and property editing
+
+### Update (Commit 90586d1)
+- Removed SourceRadius property (no longer used in updated JSON structure)
+- Simplified visualization to only show AttenuationRadius
 
 ### Visual Representation
 
@@ -12,16 +19,14 @@ RoomTone objects represent audio sources in the floorplan, such as ambient sound
 - Red filled circle at center position (10px radius)
 - Three curved arc lines radiating outward (sound waves)
 - Light blue dashed circle showing attenuation radius
-- Darker blue dashed circle showing source radius
 
 **Directional RoomTone:**
 - Red cone shape pointing in direction
-- Same radius circles as omnidirectional
+- Light blue dashed circle showing attenuation radius
 - Cone indicates directionality
 
 **Radius Visualization:**
 - **Attenuation Radius** (light blue, dashed): Maximum distance where audio can be heard with falloff
-- **Source Radius** (darker blue, dashed): Core area where audio is at full volume
 
 ### Properties
 
@@ -32,7 +37,6 @@ RoomTone objects represent audio sources in the floorplan, such as ambient sound
 | AudioId | String | Identifier for the audio asset | "NewRoomTone" |
 | bOmnidirectional | Boolean | Whether sound radiates in all directions | true |
 | AttenuationRadius | Float | Maximum hearing distance with falloff | 1000.0 |
-| SourceRadius | Float | Core audio source size | 100.0 |
 | VolumeMultiplier | Float | Volume scaling factor | 1.0 |
 
 ### UI Integration
@@ -45,7 +49,7 @@ RoomTone objects represent audio sources in the floorplan, such as ambient sound
 - All properties editable in real-time
 - String field for AudioId
 - Boolean checkbox for bOmnidirectional
-- Spinbox controls for numeric values
+- Spinbox controls for numeric values (HeightOffset, AttenuationRadius, VolumeMultiplier)
 - 300ms debounce on all changes
 
 **Selection & Manipulation:**
@@ -63,15 +67,10 @@ elif t == "RoomTone":
     # Get properties
     is_omni = item.get("bOmnidirectional", True)
     attenuation_radius = float(item.get("AttenuationRadius", 1000.0))
-    source_radius = float(item.get("SourceRadius", 100.0))
     
     # Draw attenuation radius circle (light blue, dashed)
     if attenuation_radius > 0:
         ar_circle = self.canvas.create_oval(...)
-    
-    # Draw source radius circle (darker blue)
-    if source_radius > 0:
-        sr_circle = self.canvas.create_oval(...)
     
     # Draw speaker icon
     if is_omni:
@@ -93,7 +92,10 @@ elif item_type == "RoomTone":
         self._add_string_property("AudioId", item, "AudioId")
     if "bOmnidirectional" in item:
         self._add_bool_property("Omnidirectional", item, "bOmnidirectional")
-    # ... etc
+    if "AttenuationRadius" in item:
+        self._add_float_property("AttenuationRadius", item, "AttenuationRadius")
+    if "VolumeMultiplier" in item:
+        self._add_float_property("VolumeMultiplier", item, "VolumeMultiplier")
 ```
 
 #### Adding New RoomTone
@@ -108,7 +110,6 @@ def add_roomtone_at(self, wx, wy):
         "AudioId": "NewRoomTone",
         "bOmnidirectional": True,
         "AttenuationRadius": 1000.0,
-        "SourceRadius": 100.0,
         "VolumeMultiplier": 1.0
     }
     self.data.append(item)
@@ -126,8 +127,7 @@ def add_roomtone_at(self, wx, wy):
   "HeightOffset": 150.0,
   "AudioId": "Office",
   "bOmnidirectional": true,
-  "AttenuationRadius": 2000.0,
-  "SourceRadius": 500.0,
+  "AttenuationRadius": 1500.0,
   "VolumeMultiplier": 1.0
 }
 ```
@@ -135,27 +135,25 @@ def add_roomtone_at(self, wx, wy):
 **Omnidirectional Example:**
 - Ambient office noise
 - Radiates in all directions
-- Large attenuation radius (2000 units)
-- Moderate source radius (500 units)
+- Large attenuation radius (1500 units)
 
 ```json
 {
   "Type": "RoomTone",
-  "Start": { "X": -2050.0, "Y": 500.0 },
-  "HeightOffset": 150.0,
+  "Start": { "X": -2050.0, "Y": 200.0 },
+  "HeightOffset": 300.0,
   "AudioId": "Annex",
   "bOmnidirectional": false,
-  "AttenuationRadius": 500.0,
-  "SourceRadius": 100.0,
-  "VolumeMultiplier": 1.0
+  "AttenuationRadius": 250.0,
+  "VolumeMultiplier": 0.8
 }
 ```
 
 **Directional Example:**
 - Localized annex sound
 - Directional (cone shape in visualization)
-- Smaller attenuation radius (500 units)
-- Smaller source radius (100 units)
+- Smaller attenuation radius (250 units)
+- Reduced volume (0.8)
 
 ### Visual Legend
 
@@ -163,14 +161,15 @@ def add_roomtone_at(self, wx, wy):
 Omnidirectional:              Directional:
      ))) (sound waves)             ▶ (cone)
     (●●●) speaker                 ▶▶ direction
-   ┄┄┄┄┄┄┄ source radius        ┄┄┄┄┄┄┄
   ┈┈┈┈┈┈┈┈┈ attenuation        ┈┈┈┈┈┈┈┈┈
 ```
 
 ### Helper Methods Added
 
+**New Helper Methods Added:**
+
 **_add_string_property(label, item, key)**
-- Text entry field with debounced updates
+- Text entry field with 300ms debounced updates
 - Used for AudioId
 
 **_add_bool_property(label, item, key)**
@@ -189,7 +188,6 @@ Both methods:
 - Speaker icon: #ff6b6b (red)
 - Outline: #c92a2a (dark red)
 - Attenuation radius: #87ceeb (light blue)
-- Source radius: #4169e1 (darker blue)
 
 **Selected State:**
 - Speaker icon: #ffcccc (light red)
@@ -217,18 +215,18 @@ All existing tests pass:
 
 1. **Ambient Sound Placement**
    - Place omnidirectional RoomTone for general ambience
-   - Adjust attenuation radius to control falloff
+   - Adjust attenuation radius to control falloff distance
    - Set AudioId to reference audio asset
 
 2. **Localized Audio**
    - Use directional RoomTone for speakers, vents, etc.
-   - Adjust source radius for core audio area
+   - Set appropriate attenuation radius
    - Use VolumeMultiplier to balance volumes
 
 3. **Audio Zones**
    - Multiple RoomTones can overlap
    - Different AudioIds for different areas
-   - Visual radius helps plan coverage
+   - Visual attenuation radius helps plan coverage
 
 ### Future Enhancements
 
