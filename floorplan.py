@@ -42,6 +42,7 @@ class FloorplanEditor:
         self.snap_to_grid = tk.BooleanVar(value=True)
         self.grid_size = tk.DoubleVar(value=100.0)
         self.show_lamps = tk.BooleanVar(value=True)  # for CeilingLight visualization
+        self.lock_floor_ceiling = tk.BooleanVar(value=True)  # Lock Floor/Ceiling from accidental editing
         self.grid_size.trace_add("write", self.on_grid_setting_changed)
         self.show_grid.trace_add("write", self.on_grid_setting_changed)
         self.canvas_grid_ids = []
@@ -80,7 +81,7 @@ class FloorplanEditor:
           for text, value in [("Select", "select"), ("Cubicle", "add_cubicle"), 
                              ("Wall", "add_wall"), ("Door", "add_door"), 
                              ("Window", "add_window"), ("Spawn", "add_spawn"),
-                             ("RoomTone", "add_roomtone")]:
+                             ("RoomTone", "add_roomtone"), ("Floor+Ceiling", "add_floor_ceiling")]:
               tk.Radiobutton(mode_frame, text=text, variable=self.mode,
                          value=value, bg=toolbar_bg, activebackground=toolbar_bg,
                          selectcolor=accent_color).pack(side=tk.LEFT, padx=2)
@@ -129,6 +130,9 @@ class FloorplanEditor:
           
           tk.Checkbutton(display_frame, text="Lamps", variable=self.show_lamps,
                      command=lambda: self.rebuild_canvas(preserve_selection=True),
+                     bg=toolbar_bg, activebackground=toolbar_bg,
+                     selectcolor=accent_color).pack(side=tk.LEFT, padx=2)
+          tk.Checkbutton(display_frame, text="Lock Floor/Ceiling", variable=self.lock_floor_ceiling,
                      bg=toolbar_bg, activebackground=toolbar_bg,
                      selectcolor=accent_color).pack(side=tk.LEFT, padx=2)
           
@@ -821,8 +825,30 @@ class FloorplanEditor:
             canvas_ids.append(text_id)
 
         elif t in ("Ceiling", "CeilingLight"):
-            # Visualize CeilingLight with optional lamp markers
-            if t == "CeilingLight":
+            # Visualize Ceiling or CeilingLight
+            if t == "Ceiling":
+                # Draw simple ceiling as a dashed rectangle
+                s = item.get("Start", {})
+                e = item.get("End", {})
+                x0_world = float(s.get("X", 0.0))
+                y0_world = float(s.get("Y", 0.0))
+                x1_world = float(e.get("X", 0.0))
+                y1_world = float(e.get("Y", 0.0))
+                sx0, sy0 = self.world_to_screen(x0_world, y0_world)
+                sx1, sy1 = self.world_to_screen(x1_world, y1_world)
+                cid = self.canvas.create_rectangle(sx0, sy0, sx1, sy1,
+                                                   outline="#cccccc", dash=(6, 3),
+                                                   fill="", width=1)
+                canvas_ids.append(cid)
+                
+                # Add corner anchors
+                for wx, wy in ((x0_world, y0_world), (x1_world, y0_world),
+                               (x0_world, y1_world), (x1_world, y1_world)):
+                    anchor_id = self.create_anchor_marker(wx, wy, color="#999999", size=4)
+                    anchors.append(anchor_id)
+                    canvas_ids.append(anchor_id)
+            
+            elif t == "CeilingLight":
                 s = item.get("Start", {})
                 e = item.get("End", {})
                 spacing = item.get("Spacing", {})
@@ -1388,6 +1414,12 @@ class FloorplanEditor:
             elif t == "Floor":
                 outline = "#ffaaaa" if selected else "#cccccc"
                 self.canvas.itemconfig(cid, outline=outline)
+            elif t == "Ceiling":
+                outline = "red" if selected else "#cccccc"
+                try:
+                    self.canvas.itemconfig(cid, outline=outline)
+                except tk.TclError:
+                    pass
             elif t == "SpawnPoint":
                 outline = "red" if selected else "#008800"
                 fill = "#ffff00" if selected else "#00ff00"
@@ -1461,7 +1493,10 @@ class FloorplanEditor:
             obj = self.id_to_obj.get(cid)
             if obj is not None:
                 t = obj["data"].get("Type")
-                if t in ("Wall", "Door", "Window", "Cubicle", "Floor", "SpawnPoint", "CeilingLight", "RoomTone"):
+                # Skip Floor/Ceiling if locked
+                if self.lock_floor_ceiling.get() and t in ("Floor", "Ceiling"):
+                    continue
+                if t in ("Wall", "Door", "Window", "Cubicle", "Floor", "Ceiling", "SpawnPoint", "CeilingLight", "RoomTone"):
                     return obj
         return None
 
@@ -1469,7 +1504,7 @@ class FloorplanEditor:
         mode = self.mode.get()
         wx, wy = self.screen_to_world(event.x, event.y)
 
-        if mode not in ("add_wall", "add_door", "add_window"):
+        if mode not in ("add_wall", "add_door", "add_window", "add_floor_ceiling"):
             self.clear_pending_line()
 
         if mode == "select":
@@ -1487,6 +1522,8 @@ class FloorplanEditor:
             self.add_spawn_at(wx, wy)
         elif mode == "add_roomtone":
             self.add_roomtone_at(wx, wy)
+        elif mode == "add_floor_ceiling":
+            self.handle_floor_ceiling_press(event)
         elif mode in ("add_wall", "add_door", "add_window"):
             self.handle_line_press(mode, event)
 
@@ -1637,7 +1674,70 @@ class FloorplanEditor:
             "add_wall": "#222222",
             "add_door": "#2b8a45",
             "add_window": "#1d6bd6",
+            "add_floor_ceiling": "#9966cc",
         }.get(mode, "#555555")
+    
+    def handle_floor_ceiling_press(self, event):
+        """Handle placement of Floor+Ceiling pair using rectangle drawing"""
+        wx, wy = self.screen_to_world(event.x, event.y)
+        wx, wy = self.snap_point(wx, wy)
+        
+        pending = self.pending_line
+        mode = "add_floor_ceiling"
+        
+        if pending and pending.get("mode") != mode:
+            self.clear_pending_line()
+            pending = None
+        
+        if pending is None:
+            self.begin_pending_line(mode, (wx, wy))
+            return
+        
+        if pending.get("dragged"):
+            # user finished previous drag; start a fresh segment from current point
+            self.clear_pending_line()
+            self.begin_pending_line(mode, (wx, wy))
+            return
+        
+        start_world = pending.get("start_world")
+        if start_world and math.isclose(start_world[0], wx, abs_tol=1e-6) and math.isclose(start_world[1], wy, abs_tol=1e-6):
+            return
+        
+        self.create_floor_ceiling_pair(start_world, (wx, wy))
+        self.clear_pending_line()
+    
+    def create_floor_ceiling_pair(self, start_world, end_world):
+        """Create paired Floor and Ceiling objects"""
+        if start_world == end_world:
+            return
+        
+        self.save_state()  # Save state for undo
+        
+        start_x, start_y = self.snap_point(*start_world)
+        end_x, end_y = self.snap_point(*end_world)
+        
+        # Create Floor
+        floor_item = {
+            "Type": "Floor",
+            "Start": {"X": float(start_x), "Y": float(start_y)},
+            "End": {"X": float(end_x), "Y": float(end_y)}
+        }
+        self.data.append(floor_item)
+        
+        # Create Ceiling
+        ceiling_item = {
+            "Type": "Ceiling",
+            "Start": {"X": float(start_x), "Y": float(start_y)},
+            "End": {"X": float(end_x), "Y": float(end_y)}
+        }
+        self.data.append(ceiling_item)
+        
+        # Rebuild and select the floor
+        self.rebuild_canvas(preserve_selection=False)
+        for obj in self.objects:
+            if obj["data"] is floor_item:
+                self.set_selected(obj)
+                break
 
     def handle_line_press(self, mode, event):
         wx, wy = self.screen_to_world(event.x, event.y)
@@ -1668,9 +1768,17 @@ class FloorplanEditor:
     def begin_pending_line(self, mode, start_world):
         color = self.line_mode_color(mode)
         sx, sy = self.world_to_screen(*start_world)
-        preview_id = self.canvas.create_line(sx, sy, sx, sy,
-                                             fill=color, dash=(8, 4), width=2,
-                                             tags=("preview",))
+        
+        # For floor_ceiling mode, use rectangle instead of line
+        if mode == "add_floor_ceiling":
+            preview_id = self.canvas.create_rectangle(sx, sy, sx, sy,
+                                                     outline=color, dash=(8, 4), width=2,
+                                                     fill="", tags=("preview",))
+        else:
+            preview_id = self.canvas.create_line(sx, sy, sx, sy,
+                                                 fill=color, dash=(8, 4), width=2,
+                                                 tags=("preview",))
+        
         marker_id = self.create_anchor_marker(start_world[0], start_world[1],
                                               color=color, size=6,
                                               state="normal", tags=("preview",))
@@ -1851,8 +1959,10 @@ class FloorplanEditor:
         
         for obj in self.objects:
             item_type = obj["data"].get("Type")
-            # Only select editable objects
-            if item_type in ("Wall", "Door", "Window", "Cubicle", "SpawnPoint", "CeilingLight", "RoomTone"):
+            # Only select editable objects (skip Floor/Ceiling if locked)
+            if self.lock_floor_ceiling.get() and item_type in ("Floor", "Ceiling"):
+                continue
+            if item_type in ("Wall", "Door", "Window", "Cubicle", "SpawnPoint", "CeilingLight", "RoomTone", "Floor", "Ceiling"):
                 self.selected_objects.append(obj)
                 self.style_object(obj, selected=True)
         
