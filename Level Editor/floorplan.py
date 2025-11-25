@@ -309,17 +309,27 @@ class FloorplanEditor:
         self.canvas.bind("<Button-5>", lambda e: self.on_mousewheel(e, -1))
         self.canvas.bind("<Configure>", self.on_canvas_configure)
 
-        # Keyboard bindings
-        self.root.bind("<Delete>", self.on_delete)
-        self.root.bind("<BackSpace>", self.on_delete)
+        # Keyboard bindings (use wrapper to ignore when in text entry)
+        self.root.bind("<Delete>", self._wrap_shortcut(self.on_delete))
+        self.root.bind("<BackSpace>", self._wrap_shortcut(self.on_delete))
         self.root.bind("<Escape>", lambda e: self.cancel_transient_actions())
-        self.root.bind("<r>", lambda e: self.rotate_selection(90))
-        self.root.bind("<R>", lambda e: self.rotate_selection(-90))
-        self.root.bind("<Control-c>", self.on_copy)
-        self.root.bind("<Control-v>", self.on_paste)
-        self.root.bind("<Control-a>", self.on_select_all)
-        self.root.bind("<Control-z>", self.undo)
-        self.root.bind("<Control-y>", self.redo)
+        self.root.bind("<r>", self._wrap_shortcut(lambda e: self.rotate_selection(90)))
+        self.root.bind("<R>", self._wrap_shortcut(lambda e: self.rotate_selection(-90)))
+        self.root.bind("<Control-c>", self._wrap_shortcut(self.on_copy))
+        self.root.bind("<Control-v>", self._wrap_shortcut(self.on_paste))
+        self.root.bind("<Control-a>", self._wrap_shortcut(self.on_select_all))
+        self.root.bind("<Control-z>", self._wrap_shortcut(self.undo))
+        self.root.bind("<Control-y>", self._wrap_shortcut(self.redo))
+    
+    def _wrap_shortcut(self, handler):
+        """Wrap a keyboard shortcut handler to ignore when focus is in a text entry."""
+        def wrapper(event):
+            # Check if focus is in a text entry widget
+            focused = self.root.focus_get()
+            if focused and isinstance(focused, (tk.Entry, tk.Spinbox, tk.Text)):
+                return  # Don't handle shortcut, let the widget handle it
+            return handler(event)
+        return wrapper
 
     def _build_menu(self):
         """Build the menu bar."""
@@ -1015,23 +1025,29 @@ class FloorplanEditor:
             # Check for object click
             obj = self.find_object_at(sx, sy)
             if obj:
+                was_already_selected = obj in self.selected_objects
+                
                 if ctrl_held:
                     if obj in self.selected_objects:
                         self.remove_from_selection(obj)
                     else:
                         self.add_to_selection(obj)
-                elif obj in self.selected_objects:
-                    # Already selected, prepare for drag
-                    pass
-                else:
+                elif not was_already_selected:
+                    # First click on unselected object: just select it, don't start drag
                     self.set_selected(obj)
+                # else: already selected, allow drag on this click
                 
-                self.dragging = True
-                self.drag_start_sx = sx
-                self.drag_start_sy = sy
-                self.drag_saved_state = False
-                self._drag_pending_wx = 0.0
-                self._drag_pending_wy = 0.0
+                # Only allow dragging if the object was already selected before this click
+                # This implements: click to select, then click+drag to move
+                if was_already_selected and not ctrl_held:
+                    self.dragging = True
+                    self.drag_start_sx = sx
+                    self.drag_start_sy = sy
+                    self.drag_saved_state = False
+                    self._drag_pending_wx = 0.0
+                    self._drag_pending_wy = 0.0
+                else:
+                    self.dragging = False
             else:
                 # Start box selection
                 if not ctrl_held:

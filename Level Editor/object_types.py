@@ -424,7 +424,7 @@ class CeilingLightType(RectBasedType):
 class CubicleType(PointBasedType):
     type_name = "Cubicle"
     colors = {"body": "#dddddd", "outline": "black", "arrow": "#ff6600"}
-    defaults = {"Yaw": 0.0, "Dimensions": {"X": 300.0, "Y": 250.0}}
+    defaults = {"Yaw": 0.0}  # Cubicles use global width/depth, not per-item Dimensions
     
     @classmethod
     def get_bounds(cls, item: Dict, display_dims: Optional[Tuple[float, float]] = None) -> Optional[BBox]:
@@ -432,20 +432,19 @@ class CubicleType(PointBasedType):
         if start is None:
             return None
         
-        # Use item's Dimensions if available, otherwise use display_dims or defaults
-        dims = item.get("Dimensions", {})
-        w = float(dims.get("X", display_dims[0] if display_dims else 300.0))
-        h = float(dims.get("Y", display_dims[1] if display_dims else 250.0))
+        # Use global display_dims (width, depth) - width is along back wall, depth is forward
+        w = display_dims[0] if display_dims else 300.0
+        h = display_dims[1] if display_dims else 250.0
         
         yaw = float(item.get("Yaw", 0.0))
         
-        # Adjust for visual offset
+        # Adjust for visual offset - depth extends forward from back wall
         vis_yaw = (yaw + 90.0) % 360
         steps = int(round(vis_yaw / 90.0)) % 4
         if steps % 2 != 0:
             w, h = h, w
         
-        return (start[0], start[1], start[0] + w, start[1] + h)
+        return (start[0], start[1], start[0] + h, start[1] + w)  # depth (h) is X, width (w) is Y
     
     @classmethod
     def get_center(cls, item: Dict, display_dims: Optional[Tuple[float, float]] = None) -> Optional[Point]:
@@ -457,9 +456,9 @@ class CubicleType(PointBasedType):
     
     @classmethod
     def get_properties(cls) -> List[PropertyDef]:
+        # Cubicles only have position and yaw - dimensions are global
         return [
-            PropertyDef("Start", "Start Position", "section", keys=["X", "Y"]),
-            PropertyDef("Dimensions", "Dimensions", "section", keys=["X", "Y"]),
+            PropertyDef("Start", "Position", "section", keys=["X", "Y"]),
             PropertyDef("Yaw", "Yaw", "yaw"),
         ]
     

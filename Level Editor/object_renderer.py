@@ -21,6 +21,19 @@ except ImportError:
 # Type aliases
 Point = Tuple[float, float]
 
+# Z-order layer tags (bottom to top)
+# Objects are placed in these layers to ensure consistent visual stacking
+Z_ORDER = [
+    "floor_layer",    # Floor rectangles (bottommost objects)
+    "ceiling_layer",  # Ceiling rectangles
+    "furniture_layer",# Cubicles and other furniture
+    "light_layer",    # Ceiling lights
+    "structure_layer",# Walls, doors, windows, elevators
+    "label_layer",    # ID labels and text
+    "grid",           # Background grid
+    "anchor_layer",   # Anchors (topmost, for interaction)
+]
+
 
 class ObjectRenderer:
     """Renders layout objects to canvas."""
@@ -110,6 +123,37 @@ class ObjectRenderer:
             end = (float(e.get("X", 0.0)), float(e.get("Y", 0.0)))
         return start, end
     
+    def _place_in_layer(self, cid: int, layer: str):
+        """Place a canvas item in the appropriate z-order layer.
+        
+        Strategy: Try to lower this item below items in higher layers.
+        This ensures proper ordering regardless of creation order.
+        """
+        # Add tag for the layer
+        self.helper.canvas.addtag_withtag(layer, cid)
+        
+        # Find the layer index
+        try:
+            layer_idx = Z_ORDER.index(layer)
+        except ValueError:
+            return  # Unknown layer, leave as is
+        
+        # Try to lower below layers above this one (from lowest higher layer to highest)
+        for i in range(layer_idx + 1, len(Z_ORDER)):
+            try:
+                self.helper.canvas.tag_lower(cid, Z_ORDER[i])
+                return  # Successfully placed below a higher layer
+            except tk.TclError:
+                continue  # That layer doesn't have any items yet
+        
+        # No higher layers exist yet, try to raise above lower layers
+        for i in range(layer_idx - 1, -1, -1):
+            try:
+                self.helper.canvas.tag_raise(cid, Z_ORDER[i])
+                return  # Successfully placed above a lower layer
+            except tk.TclError:
+                continue  # That layer doesn't have any items yet
+    
     def _create_anchor(
         self,
         wx: float,
@@ -126,6 +170,8 @@ class ObjectRenderer:
         canvas_ids.append(anchor_id)
         # Store meta for later lookup by floorplan editor
         self._anchor_meta[anchor_id] = dict(meta)
+        # Place anchors in anchor layer (topmost)
+        self._place_in_layer(anchor_id, "anchor_layer")
         return anchor_id
     
     def _draw_floor(
@@ -153,12 +199,7 @@ class ObjectRenderer:
         )
         canvas_ids.append(cid)
         register_part(cid, "body")
-        # Put floor at the very bottom (below everything except grid)
-        self.helper.canvas.tag_lower(cid)
-        try:
-            self.helper.canvas.tag_raise(cid, "grid")
-        except tk.TclError:
-            pass  # No grid, leave at bottom
+        self._place_in_layer(cid, "floor_layer")
         
         # Corner anchors
         corners = [(x0, y0), (x1, y0), (x0, y1), (x1, y1)]
@@ -199,17 +240,7 @@ class ObjectRenderer:
         )
         canvas_ids.append(cid)
         register_part(cid, "outline")
-        # Place ceiling just above floor layer (grid < floor < ceiling < other objects)
-        self.helper.canvas.tag_lower(cid)
-        # Raise above floor_layer if any floors exist, otherwise just above grid
-        try:
-            self.helper.canvas.tag_raise(cid, "floor_layer")
-        except tk.TclError:
-            # No floor_layer exists, raise above grid
-            try:
-                self.helper.canvas.tag_raise(cid, "grid")
-            except tk.TclError:
-                pass  # No grid either, leave at bottom
+        self._place_in_layer(cid, "ceiling_layer")
         
         # Corner anchors
         corners = [(x0, y0), (x1, y0), (x0, y1), (x1, y1)]
@@ -324,6 +355,11 @@ class ObjectRenderer:
         self._create_anchor(cx, cy, "#777777", 5,
                            {"kind": "center", "center": (cx, cy)},
                            anchors, canvas_ids)
+        
+        # Place all non-anchor elements in structure layer
+        for cid in canvas_ids:
+            if cid not in anchors:
+                self._place_in_layer(cid, "structure_layer")
     
     def _draw_elevator(
         self,
@@ -349,6 +385,8 @@ class ObjectRenderer:
         dx, dy = x1 - x0, y1 - y0
         length = math.hypot(dx, dy)
         
+        # Draw cab rectangle first (so it's behind the wall line)
+        cab_rect = None
         if length > 1e-6:
             perp_x = -dy / length
             perp_y = dx / length
@@ -369,7 +407,6 @@ class ObjectRenderer:
             )
             canvas_ids.append(cab_rect)
             register_part(cab_rect, "cab")
-            self.helper.canvas.tag_lower(cab_rect)
         
         wall_line = self.helper.canvas.create_line(
             x0, y0, x1, y1, fill=wall_color, width=4, capstyle=tk.PROJECTING
@@ -402,6 +439,11 @@ class ObjectRenderer:
         self._create_anchor(cx, cy, "#777777", 5,
                            {"kind": "center", "center": (cx, cy)},
                            anchors, canvas_ids)
+        
+        # Place all non-anchor elements in structure layer
+        for cid in canvas_ids:
+            if cid not in anchors:
+                self._place_in_layer(cid, "structure_layer")
     
     def _draw_ceiling_light(
         self,
@@ -509,6 +551,11 @@ class ObjectRenderer:
         self._create_anchor(cx, cy, "#777777", 5,
                            {"kind": "center", "center": (cx, cy)},
                            anchors, canvas_ids)
+        
+        # Place all non-anchor elements in light layer
+        for cid in canvas_ids:
+            if cid not in anchors:
+                self._place_in_layer(cid, "light_layer")
     
     def _draw_cubicle(
         self,
@@ -522,12 +569,19 @@ class ObjectRenderer:
         if start is None:
             return
         
+        # Use global display dimensions (width = along back wall, depth = perpendicular)
         display_width, display_depth = self.get_display_dims()
         yaw = normalize_yaw(float(item.get("Yaw", 0.0)))
         item["Yaw"] = yaw
         
+        # The cubicle is positioned with its back wall at the start point
+        # Width extends along the back wall, depth extends forward from the back wall
+        # Yaw=0 means back wall is along X-axis, desk faces +Y direction
         vis_yaw = normalize_yaw(yaw + 90.0)
-        dim = {"X": display_width, "Y": display_depth}
+        
+        # For display: depth is the "width" in the direction perpendicular to back wall
+        # and width is along the back wall
+        dim = {"X": display_depth, "Y": display_width}  # Fixed: depth is X (forward), width is Y (along wall)
         w_world, h_world = get_axis_size(dim, vis_yaw)
         
         x0, y0 = start
@@ -542,7 +596,7 @@ class ObjectRenderer:
         canvas_ids.append(cid)
         register_part(cid, "body")
         
-        # Direction arrow
+        # Direction arrow (points in the direction the desk faces)
         indicator_size = min(abs(sx1 - sx0), abs(sy1 - sy0)) * 0.12
         cx, cy = (sx0 + sx1) / 2, (sy0 + sy1) / 2
         angle_rad = math.radians(-vis_yaw)
@@ -557,6 +611,10 @@ class ObjectRenderer:
         canvas_ids.append(arrow_id)
         register_part(arrow_id, "arrow")
         
+        # Place cubicle body elements in furniture layer
+        for c in [cid, arrow_id]:
+            self._place_in_layer(c, "furniture_layer")
+        
         # Corner anchors
         corners = [(x0, y0), (x1, y0), (x0, y1), (x1, y1)]
         for idx, (wx, wy) in enumerate(corners):
@@ -570,15 +628,6 @@ class ObjectRenderer:
         self._create_anchor(center_x, center_y, "#777777", 5,
                            {"kind": "center", "center": (center_x, center_y)},
                            anchors, canvas_ids)
-        
-        # Dimension label
-        screen_cx, screen_cy = self.helper.world_to_screen(center_x, center_y)
-        dim_text = f"{display_width:.0f}×{display_depth:.0f}"
-        text_id = self.helper.canvas.create_text(
-            screen_cx, screen_cy, text=dim_text, fill="#555555", font=("Arial", 9)
-        )
-        canvas_ids.append(text_id)
-        register_part(text_id, "label")
     
     def _draw_spawn_point(
         self,
@@ -620,6 +669,10 @@ class ObjectRenderer:
         )
         canvas_ids.append(arrow_id)
         register_part(arrow_id, "arrow")
+        
+        # Place spawn point elements in structure layer
+        for c in [cid, arrow_id]:
+            self._place_in_layer(c, "structure_layer")
         
         # Center anchor
         self._create_anchor(wx, wy, "#00cc66", 5,
@@ -665,6 +718,10 @@ class ObjectRenderer:
         canvas_ids.append(cid)
         register_part(cid, "body")
         
+        # Place room tone elements in structure layer
+        for c in [radius_cid, cid]:
+            self._place_in_layer(c, "structure_layer")
+        
         # Audio ID label
         audio_id = item.get("AudioId", "")
         if audio_id:
@@ -674,6 +731,7 @@ class ObjectRenderer:
             )
             canvas_ids.append(text_id)
             register_part(text_id, "label")
+            self._place_in_layer(text_id, "label_layer")
         
         # Center anchor
         self._create_anchor(wx, wy, "#ff9900", 5,
@@ -702,27 +760,35 @@ class ObjectRenderer:
         sx, sy = self.helper.world_to_screen(*label_pos)
         
         # Create background for readability
+        label_font = ("Segoe UI", 10, "bold")
         temp_text = self.helper.canvas.create_text(
-            0, 0, text=item_id, font=("Segoe UI", 8, "bold")
+            0, 0, text=item_id, font=label_font
         )
         bbox = self.helper.canvas.bbox(temp_text)
         self.helper.canvas.delete(temp_text)
         
+        bg_id = None
         if bbox:
             tw = bbox[2] - bbox[0]
             th = bbox[3] - bbox[1]
-            pad = 3
+            pad = 4
             bg_id = self.helper.canvas.create_rectangle(
                 sx - tw/2 - pad, sy - th/2 - pad,
                 sx + tw/2 + pad, sy + th/2 + pad,
-                fill="#ffffff", outline="#4a148c", width=1
+                fill="#ffffff", outline="#333333", width=1
             )
             canvas_ids.append(bg_id)
             register_part(bg_id, "id_label_bg")
+            self._place_in_layer(bg_id, "label_layer")
         
         text_id = self.helper.canvas.create_text(
-            sx, sy, text=item_id, fill="#4a148c",
-            font=("Segoe UI", 8, "bold"), anchor="center"
+            sx, sy, text=item_id, fill="#000000",
+            font=label_font, anchor="center"
         )
         canvas_ids.append(text_id)
         register_part(text_id, "id_label")
+        self._place_in_layer(text_id, "label_layer")
+        
+        # Ensure text is above background
+        if bg_id is not None:
+            self.helper.canvas.tag_raise(text_id, bg_id)
