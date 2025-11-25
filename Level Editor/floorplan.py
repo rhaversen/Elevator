@@ -378,6 +378,19 @@ class FloorplanEditor:
         grid = self.get_grid_size()
         return snap_point((x, y), grid)
 
+    def snap_point_for_cubicle(self, x, y):
+        """Snap a point to the cubicle dimension grid if snapping is enabled."""
+        if not self.snap_enabled.get():
+            return float(x), float(y)
+        # Use cubicle dimensions as the grid
+        width = max(self.cubicle_display_width.get(), 1.0)
+        depth = max(self.cubicle_display_depth.get(), 1.0)
+        # Snap X to width grid (along cubicle back wall)
+        # Snap Y to depth grid (cubicle depth forward)
+        snapped_x = round(x / width) * width
+        snapped_y = round(y / depth) * depth
+        return snapped_x, snapped_y
+
     def on_grid_setting_changed(self, *_):
         if hasattr(self, "canvas"):
             self.rebuild_canvas(preserve_selection=True)
@@ -1087,7 +1100,11 @@ class FloorplanEditor:
         # Point modes (single click to place)
         if mode in POINT_MODES:
             if self.snap_enabled.get():
-                wx, wy = self.snap_point_to_grid(wx, wy)
+                if mode == "add_cubicle":
+                    # Cubicles snap to their own dimension grid
+                    wx, wy = self.snap_point_for_cubicle(wx, wy)
+                else:
+                    wx, wy = self.snap_point_to_grid(wx, wy)
             self._create_point_object(wx, wy, mode)
 
     def _begin_pending_line(self, mode, wx, wy):
@@ -1170,14 +1187,24 @@ class FloorplanEditor:
         
         # Apply snapping if enabled
         if self.snap_enabled.get():
-            grid = self.get_grid_size()
+            # Check if we're dragging only cubicles - use cubicle grid
+            all_cubicles = all(
+                obj.get("data", {}).get("Type") == "Cubicle" 
+                for obj in self.selected_objects
+            )
+            if all_cubicles:
+                grid_x = max(self.cubicle_display_width.get(), 1.0)
+                grid_y = max(self.cubicle_display_depth.get(), 1.0)
+            else:
+                grid_x = grid_y = self.get_grid_size()
+            
             # Accumulate delta
             self._drag_pending_wx += dx_world
             self._drag_pending_wy += dy_world
             # Snap to grid increments
-            snapped_dx = round(self._drag_pending_wx / grid) * grid
-            snapped_dy = round(self._drag_pending_wy / grid) * grid
-            if abs(snapped_dx) >= grid or abs(snapped_dy) >= grid:
+            snapped_dx = round(self._drag_pending_wx / grid_x) * grid_x
+            snapped_dy = round(self._drag_pending_wy / grid_y) * grid_y
+            if abs(snapped_dx) >= grid_x or abs(snapped_dy) >= grid_y:
                 self._drag_pending_wx -= snapped_dx
                 self._drag_pending_wy -= snapped_dy
                 self._move_selected_objects(snapped_dx, snapped_dy)
@@ -1219,7 +1246,11 @@ class FloorplanEditor:
 
         wx, wy = self.screen_to_world(event.x, event.y)
         if self.snap_enabled.get():
-            wx, wy = self.snap_point_to_grid(wx, wy)
+            # Use cubicle-specific snapping for cubicles
+            if item.get("Type") == "Cubicle":
+                wx, wy = self.snap_point_for_cubicle(wx, wy)
+            else:
+                wx, wy = self.snap_point_to_grid(wx, wy)
 
         kind = meta.get("kind")
         
@@ -1524,29 +1555,48 @@ class FloorplanEditor:
             return False
         
         changed = False
-        grid = self.get_grid_size()
+        item_type = item.get("Type")
         
-        if "Start" in item:
-            start = item["Start"]
-            old_x = float(start.get("X", 0))
-            old_y = float(start.get("Y", 0))
-            new_x = round(old_x / grid) * grid
-            new_y = round(old_y / grid) * grid
-            if abs(new_x - old_x) > 0.01 or abs(new_y - old_y) > 0.01:
-                start["X"] = new_x
-                start["Y"] = new_y
-                changed = True
-        
-        if "End" in item:
-            end = item["End"]
-            old_x = float(end.get("X", 0))
-            old_y = float(end.get("Y", 0))
-            new_x = round(old_x / grid) * grid
-            new_y = round(old_y / grid) * grid
-            if abs(new_x - old_x) > 0.01 or abs(new_y - old_y) > 0.01:
-                end["X"] = new_x
-                end["Y"] = new_y
-                changed = True
+        if item_type == "Cubicle":
+            width = max(self.cubicle_display_width.get(), 1.0)
+            depth = max(self.cubicle_display_depth.get(), 1.0)
+            if "Start" in item:
+                start = item["Start"]
+                old_x = float(start.get("X", 0))
+                old_y = float(start.get("Y", 0))
+                new_x = round(old_x / width) * width
+                new_y = round(old_y / depth) * depth
+                if abs(new_x - old_x) > 0.01 or abs(new_y - old_y) > 0.01:
+                    start["X"] = new_x
+                    start["Y"] = new_y
+                    if "End" in item:
+                        end = item["End"]
+                        end["X"] = float(end.get("X", 0)) + (new_x - old_x)
+                        end["Y"] = float(end.get("Y", 0)) + (new_y - old_y)
+                    changed = True
+        else:
+            grid = self.get_grid_size()
+            if "Start" in item:
+                start = item["Start"]
+                old_x = float(start.get("X", 0))
+                old_y = float(start.get("Y", 0))
+                new_x = round(old_x / grid) * grid
+                new_y = round(old_y / grid) * grid
+                if abs(new_x - old_x) > 0.01 or abs(new_y - old_y) > 0.01:
+                    start["X"] = new_x
+                    start["Y"] = new_y
+                    changed = True
+            
+            if "End" in item:
+                end = item["End"]
+                old_x = float(end.get("X", 0))
+                old_y = float(end.get("Y", 0))
+                new_x = round(old_x / grid) * grid
+                new_y = round(old_y / grid) * grid
+                if abs(new_x - old_x) > 0.01 or abs(new_y - old_y) > 0.01:
+                    end["X"] = new_x
+                    end["Y"] = new_y
+                    changed = True
         
         return changed
 
