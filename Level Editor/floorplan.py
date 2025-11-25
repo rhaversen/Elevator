@@ -63,6 +63,9 @@ class FloorplanEditor:
         self.drag_start_sy = 0
         self.drag_saved_state = False  # Track if state was saved for this drag
         self.dragging_anchor = None    # metadata for active anchor drag
+        self.box_selecting = False     # True when doing box selection
+        self.box_select_start = None   # (sx, sy) screen coords of box start
+        self.box_select_rect_id = None # Canvas ID of selection rectangle
 
         self.mode = tk.StringVar(value="select")
         self.mode.trace_add("write", self.on_mode_changed)
@@ -695,6 +698,16 @@ class FloorplanEditor:
                 self.canvas.configure(cursor="")
         self.dragging = False
         self.dragging_anchor = None
+        # Cancel box selection if active
+        if self.box_selecting:
+            if self.box_select_rect_id is not None:
+                try:
+                    self.canvas.delete(self.box_select_rect_id)
+                except tk.TclError:
+                    pass
+                self.box_select_rect_id = None
+            self.box_selecting = False
+            self.box_select_start = None
 
     def rebuild_canvas(self, preserve_selection=False):
         self.clear_pending_line()
@@ -2410,7 +2423,9 @@ class FloorplanEditor:
 
             anchor_obj, anchor_meta = self.find_anchor_at(event.x, event.y)
             if anchor_obj is not None and anchor_meta is not None:
-                self.set_selected(anchor_obj, multi=False)
+                # If the anchor's object is already selected, keep selection and drag
+                if anchor_obj not in self.selected_objects:
+                    self.set_selected(anchor_obj, multi=False)
                 self.dragging_anchor = {"item": anchor_obj["data"], "meta": anchor_meta}
                 self.drag_saved_state = False
                 self.dragging = True
@@ -2419,12 +2434,34 @@ class FloorplanEditor:
                 return
 
             obj = self.find_object_at(event.x, event.y)
-            self.set_selected(obj, multi=ctrl_pressed)
+            
             if obj is not None:
+                # Clicked on an object
+                if ctrl_pressed:
+                    # Ctrl+click toggles selection
+                    self.set_selected(obj, multi=True)
+                elif obj in self.selected_objects:
+                    # Clicked on already-selected object: keep selection, start drag
+                    pass
+                else:
+                    # Clicked on unselected object: select it (deselect others)
+                    self.set_selected(obj, multi=False)
+                
                 self.dragging = True
                 self.drag_start_sx = event.x
                 self.drag_start_sy = event.y
-                self.drag_saved_state = False  # Haven't saved state yet
+                self.drag_saved_state = False
+            else:
+                # Clicked on empty space: start box selection
+                if not ctrl_pressed:
+                    # Clear selection unless Ctrl is held
+                    self.set_selected(None)
+                self.box_selecting = True
+                self.box_select_start = (event.x, event.y)
+                self.box_select_rect_id = self.canvas.create_rectangle(
+                    event.x, event.y, event.x, event.y,
+                    outline="#0078d7", dash=(3, 3), width=1
+                )
         elif mode == "add_cubicle":
             self.add_cubicle_at(wx, wy)
         elif mode == "add_spawn":
@@ -2437,6 +2474,13 @@ class FloorplanEditor:
             self.handle_line_press(mode, event)
 
     def on_drag(self, event):
+        # Handle box selection drag
+        if self.box_selecting and self.box_select_start is not None:
+            sx, sy = self.box_select_start
+            if self.box_select_rect_id is not None:
+                self.canvas.coords(self.box_select_rect_id, sx, sy, event.x, event.y)
+            return
+
         if self.pending_line and self.pending_line.get("preview_id") is not None:
             self.update_pending_line(event)
             return
@@ -2509,6 +2553,11 @@ class FloorplanEditor:
             self.dragging = False
             return
 
+        # Handle box selection release
+        if self.box_selecting:
+            self.finish_box_selection(event)
+            return
+
         if self.dragging_anchor is not None:
             self.dragging_anchor = None
             self.dragging = False
@@ -2524,6 +2573,59 @@ class FloorplanEditor:
             if any_snapped:
                 self.rebuild_canvas(preserve_selection=True)
         self.dragging = False
+
+    def finish_box_selection(self, event):
+        """Finalize box selection and select all objects within the box."""
+        if self.box_select_rect_id is not None:
+            self.canvas.delete(self.box_select_rect_id)
+            self.box_select_rect_id = None
+
+        if self.box_select_start is None:
+            self.box_selecting = False
+            return
+
+        sx, sy = self.box_select_start
+        ex, ey = event.x, event.y
+
+        # Normalize coordinates (ensure min < max)
+        x0, x1 = min(sx, ex), max(sx, ex)
+        y0, y1 = min(sy, ey), max(sy, ey)
+
+        self.box_selecting = False
+        self.box_select_start = None
+
+        # Find all objects that intersect with the box
+        for obj in self.objects:
+            if obj in self.selected_objects:
+                continue  # Already selected
+
+            # Check if any of the object's canvas items overlap with the box
+            for cid in obj["canvas_ids"]:
+                if cid in obj.get("anchors", []):
+                    continue  # Skip anchor markers
+
+                try:
+                    bbox = self.canvas.bbox(cid)
+                    if bbox is None:
+                        continue
+
+                    item_x0, item_y0, item_x1, item_y1 = bbox
+
+                    # Check if bounding boxes overlap
+                    if not (item_x1 < x0 or item_x0 > x1 or item_y1 < y0 or item_y0 > y1):
+                        # Overlaps - select this object
+                        group = self._get_linked_selection_group(obj)
+                        for member in group:
+                            if member not in self.selected_objects:
+                                self.selected_objects.append(member)
+                                self.style_object(member, selected=True)
+                        if self.selected_obj is None:
+                            self.selected_obj = obj
+                        break
+                except tk.TclError:
+                    continue
+
+        self.update_properties_panel()
 
     # ---------- Add / Delete ----------
 
