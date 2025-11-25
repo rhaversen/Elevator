@@ -12,7 +12,14 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 
 # Import helper modules
-from geometry import normalize_yaw, get_axis_size, snap_value, snap_point, rotate_point
+from geometry import (
+    normalize_yaw,
+    get_axis_size,
+    snap_value,
+    snap_point,
+    rotate_point,
+    get_axis_vectors_for_yaw,
+)
 from file_io import load_layout_file, save_layout_file, get_display_name
 from object_types import get_object_type, get_mode_color, LINE_MODES, RECT_MODES, POINT_MODES, TYPE_MAP
 from canvas_helper import CanvasHelper, draw_grid
@@ -405,6 +412,30 @@ class FloorplanEditor:
         step_y = depth / divisions
         return step_x, step_y
 
+    def _cubicle_axes(self, yaw: float):
+        forward, right = get_axis_vectors_for_yaw(yaw)
+        return forward, right
+
+    def _cubicle_back_from_center(self, center_x: float, center_y: float, yaw: float):
+        forward, _ = self._cubicle_axes(yaw)
+        half_depth = max(self.cubicle_display_depth.get(), 1.0) / 2.0
+        back_x = center_x - forward[0] * half_depth
+        back_y = center_y - forward[1] * half_depth
+        return back_x, back_y
+
+    def _cubicle_center_from_back(self, back_x: float, back_y: float, yaw: float):
+        forward, _ = self._cubicle_axes(yaw)
+        half_depth = max(self.cubicle_display_depth.get(), 1.0) / 2.0
+        center_x = back_x + forward[0] * half_depth
+        center_y = back_y + forward[1] * half_depth
+        return center_x, center_y
+
+    def _snap_cubicle_center_position(self, center_x: float, center_y: float, item):
+        yaw = float(item.get("Yaw", 0.0))
+        back_x, back_y = self._cubicle_back_from_center(center_x, center_y, yaw)
+        snapped_back_x, snapped_back_y = self.snap_point_for_cubicle(back_x, back_y)
+        return self._cubicle_center_from_back(snapped_back_x, snapped_back_y, yaw)
+
     def snap_point_to_grid(self, x, y):
         """Snap a point to grid if snapping is enabled."""
         if not self.snap_enabled.get():
@@ -413,7 +444,7 @@ class FloorplanEditor:
         return snap_point((x, y), grid)
 
     def snap_point_for_cubicle(self, x, y):
-        """Snap a point to the cubicle dimension grid if snapping is enabled."""
+        """Snap the back-wall anchor point of a cubicle to its dimension grid."""
         if not self.snap_enabled.get():
             return float(x), float(y)
         # Use cubicle dimensions as the grid
@@ -1310,14 +1341,17 @@ class FloorplanEditor:
             return
 
         wx, wy = self.screen_to_world(event.x, event.y)
+        kind = meta.get("kind")
+        item_type = item.get("Type")
+
         if self.snap_enabled.get():
-            # Use cubicle-specific snapping for cubicles
-            if item.get("Type") == "Cubicle":
-                wx, wy = self.snap_point_for_cubicle(wx, wy)
+            if item_type == "Cubicle":
+                if kind in ("center", "unified_center"):
+                    wx, wy = self._snap_cubicle_center_position(wx, wy, item)
+                else:
+                    wx, wy = self.snap_point_for_cubicle(wx, wy)
             else:
                 wx, wy = self.snap_point_to_grid(wx, wy)
-
-        kind = meta.get("kind")
         
         # For center or unified_center anchor (move), use the smooth object dragging method
         if kind in ("center", "unified_center"):
@@ -1342,7 +1376,6 @@ class FloorplanEditor:
             return
         
         # For resize anchors (endpoint, corner, point), update data and rebuild
-        item_type = item.get("Type")
         changed = False
 
         if kind == "endpoint":

@@ -29,6 +29,25 @@ def get_axis_size(dimensions: Dict[str, float], yaw: float) -> Tuple[float, floa
     return abs(h), abs(w)
 
 
+def get_axis_vectors_for_yaw(yaw: float) -> Tuple[Point, Point]:
+    """Return forward and right unit vectors for a yaw snapped to 90° increments."""
+    normalized = normalize_yaw(yaw)
+    steps = int(normalized / 90.0) % 4
+    if steps == 0:
+        forward = (0.0, 1.0)
+        right = (1.0, 0.0)
+    elif steps == 1:
+        forward = (1.0, 0.0)
+        right = (0.0, -1.0)
+    elif steps == 2:
+        forward = (0.0, -1.0)
+        right = (-1.0, 0.0)
+    else:
+        forward = (-1.0, 0.0)
+        right = (0.0, 1.0)
+    return forward, right
+
+
 def rotate_point(point: Point, center: Point, angle_deg: float) -> Point:
     """Rotate a point around a center by angle in degrees."""
     cos_a = math.cos(math.radians(angle_deg))

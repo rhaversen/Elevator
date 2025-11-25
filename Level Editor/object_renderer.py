@@ -10,11 +10,19 @@ from typing import Dict, List, Tuple, Any, Optional, Callable
 
 try:
     from .canvas_helper import CanvasHelper, draw_direction_arrow
-    from .geometry import normalize_yaw, get_axis_size, perpendicular_offset
+    from .geometry import (
+        normalize_yaw,
+        perpendicular_offset,
+        get_axis_vectors_for_yaw,
+    )
     from .object_types import get_object_type, LineBasedType
 except ImportError:
     from canvas_helper import CanvasHelper, draw_direction_arrow
-    from geometry import normalize_yaw, get_axis_size, perpendicular_offset
+    from geometry import (
+        normalize_yaw,
+        perpendicular_offset,
+        get_axis_vectors_for_yaw,
+    )
     from object_types import get_object_type, LineBasedType
 
 
@@ -569,27 +577,39 @@ class ObjectRenderer:
         if start is None:
             return
         
-        # Use global display dimensions (width = along back wall, depth = perpendicular)
         display_width, display_depth = self.get_display_dims()
         yaw = normalize_yaw(float(item.get("Yaw", 0.0)))
         item["Yaw"] = yaw
-        
-        # The cubicle is positioned with its back wall at the start point
-        # Width extends along the back wall, depth extends forward from the back wall
-        # Yaw=0 means back wall is along X-axis, desk faces +Y direction
-        vis_yaw = normalize_yaw(yaw + 90.0)
-        
-        # For display: depth is the "width" in the direction perpendicular to back wall
-        # and width is along the back wall
-        dim = {"X": display_depth, "Y": display_width}  # Fixed: depth is X (forward), width is Y (along wall)
-        w_world, h_world = get_axis_size(dim, vis_yaw)
-        
-        x0, y0 = start
-        x1, y1 = x0 + w_world, y0 + h_world
-        
-        sx0, sy0 = self.helper.world_to_screen(x0, y0)
-        sx1, sy1 = self.helper.world_to_screen(x1, y1)
-        
+
+        forward, right = get_axis_vectors_for_yaw(yaw)
+        half_width = display_width / 2.0
+
+        back_center = start
+        back_left = (
+            back_center[0] - right[0] * half_width,
+            back_center[1] - right[1] * half_width,
+        )
+        back_right = (
+            back_center[0] + right[0] * half_width,
+            back_center[1] + right[1] * half_width,
+        )
+        front_left = (
+            back_left[0] + forward[0] * display_depth,
+            back_left[1] + forward[1] * display_depth,
+        )
+        front_right = (
+            back_right[0] + forward[0] * display_depth,
+            back_right[1] + forward[1] * display_depth,
+        )
+
+        world_corners = [back_left, back_right, front_right, front_left]
+        screen_corners = [self.helper.world_to_screen(px, py) for px, py in world_corners]
+        sx_values = [sx for sx, _ in screen_corners]
+        sy_values = [sy for _, sy in screen_corners]
+
+        sx0, sx1 = min(sx_values), max(sx_values)
+        sy0, sy1 = min(sy_values), max(sy_values)
+
         cid = self.helper.canvas.create_rectangle(
             sx0, sy0, sx1, sy1, outline="black", fill="#dddddd"
         )
@@ -599,6 +619,7 @@ class ObjectRenderer:
         # Direction arrow (points in the direction the desk faces)
         indicator_size = min(abs(sx1 - sx0), abs(sy1 - sy0)) * 0.12
         cx, cy = (sx0 + sx1) / 2, (sy0 + sy1) / 2
+        vis_yaw = normalize_yaw(yaw + 90.0)
         angle_rad = math.radians(-vis_yaw)
         arrow_len = indicator_size * 2
         end_x = cx + arrow_len * math.cos(angle_rad)
@@ -615,7 +636,11 @@ class ObjectRenderer:
         for c in [cid, arrow_id]:
             self._place_in_layer(c, "furniture_layer")
         
-        # Corner anchors
+        # Corner anchors (axis-aligned bounds suffice for 90° increments)
+        xs = [corner[0] for corner in world_corners]
+        ys = [corner[1] for corner in world_corners]
+        x0, x1 = min(xs), max(xs)
+        y0, y1 = min(ys), max(ys)
         corners = [(x0, y0), (x1, y0), (x0, y1), (x1, y1)]
         for idx, (wx, wy) in enumerate(corners):
             color = "#ff8c00" if idx == 0 else ("#1f78d1" if idx == 3 else "#666666")
