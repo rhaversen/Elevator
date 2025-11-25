@@ -747,6 +747,14 @@ UInstancedStaticMeshComponent *AProceduralOfficeGenerator::GetOrCreateISMC(UStat
 
 void AProceduralOfficeGenerator::DestroySpawnedComponents()
 {
+    UE_LOG(LogProceduralOffice, Log, TEXT("DestroySpawnedComponents: Destroying %d ISMCs, %d ChildActors, %d Audio, %d CeilingLights, %d ElevatorLights, %d Visualizers"),
+        SpawnedInstancedComponents.Num(),
+        SpawnedChildActors.Num(),
+        SpawnedAudioComponents.Num(),
+        SpawnedCeilingLights.Num(),
+        SpawnedElevatorLights.Num(),
+        WorkstationTargetVisualizers.Num());
+
     for (UInstancedStaticMeshComponent *Component : SpawnedInstancedComponents)
     {
         if (Component)
