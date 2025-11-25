@@ -160,7 +160,7 @@ protected:
     void PlaceWall(const FVector2D& Start, const FVector2D& End);
     void PlaceWindow(const FVector2D& Start, const FVector2D& End, float Thickness, int32 SectionCount);
     void PlaceSpawnPoint(const FVector2D& Location, float HeightOffset, float Yaw);
-    void PlaceCubicle(const FVector2D& Center, const FVector2D& Size, float Yaw, FName ElementId = NAME_None, const FElementPropertyOverride* Override = nullptr);
+    void PlaceCubicle(const FVector2D& Center, float Yaw, FName ElementId = NAME_None, const FElementPropertyOverride* Override = nullptr);
     void PlaceCeilingLights(const FVector2D& Start, const FVector2D& End, const FVector2D& Spacing, const FVector2D& Padding, float DirectionYawDegrees);
     void PlaceDoor(const FOfficeElementDefinition& Element);
     void PlaceElevator(const FOfficeElementDefinition& Element, const FElementPropertyOverride* Override = nullptr);
@@ -268,8 +268,8 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Cubicles")
     FVector CubicleDeskScale = FVector(1.0f, 1.0f, 1.0f);
 
-    UPROPERTY(EditAnywhere, Category = "Cubicles", meta = (ClampMin = "0.0", ClampMax = "0.45"))
-    float CubicleDeskBackOffsetRatio = 0.25f;
+    UPROPERTY(EditAnywhere, Category = "Cubicles")
+    FVector2D CubicleDeskOffset = FVector2D(0.0f, 60.0f);
 
     UPROPERTY(EditAnywhere, Category = "Cubicles")
     FRotator CubicleChairRotation = FRotator::ZeroRotator;
@@ -280,11 +280,11 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Cubicles")
     FVector CubicleChairRelativeLocation = FVector(0.0f, 84.0f, 0.0f);
 
-    UPROPERTY(EditAnywhere, Category = "Cubicles", meta = (ClampMin = "0.01"))
-    float CubiclePartitionWidthScale = 1.0f;
+    UPROPERTY(EditAnywhere, Category = "Cubicles", meta = (ClampMin = "50.0"))
+    float CubicleWidth = 300.0f;
 
-    UPROPERTY(EditAnywhere, Category = "Cubicles", meta = (ClampMin = "0.01"))
-    float CubiclePartitionDepthScale = 1.0f;
+    UPROPERTY(EditAnywhere, Category = "Cubicles", meta = (ClampMin = "50.0"))
+    float CubicleDepth = 250.0f;
 
     UPROPERTY(EditAnywhere, Category = "Cubicles|Workstation", meta = (DisplayName = "Monitor Mesh"))
     TObjectPtr<UStaticMesh> CubicleComputerMesh;
