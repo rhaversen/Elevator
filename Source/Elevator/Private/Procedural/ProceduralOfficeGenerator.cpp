@@ -774,6 +774,41 @@ void AProceduralOfficeGenerator::DestroySpawnedComponents()
         }
     }
     SpawnedAudioComponents.Empty();
+
+    for (URectLightComponent *Component : SpawnedCeilingLights)
+    {
+        if (Component)
+        {
+            Component->DestroyComponent();
+        }
+    }
+    SpawnedCeilingLights.Empty();
+
+    for (URectLightComponent *Component : SpawnedElevatorLights)
+    {
+        if (Component)
+        {
+            Component->DestroyComponent();
+        }
+    }
+    SpawnedElevatorLights.Empty();
+
+    for (UArrowComponent *Component : WorkstationTargetVisualizers)
+    {
+        if (Component)
+        {
+            Component->DestroyComponent();
+        }
+    }
+    WorkstationTargetVisualizers.Empty();
+
+    if (IsValid(ComputerHighlightProxy))
+    {
+        ComputerHighlightProxy->DestroyComponent();
+        ComputerHighlightProxy = nullptr;
+    }
+
+    ComputerMeshComponent = nullptr;
 }
 
 bool AProceduralOfficeGenerator::EvaluateInteractionFocus_Implementation(APawn *PlayerPawn, const FHitResult &Hit, float AssistRadius, UPrimitiveComponent *&OutHighlightComponent)
