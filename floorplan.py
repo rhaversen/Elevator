@@ -21,6 +21,7 @@ class FloorplanEditor:
         self.objects = []      # list of { "data": dict, "canvas_ids": [int, ...] }
         self.id_to_obj = {}    # canvas_id -> object
         self.anchor_meta = {}  # canvas_id -> anchor metadata for resizing/moving
+        self.floor_ceiling_links = {}  # id(item) -> partner item (in-memory only)
         
         self.selected_objects = []  # list of selected objects for multi-select
         self.clipboard = []    # clipboard for copy/paste
@@ -167,8 +168,9 @@ class FloorplanEditor:
         ).pack(side=tk.LEFT, padx=2)
         tk.Checkbutton(
             display_frame,
-            text="Lock Floor/Ceiling",
+            text="Link Floor/Ceiling",
             variable=self.lock_floor_ceiling,
+            command=self.on_floor_ceiling_link_changed,
             bg=toolbar_bg,
             activebackground=toolbar_bg,
             selectcolor=toolbar_bg,
@@ -250,7 +252,6 @@ class FloorplanEditor:
         self.root.bind("<Control-v>", self.on_paste)
         self.root.bind("<Control-a>", self.on_select_all)
         self.root.bind("<Control-z>", self.on_undo)
-        self.root.bind("<Control-y>", self.on_redo)
 
         menubar = tk.Menu(self.root)
         filemenu = tk.Menu(menubar, tearoff=0)
@@ -320,6 +321,15 @@ class FloorplanEditor:
     def on_grid_setting_changed(self, *_):
         if hasattr(self, "canvas"):
             self.rebuild_canvas(preserve_selection=True)
+
+    def on_floor_ceiling_link_changed(self, *_):
+        if not hasattr(self, "canvas"):
+            return
+
+        if self.lock_floor_ceiling.get():
+            self.ensure_floor_ceiling_pairs()
+
+        self.rebuild_canvas(preserve_selection=True)
 
     def normalize_yaw(self, yaw):
         try:
@@ -688,12 +698,15 @@ class FloorplanEditor:
     def rebuild_canvas(self, preserve_selection=False):
         self.clear_pending_line()
         selected_data_list = [obj["data"] for obj in self.selected_objects] if preserve_selection and self.selected_objects else []
+        primary_data = self.selected_obj["data"] if preserve_selection and self.selected_obj is not None else None
         if self.selected_obj is not None:
             self.style_object(self.selected_obj, selected=False)
         for obj in self.selected_objects:
             self.style_object(obj, selected=False)
         self.selected_obj = None
         self.selected_objects.clear()
+
+        self.refresh_floor_ceiling_links()
 
         self.canvas.delete("all")
         self.canvas_grid_ids.clear()
@@ -710,11 +723,29 @@ class FloorplanEditor:
                 to_select.append(obj)
 
         if to_select:
-            self.selected_objects = to_select
+            combined_selection = []
             for obj in to_select:
+                if self.lock_floor_ceiling.get() and obj["data"].get("Type") in ("Floor", "Ceiling"):
+                    group = self._get_linked_selection_group(obj)
+                else:
+                    group = [obj]
+                for member in group:
+                    if member not in combined_selection:
+                        combined_selection.append(member)
+            self.selected_objects = combined_selection
+            for obj in combined_selection:
                 self.style_object(obj, selected=True)
-            if len(to_select) == 1:
-                self.selected_obj = to_select[0]
+
+            if primary_data is not None:
+                for obj in combined_selection:
+                    if obj["data"] is primary_data:
+                        self.selected_obj = obj
+                        break
+
+            if self.selected_obj is None and combined_selection:
+                self.selected_obj = combined_selection[0]
+
+        self.update_properties_panel()
 
     def draw_item(self, item):
         t = item.get("Type")
@@ -734,6 +765,7 @@ class FloorplanEditor:
             cid = self.canvas.create_rectangle(x0, y0, x1, y1,
                                                outline="#cccccc", fill="#f9f9f9")
             canvas_ids.append(cid)
+            self.canvas.tag_lower(cid)
             floor_corners = [
                 (x0_world, y0_world),
                 (x1_world, y0_world),
@@ -970,6 +1002,7 @@ class FloorplanEditor:
                                                    outline="#cccccc", dash=(6, 3),
                                                    fill="", width=1)
                 canvas_ids.append(cid)
+                self.canvas.tag_lower(cid)
                 
                 # Add corner anchors
                 for idx, (wx, wy) in enumerate(
@@ -1240,37 +1273,54 @@ class FloorplanEditor:
 
     def set_selected(self, obj, multi=False):
         if multi:
-            # Multi-select mode (Ctrl+Click)
             if obj is None:
                 return
-            if obj in self.selected_objects:
-                # Deselect if already selected
-                self.selected_objects.remove(obj)
-                self.style_object(obj, selected=False)
-                if self.selected_obj is obj:
-                    self.selected_obj = self.selected_objects[0] if self.selected_objects else None
-            else:
-                # Add to selection
-                self.selected_objects.append(obj)
-                self.style_object(obj, selected=True)
-                self.selected_obj = obj
-        else:
-            # Single select mode
-            if self.selected_obj is obj and not self.selected_objects:
+            group = self._get_linked_selection_group(obj)
+            if not group:
                 return
-            # Clear previous selection
-            if self.selected_obj is not None:
-                self.style_object(self.selected_obj, selected=False)
-            for sobj in self.selected_objects:
-                self.style_object(sobj, selected=False)
-            self.selected_objects.clear()
-            
+            all_selected = all(member in self.selected_objects for member in group)
+            if all_selected:
+                for member in group:
+                    if member in self.selected_objects:
+                        self.selected_objects.remove(member)
+                        self.style_object(member, selected=False)
+                if self.selected_obj in group:
+                    self.selected_obj = self.selected_objects[-1] if self.selected_objects else None
+            else:
+                for member in group:
+                    if member not in self.selected_objects:
+                        self.selected_objects.append(member)
+                        self.style_object(member, selected=True)
+                self.selected_obj = obj
+            self.update_properties_panel()
+            return
+
+        group = self._get_linked_selection_group(obj) if obj is not None else []
+        if (
+            obj is not None
+            and group
+            and self.selected_obj is obj
+            and len(group) == len(self.selected_objects)
+            and all(member in self.selected_objects for member in group)
+        ):
+            return
+
+        for sobj in self.selected_objects:
+            self.style_object(sobj, selected=False)
+        self.selected_objects.clear()
+        self.selected_obj = None
+
+        if group:
             self.selected_obj = obj
-            if obj is not None:
-                self.selected_objects = [obj]
-                self.style_object(obj, selected=True)
-        
-        # Update properties panel
+            for member in group:
+                if member not in self.selected_objects:
+                    self.selected_objects.append(member)
+                    self.style_object(member, selected=True)
+        elif obj is not None:
+            self.selected_objects = [obj]
+            self.selected_obj = obj
+            self.style_object(obj, selected=True)
+
         self.update_properties_panel()
     
     def update_properties_panel(self):
@@ -1279,30 +1329,41 @@ class FloorplanEditor:
         for widget in self.props_inner.winfo_children():
             widget.destroy()
         
-        if not self.selected_obj:
+        obj = self.selected_obj
+        if not obj:
             tk.Label(self.props_inner, text="No selection", fg="#999999", bg="#fafafa",
                     font=("Segoe UI", 10)).pack(pady=30)
             return
-        
+
+        effective_obj = obj
+        pair_primary = None
         if len(self.selected_objects) > 1:
-            tk.Label(self.props_inner, text=f"{len(self.selected_objects)} objects selected", 
-                    font=("Segoe UI", 10, "bold"), bg="#fafafa").pack(pady=10, padx=10)
-            return
-        
-        item = self.selected_obj["data"]
+            if self.lock_floor_ceiling.get():
+                pair_primary = self._get_floor_ceiling_primary()
+            if pair_primary is None:
+                tk.Label(self.props_inner, text=f"{len(self.selected_objects)} objects selected",
+                        font=("Segoe UI", 10, "bold"), bg="#fafafa").pack(pady=10, padx=10)
+                return
+            effective_obj = pair_primary
+
+        item = effective_obj["data"]
         item_type = item.get("Type", "Unknown")
         
         type_frame = tk.Frame(self.props_inner, bg="#e3f2fd", relief=tk.FLAT, bd=1)
         type_frame.pack(fill=tk.X, padx=8, pady=8)
         tk.Label(type_frame, text=f"Type: {item_type}", 
                 font=("Segoe UI", 10, "bold"), bg="#e3f2fd", fg="#0078d7").pack(pady=6, padx=8)
+
+        if pair_primary is not None:
+            tk.Label(type_frame, text="Linked Floor/Ceiling", font=("Segoe UI", 9),
+                     bg="#e3f2fd", fg="#005a9e").pack(pady=(0, 4))
         
         # Common properties
         if "Start" in item:
-            self._add_property_section("Start Position", item["Start"], ["X", "Y"])
+            self._add_property_section("Start Position", item, item.get("Start", {}), ["X", "Y"])
         
         if "End" in item:
-            self._add_property_section("End Position", item["End"], ["X", "Y"])
+            self._add_property_section("End Position", item, item.get("End", {}), ["X", "Y"])
         
         # Type-specific properties
         if item_type == "Cubicle":
@@ -1324,9 +1385,9 @@ class FloorplanEditor:
         
         elif item_type == "CeilingLight":
             if "Spacing" in item:
-                self._add_property_section("Spacing", item["Spacing"], ["X", "Y"])
+                self._add_property_section("Spacing", item, item["Spacing"], ["X", "Y"])
             if "Padding" in item:
-                self._add_property_section("Padding", item["Padding"], ["X", "Y"])
+                self._add_property_section("Padding", item, item["Padding"], ["X", "Y"])
             if "Yaw" in item:
                 self._add_yaw_property(item)
             elif item.get("Yaw") is None:
@@ -1346,7 +1407,7 @@ class FloorplanEditor:
             if "VolumeMultiplier" in item:
                 self._add_float_property("VolumeMultiplier", item, "VolumeMultiplier")
     
-    def _add_property_section(self, title, data_dict, keys):
+    def _add_property_section(self, title, parent_item, data_dict, keys):
         """Add a property section with multiple fields"""
         frame = tk.LabelFrame(self.props_inner, text=title, padx=8, pady=6, bg="#fafafa",
                              font=("Segoe UI", 9, "bold"), relief=tk.GROOVE, bd=1)
@@ -1362,68 +1423,70 @@ class FloorplanEditor:
             var = tk.DoubleVar(value=float(data_dict.get(key, 0.0)))
             spinbox = tk.Spinbox(row, textvariable=var, width=10, from_=-10000, to=10000, increment=10)
             spinbox.pack(side=tk.LEFT)
-            
+
             # Debounce to avoid excessive saves
             timer_id = [None]
-            
+
             def make_callback(d, k, v, tid):
                 def callback(*args):
-                    # Cancel previous timer
                     if tid[0] is not None:
                         self.root.after_cancel(tid[0])
-                    
-                    # Set new timer for 300ms delay
+
                     def apply_change():
                         try:
                             old_val = d.get(k, 0.0)
                             new_val = float(v.get())
-                            if abs(old_val - new_val) > 0.001:  # Only if actually changed
+                            if abs(old_val - new_val) > 0.001:
                                 self.save_state()
                                 d[k] = new_val
+                                if (
+                                    self.lock_floor_ceiling.get()
+                                    and parent_item is not None
+                                    and parent_item.get("Type") in ("Floor", "Ceiling")
+                                ):
+                                    self.sync_floor_ceiling_partner(parent_item)
                                 self.rebuild_canvas(preserve_selection=True)
                         except (ValueError, tk.TclError):
                             pass
                         tid[0] = None
-                    
+
                     tid[0] = self.root.after(300, apply_change)
+
                 return callback
-            
+
             var.trace_add("write", make_callback(data_dict, key, var, timer_id))
-    
+
     def _add_float_property(self, label, item, key):
         """Add a single float property"""
         frame = tk.Frame(self.props_inner, bg="#fafafa")
         frame.pack(fill=tk.X, padx=8, pady=3)
         tk.Label(frame, text=f"{label}:", width=10, anchor="w", bg="#fafafa",
                 font=("Segoe UI", 9)).pack(side=tk.LEFT)
-        
+
         var = tk.DoubleVar(value=float(item.get(key, 0.0)))
         spinbox = tk.Spinbox(frame, textvariable=var, width=10, from_=-10000, to=10000, increment=10)
         spinbox.pack(side=tk.LEFT)
-        
-        # Debounce to avoid excessive saves
+
         timer_id = [None]
-        
+
         def callback(*args):
-            # Cancel previous timer
             if timer_id[0] is not None:
                 self.root.after_cancel(timer_id[0])
-            
-            # Set new timer for 300ms delay
+
             def apply_change():
                 try:
                     old_val = item.get(key, 0.0)
                     new_val = float(var.get())
-                    if abs(old_val - new_val) > 0.001:  # Only if actually changed
+                    if abs(old_val - new_val) > 0.001:
                         self.save_state()
                         item[key] = new_val
                         self.rebuild_canvas(preserve_selection=True)
                 except (ValueError, tk.TclError):
                     pass
                 timer_id[0] = None
-            
+
             timer_id[0] = self.root.after(300, apply_change)
-        
+
         var.trace_add("write", callback)
     
     def _add_int_property(self, label, item, key):
@@ -1716,9 +1779,6 @@ class FloorplanEditor:
             obj = self.id_to_obj.get(cid)
             if obj is not None:
                 t = obj["data"].get("Type")
-                # Skip Floor/Ceiling if locked
-                if self.lock_floor_ceiling.get() and t in ("Floor", "Ceiling"):
-                    continue
                 if t in ("Wall", "Door", "Window", "Cubicle", "Floor", "Ceiling", "SpawnPoint", "CeilingLight", "RoomTone"):
                     return obj
         return None
@@ -1733,9 +1793,6 @@ class FloorplanEditor:
                 continue
             obj = self.id_to_obj.get(cid)
             if obj is None:
-                continue
-            t = obj["data"].get("Type")
-            if self.lock_floor_ceiling.get() and t in ("Floor", "Ceiling"):
                 continue
             return obj, meta
         return None, None
@@ -1798,6 +1855,170 @@ class FloorplanEditor:
         x1 = x0 + w_world
         y1 = y0 + h_world
         return [(x0, y0), (x1, y0), (x0, y1), (x1, y1)]
+
+    def _rect_signature(self, item):
+        start = item.get("Start", {}) if isinstance(item, dict) else {}
+        end = item.get("End", {}) if isinstance(item, dict) else {}
+        x0 = float(start.get("X", 0.0))
+        y0 = float(start.get("Y", 0.0))
+        x1 = float(end.get("X", 0.0))
+        y1 = float(end.get("Y", 0.0))
+        min_x, max_x = sorted((x0, x1))
+        min_y, max_y = sorted((y0, y1))
+        return (
+            round(min_x, 4),
+            round(min_y, 4),
+            round(max_x, 4),
+            round(max_y, 4),
+        )
+
+    def find_floor_ceiling_partner_data(self, item):
+        if not isinstance(item, dict):
+            return None
+        partner = self.floor_ceiling_links.get(id(item))
+        if partner is not None and partner in self.data:
+            return partner
+        item_type = item.get("Type")
+        if item_type not in ("Floor", "Ceiling"):
+            return None
+        target_type = "Ceiling" if item_type == "Floor" else "Floor"
+        signature = self._rect_signature(item)
+        for candidate in self.data:
+            if candidate is item:
+                continue
+            if candidate.get("Type") != target_type:
+                continue
+            if self._rect_signature(candidate) == signature:
+                self.floor_ceiling_links[id(item)] = candidate
+                self.floor_ceiling_links[id(candidate)] = item
+                return candidate
+        return None
+
+    def find_floor_ceiling_partner_object(self, obj):
+        if obj is None:
+            return None
+        partner_data = self.find_floor_ceiling_partner_data(obj.get("data"))
+        if partner_data is None:
+            return None
+        for candidate in self.objects:
+            if candidate["data"] is partner_data:
+                return candidate
+        return None
+
+    def _copy_floor_ceiling_shape(self, source_item, target_item):
+        if not isinstance(source_item, dict) or not isinstance(target_item, dict):
+            return
+        for key in ("Start", "End"):
+            if key not in source_item:
+                continue
+            src = source_item.get(key, {})
+            dst = target_item.setdefault(key, {})
+            dst["X"] = float(src.get("X", 0.0))
+            dst["Y"] = float(src.get("Y", 0.0))
+
+    def sync_floor_ceiling_partner(self, item):
+        partner = self.find_floor_ceiling_partner_data(item)
+        if partner is None:
+            return None
+        self._copy_floor_ceiling_shape(item, partner)
+        self.floor_ceiling_links[id(item)] = partner
+        self.floor_ceiling_links[id(partner)] = item
+        return partner
+
+    def refresh_floor_ceiling_links(self):
+        self.floor_ceiling_links.clear()
+        signature_map = {}
+
+        for item in self.data:
+            if not isinstance(item, dict):
+                continue
+            item_type = item.get("Type")
+            if item_type not in ("Floor", "Ceiling"):
+                continue
+            signature = self._rect_signature(item)
+            bucket = signature_map.setdefault(signature, {"Floor": [], "Ceiling": []})
+            bucket[item_type].append(item)
+
+        for bucket in signature_map.values():
+            floors = bucket.get("Floor", [])
+            ceilings = bucket.get("Ceiling", [])
+            for floor_item, ceiling_item in zip(floors, ceilings):
+                self.floor_ceiling_links[id(floor_item)] = ceiling_item
+                self.floor_ceiling_links[id(ceiling_item)] = floor_item
+
+    def ensure_floor_ceiling_pairs(self):
+        created_items = []
+        for item in list(self.data):
+            item_type = item.get("Type")
+            if item_type not in ("Floor", "Ceiling"):
+                continue
+
+            if self.find_floor_ceiling_partner_data(item) is not None:
+                continue
+
+            start = item.get("Start")
+            end = item.get("End")
+            if not isinstance(start, dict) or not isinstance(end, dict):
+                continue
+
+            partner_type = "Ceiling" if item_type == "Floor" else "Floor"
+            partner_start = {
+                "X": float(start.get("X", 0.0)),
+                "Y": float(start.get("Y", 0.0)),
+            }
+            partner_end = {
+                "X": float(end.get("X", 0.0)),
+                "Y": float(end.get("Y", 0.0)),
+            }
+
+            created_items.append(
+                {
+                    "Type": partner_type,
+                    "Start": partner_start,
+                    "End": partner_end,
+                }
+            )
+
+        if created_items:
+            self.save_state()
+            self.data.extend(created_items)
+            for item in created_items:
+                existing = self.find_floor_ceiling_partner_data(item)
+                if existing is None:
+                    continue
+                self.floor_ceiling_links[id(item)] = existing
+                self.floor_ceiling_links[id(existing)] = item
+            self.refresh_floor_ceiling_links()
+        return created_items
+
+    def _get_linked_selection_group(self, obj):
+        if obj is None:
+            return []
+        group = [obj]
+        if not self.lock_floor_ceiling.get():
+            return group
+        item_type = obj["data"].get("Type")
+        if item_type not in ("Floor", "Ceiling"):
+            return group
+        partner_obj = self.find_floor_ceiling_partner_object(obj)
+        if partner_obj and partner_obj not in group:
+            group.append(partner_obj)
+        return group
+
+    def _get_floor_ceiling_primary(self):
+        if len(self.selected_objects) != 2:
+            return None
+        floor_objs = [obj for obj in self.selected_objects if obj["data"].get("Type") == "Floor"]
+        ceiling_objs = [obj for obj in self.selected_objects if obj["data"].get("Type") == "Ceiling"]
+        if not floor_objs or not ceiling_objs:
+            return None
+        floor_obj = floor_objs[0]
+        partner = self.find_floor_ceiling_partner_object(floor_obj)
+        if partner is not ceiling_objs[0]:
+            return None
+        if self.selected_obj in (floor_obj, partner):
+            return self.selected_obj
+        return floor_obj
 
     def handle_anchor_drag(self, event):
         if not self.dragging_anchor:
@@ -1926,7 +2147,14 @@ class FloorplanEditor:
                     changed = True
 
         if changed:
+            partner_data = None
+            if self.lock_floor_ceiling.get() and item_type in ("Floor", "Ceiling"):
+                partner_data = self.sync_floor_ceiling_partner(item)
+
             self.redraw_item(item)
+            if partner_data is not None:
+                self.redraw_item(partner_data)
+
             self.update_properties_panel()
 
     def on_left_click(self, event):
@@ -1998,9 +2226,14 @@ class FloorplanEditor:
         self.drag_start_sx = event.x
         self.drag_start_sy = event.y
 
-        # Move all selected objects
-        for obj in self.selected_objects:
-            item = obj["data"]
+        handled_items = set()
+
+        def move_object(target_obj):
+            item = target_obj["data"]
+            data_id = id(item)
+            if data_id in handled_items:
+                return
+            handled_items.add(data_id)
 
             if "Start" in item:
                 s = item["Start"]
@@ -2012,8 +2245,19 @@ class FloorplanEditor:
                 e["X"] = float(e.get("X", 0.0)) + dx_world
                 e["Y"] = float(e.get("Y", 0.0)) + dy_world
 
-            for cid in obj["canvas_ids"]:
+            for cid in target_obj["canvas_ids"]:
                 self.canvas.move(cid, dx_pix, dy_pix)
+
+        for obj in list(self.selected_objects):
+            move_object(obj)
+
+            if (
+                self.lock_floor_ceiling.get()
+                and obj["data"].get("Type") in ("Floor", "Ceiling")
+            ):
+                partner_obj = self.find_floor_ceiling_partner_object(obj)
+                if partner_obj is not None:
+                    move_object(partner_obj)
 
     def on_release(self, event):
         if self.pending_line:
@@ -2053,12 +2297,16 @@ class FloorplanEditor:
         
         # Delete all selected objects
         for obj in self.selected_objects:
+            item = obj["data"]
+            partner = self.floor_ceiling_links.pop(id(item), None)
+            if partner is not None:
+                self.floor_ceiling_links.pop(id(partner), None)
             for cid in obj["canvas_ids"]:
                 self.canvas.delete(cid)
                 self.id_to_obj.pop(cid, None)
                 self.anchor_meta.pop(cid, None)
             try:
-                self.data.remove(obj["data"])
+                self.data.remove(item)
             except ValueError:
                 pass
             try:
@@ -2187,6 +2435,9 @@ class FloorplanEditor:
             "End": {"X": float(end_x), "Y": float(end_y)}
         }
         self.data.append(ceiling_item)
+
+        self.floor_ceiling_links[id(floor_item)] = ceiling_item
+        self.floor_ceiling_links[id(ceiling_item)] = floor_item
         
         # Rebuild and select the floor
         self.rebuild_canvas(preserve_selection=False)
@@ -2275,7 +2526,11 @@ class FloorplanEditor:
             self.clear_pending_line()
             return
 
-        self.create_line_item(pending.get("mode"), start_world, end_world)
+        mode = pending.get("mode")
+        if mode == "add_floor_ceiling":
+            self.create_floor_ceiling_pair(start_world, end_world)
+        else:
+            self.create_line_item(mode, start_world, end_world)
         self.clear_pending_line()
 
     def create_line_item(self, mode, start_world, end_world):
@@ -2402,6 +2657,9 @@ class FloorplanEditor:
             self.selected_obj = new_objects[0] if len(new_objects) == 1 else None
             for obj in new_objects:
                 self.style_object(obj, selected=True)
+
+        if any(obj["data"].get("Type") in ("Floor", "Ceiling") for obj in new_objects):
+            self.refresh_floor_ceiling_links()
         
         self.status_label.config(text=f"Pasted {len(new_objects)} object(s)")
         self.root.after(2000, lambda: self.status_label.config(
@@ -2415,15 +2673,21 @@ class FloorplanEditor:
         
         for obj in self.objects:
             item_type = obj["data"].get("Type")
-            # Only select editable objects (skip Floor/Ceiling if locked)
-            if self.lock_floor_ceiling.get() and item_type in ("Floor", "Ceiling"):
+            if item_type not in ("Wall", "Door", "Window", "Cubicle", "SpawnPoint", "CeilingLight", "RoomTone", "Floor", "Ceiling"):
                 continue
-            if item_type in ("Wall", "Door", "Window", "Cubicle", "SpawnPoint", "CeilingLight", "RoomTone", "Floor", "Ceiling"):
-                self.selected_objects.append(obj)
-                self.style_object(obj, selected=True)
+
+            group = self._get_linked_selection_group(obj) if self.lock_floor_ceiling.get() and item_type in ("Floor", "Ceiling") else [obj]
+            for member in group:
+                if member not in self.selected_objects:
+                    self.selected_objects.append(member)
+                    self.style_object(member, selected=True)
         
-        if len(self.selected_objects) == 1:
+        if self.selected_objects:
             self.selected_obj = self.selected_objects[0]
+        else:
+            self.selected_obj = None
+
+        self.update_properties_panel()
         
         return "break"
     
