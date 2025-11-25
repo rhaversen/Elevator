@@ -998,11 +998,17 @@ class FloorplanEditor:
                 y1_world = float(e.get("Y", 0.0))
                 sx0, sy0 = self.world_to_screen(x0_world, y0_world)
                 sx1, sy1 = self.world_to_screen(x1_world, y1_world)
-                cid = self.canvas.create_rectangle(sx0, sy0, sx1, sy1,
-                                                   outline="#cccccc", dash=(6, 3),
-                                                   fill="", width=1)
+                cid = self.canvas.create_rectangle(
+                    sx0,
+                    sy0,
+                    sx1,
+                    sy1,
+                    outline="#6a7aea",
+                    dash=(4, 3),
+                    fill="",
+                    width=2,
+                )
                 canvas_ids.append(cid)
-                self.canvas.tag_lower(cid)
                 
                 # Add corner anchors
                 for idx, (wx, wy) in enumerate(
