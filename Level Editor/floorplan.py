@@ -751,7 +751,21 @@ class FloorplanEditor:
         t = item.get("Type")
         canvas_ids = []
         anchors = []
+        parts = {}
+        base_styles = {}
         obj = None
+
+        def register_part(cid, role=None, capture=True):
+            if role is not None:
+                parts.setdefault(role, []).append(cid)
+            if capture:
+                try:
+                    base_styles[cid] = {
+                        "fill": self.canvas.itemcget(cid, "fill"),
+                        "outline": self.canvas.itemcget(cid, "outline"),
+                    }
+                except tk.TclError:
+                    base_styles[cid] = {}
 
         if t == "Floor":
             s = item.get("Start", {})
@@ -765,6 +779,7 @@ class FloorplanEditor:
             cid = self.canvas.create_rectangle(x0, y0, x1, y1,
                                                outline="#cccccc", fill="#f9f9f9")
             canvas_ids.append(cid)
+            register_part(cid, "body")
             self.canvas.tag_lower(cid)
             floor_corners = [
                 (x0_world, y0_world),
@@ -819,6 +834,7 @@ class FloorplanEditor:
                                                 width=width,
                                                 capstyle=tk.ROUND)
             canvas_ids.append(main_line)
+            register_part(main_line, "line")
             
             # Draw window sections if applicable
             if t == "Window":
@@ -842,6 +858,7 @@ class FloorplanEditor:
                                 sect_x + perp_x, sect_y + perp_y,
                                 fill=color, width=max(1, width))
                             canvas_ids.append(sect_line)
+                            register_part(sect_line, "line")
 
             if t == "Door":
                 dx = x1 - x0
@@ -864,6 +881,7 @@ class FloorplanEditor:
                                                         fill=color, width=max(width, width + 1),
                                                         capstyle=tk.ROUND)
                     canvas_ids.append(door_line)
+                    register_part(door_line, "line")
                     tick_length = min(door_length * 0.4, 35)
                     tick_x = mx - uy * tick_length
                     tick_y = my + ux * tick_length
@@ -871,6 +889,7 @@ class FloorplanEditor:
                                                         fill=color, width=max(1, width - 1),
                                                         capstyle=tk.ROUND)
                     canvas_ids.append(tick_line)
+                    register_part(tick_line, "line")
 
             anchor_start = self.create_anchor_marker(
                 sx_world,
@@ -925,6 +944,7 @@ class FloorplanEditor:
                                                outline="black",
                                                fill="#dddddd")
             canvas_ids.append(cid)
+            register_part(cid, "body")
             
             # Add rotation indicator (small triangle showing front/orientation)
             indicator_size = min(abs(x1 - x0), abs(y1 - y0)) * 0.12
@@ -947,6 +967,7 @@ class FloorplanEditor:
                                                fill="#ff6600", width=3,
                                                arrow=tk.LAST, arrowshape=(10, 12, 5))
             canvas_ids.append(arrow_id)
+            register_part(arrow_id, "arrow")
 
             corners = [
                 (x0_world, y0_world),
@@ -985,6 +1006,7 @@ class FloorplanEditor:
             text_id = self.canvas.create_text(cx, cy, text=dim_text,
                                              fill="#555555", font=("Arial", 9))
             canvas_ids.append(text_id)
+            register_part(text_id, "label")
 
         elif t in ("Ceiling", "CeilingLight"):
             # Visualize Ceiling or CeilingLight
@@ -1009,6 +1031,7 @@ class FloorplanEditor:
                     width=2,
                 )
                 canvas_ids.append(cid)
+                register_part(cid, "outline")
                 
                 # Add corner anchors
                 for idx, (wx, wy) in enumerate(
@@ -1060,6 +1083,7 @@ class FloorplanEditor:
                                                    outline="#ffa500", dash=(4, 4),
                                                    fill="", width=1)
                 canvas_ids.append(cid)
+                register_part(cid, "frame")
                 
                 # Draw lamp positions if enabled - now in lines along rotated axis
                 if self.show_lamps.get():
@@ -1128,6 +1152,7 @@ class FloorplanEditor:
                             line_id = self.canvas.create_line(ls_x, ls_y, le_x, le_y,
                                                               fill="#ffa500", width=1, dash=(2, 2))
                             canvas_ids.append(line_id)
+                            register_part(line_id, "gridline")
                             
                             # Place lamps along this line
                             line_length = 2 * half_w
@@ -1143,6 +1168,7 @@ class FloorplanEditor:
                                 lamp_id = self.canvas.create_oval(sx - 3, sy - 3, sx + 3, sy + 3,
                                                                   fill="#ffff00", outline="#ffa500")
                                 canvas_ids.append(lamp_id)
+                                register_part(lamp_id, "lamp")
                 
                 # Add corner anchors
                 anchor_start = self.create_anchor_marker(
@@ -1187,6 +1213,7 @@ class FloorplanEditor:
                                                    sx + radius, sy + radius,
                                                    fill="#00ff00", outline="#008800", width=2)
             canvas_ids.append(spawn_circle)
+            register_part(spawn_circle, "body")
             
             # Draw direction arrow
             angle_rad = math.radians(yaw)
@@ -1197,6 +1224,7 @@ class FloorplanEditor:
                                                  fill="#008800", width=2,
                                                  arrow=tk.LAST, arrowshape=(8, 10, 4))
             canvas_ids.append(arrow_line)
+            register_part(arrow_line, "arrow")
             
             # Add anchor
             anchor_id = self.create_anchor_marker(
@@ -1228,6 +1256,7 @@ class FloorplanEditor:
                 ar_circle = self.canvas.create_oval(ar_x0, ar_y0, ar_x1, ar_y1,
                                                     outline="#87ceeb", dash=(4, 4), width=1)
                 canvas_ids.append(ar_circle)
+                register_part(ar_circle, "radius")
             
             # Draw speaker icon at center
             speaker_size = 10
@@ -1237,6 +1266,7 @@ class FloorplanEditor:
                                                   sx + speaker_size, sy + speaker_size,
                                                   fill="#ff6b6b", outline="#c92a2a", width=2)
                 canvas_ids.append(speaker)
+                register_part(speaker, "icon")
                 
                 # Draw sound waves (3 arcs)
                 for i in range(1, 4):
@@ -1246,6 +1276,7 @@ class FloorplanEditor:
                                                  start=45, extent=90, style=tk.ARC,
                                                  outline="#ff6b6b", width=1)
                     canvas_ids.append(arc)
+                    register_part(arc, "wave")
             else:
                 # Directional: cone shape
                 cone_points = [
@@ -1256,6 +1287,7 @@ class FloorplanEditor:
                 cone = self.canvas.create_polygon(cone_points,
                                                   fill="#ff6b6b", outline="#c92a2a", width=2)
                 canvas_ids.append(cone)
+                register_part(cone, "icon")
             
             # Add anchor
             anchor_id = self.create_anchor_marker(
@@ -1268,7 +1300,13 @@ class FloorplanEditor:
             canvas_ids.append(anchor_id)
 
         if canvas_ids:
-            obj = {"data": item, "canvas_ids": canvas_ids, "anchors": anchors}
+            obj = {
+                "data": item,
+                "canvas_ids": canvas_ids,
+                "anchors": anchors,
+                "parts": parts,
+                "base_styles": base_styles,
+            }
             self.objects.append(obj)
             for cid in canvas_ids:
                 self.id_to_obj[cid] = obj
@@ -1411,7 +1449,15 @@ class FloorplanEditor:
             if "AttenuationRadius" in item:
                 self._add_float_property("AttenuationRadius", item, "AttenuationRadius")
             if "VolumeMultiplier" in item:
-                self._add_float_property("VolumeMultiplier", item, "VolumeMultiplier")
+                self._add_float_property(
+                    "VolumeMultiplier",
+                    item,
+                    "VolumeMultiplier",
+                    minimum=0.0,
+                    maximum=10.0,
+                    step=0.1,
+                    precision=2,
+                )
     
     def _add_property_section(self, title, parent_item, data_dict, keys):
         """Add a property section with multiple fields"""
@@ -1462,7 +1508,17 @@ class FloorplanEditor:
 
             var.trace_add("write", make_callback(data_dict, key, var, timer_id))
 
-    def _add_float_property(self, label, item, key):
+    def _add_float_property(
+        self,
+        label,
+        item,
+        key,
+        *,
+        minimum=-10000.0,
+        maximum=10000.0,
+        step=10.0,
+        precision=2,
+    ):
         """Add a single float property"""
         frame = tk.Frame(self.props_inner, bg="#fafafa")
         frame.pack(fill=tk.X, padx=8, pady=3)
@@ -1470,7 +1526,15 @@ class FloorplanEditor:
                 font=("Segoe UI", 9)).pack(side=tk.LEFT)
 
         var = tk.DoubleVar(value=float(item.get(key, 0.0)))
-        spinbox = tk.Spinbox(frame, textvariable=var, width=10, from_=-10000, to=10000, increment=10)
+        spinbox = tk.Spinbox(
+            frame,
+            textvariable=var,
+            width=10,
+            from_=minimum,
+            to=maximum,
+            increment=step,
+            format=f"%.{precision}f",
+        )
         spinbox.pack(side=tk.LEFT)
 
         timer_id = [None]
@@ -1694,41 +1758,102 @@ class FloorplanEditor:
         item = obj["data"]
         t = item.get("Type")
         anchors = set(obj.get("anchors", []))
-        for cid in obj["canvas_ids"]:
-            if cid in anchors:
-                state = "normal" if selected else "hidden"
-                self.canvas.itemconfigure(cid, state=state)
-                continue
-            if t in ("Wall", "Door", "Window"):
-                if t == "Wall":
-                    base_color = "#222222"
-                elif t == "Door":
-                    base_color = "#2b8a45"
-                else:
-                    base_color = "#1d6bd6"
-                color = "red" if selected else base_color
+        base_styles = obj.get("base_styles", {})
+        parts = obj.get("parts", {})
+
+        for cid in anchors:
+            try:
+                self.canvas.itemconfigure(cid, state="normal" if selected else "hidden")
+            except tk.TclError:
+                pass
+
+        def restore_style(cid):
+            style = base_styles.get(cid)
+            if not style:
+                return
+            self._apply_canvas_colors(
+                cid,
+                fill=style.get("fill"),
+                outline=style.get("outline"),
+            )
+
+        if not selected:
+            for cid in obj["canvas_ids"]:
+                if cid in anchors:
+                    continue
+                restore_style(cid)
+            return
+
+        touched = set()
+
+        if t in ("Wall", "Door", "Window"):
+            if t == "Wall":
+                color = "#ff5252"
+            elif t == "Door":
+                color = "#2fb46d"
+            else:
+                color = "#5393ff"
+            for cid in obj["canvas_ids"]:
+                if cid in anchors:
+                    continue
                 self._apply_canvas_colors(cid, fill=color, outline=color)
-            elif t == "Cubicle":
-                outline = "red" if selected else "black"
-                fill = "#ffeecc" if selected else "#dddddd"
-                self._apply_canvas_colors(cid, fill=fill, outline=outline)
-            elif t == "Floor":
-                outline = "#ffaaaa" if selected else "#cccccc"
-                self._apply_canvas_colors(cid, outline=outline)
-            elif t == "Ceiling":
-                outline = "red" if selected else "#cccccc"
-                self._apply_canvas_colors(cid, outline=outline)
-            elif t == "SpawnPoint":
-                outline = "red" if selected else "#008800"
-                fill = "#ffff00" if selected else "#00ff00"
-                self._apply_canvas_colors(cid, fill=fill, outline=outline)
-            elif t == "CeilingLight":
-                outline = "red" if selected else "#ffa500"
-                self._apply_canvas_colors(cid, outline=outline)
-            elif t == "RoomTone":
-                outline = "red" if selected else "#c92a2a"
-                fill = "#ffcccc" if selected else "#ff6b6b"
-                self._apply_canvas_colors(cid, fill=fill, outline=outline)
+                touched.add(cid)
+        elif t == "Floor":
+            for cid in parts.get("body", []):
+                self._apply_canvas_colors(cid, outline="#ff6666")
+                touched.add(cid)
+        elif t == "Ceiling":
+            for cid in parts.get("outline", []):
+                self._apply_canvas_colors(cid, outline="#ff6666")
+                touched.add(cid)
+        elif t == "Cubicle":
+            for cid in parts.get("body", []):
+                self._apply_canvas_colors(cid, fill="#fde7c7", outline="#ff5a5f")
+                touched.add(cid)
+            for cid in parts.get("arrow", []):
+                self._apply_canvas_colors(cid, fill="#ff5a5f", outline="#ff5a5f")
+                touched.add(cid)
+            for cid in parts.get("label", []):
+                self._apply_canvas_colors(cid, fill="#c2410c")
+                touched.add(cid)
+        elif t == "SpawnPoint":
+            for cid in parts.get("body", []):
+                self._apply_canvas_colors(cid, fill="#fff08a", outline="#d9480f")
+                touched.add(cid)
+            for cid in parts.get("arrow", []):
+                self._apply_canvas_colors(cid, fill="#d9480f", outline="#d9480f")
+                touched.add(cid)
+        elif t == "CeilingLight":
+            for cid in parts.get("frame", []):
+                self._apply_canvas_colors(cid, outline="#ff8c00")
+                touched.add(cid)
+            for cid in parts.get("gridline", []):
+                self._apply_canvas_colors(cid, fill="#ff8c00")
+                touched.add(cid)
+            for cid in parts.get("lamp", []):
+                self._apply_canvas_colors(cid, fill="#fff3a1", outline="#ffb347")
+                touched.add(cid)
+        elif t == "RoomTone":
+            for cid in parts.get("icon", []):
+                self._apply_canvas_colors(cid, fill="#ff9090", outline="#ff3b3b")
+                touched.add(cid)
+            for cid in parts.get("wave", []):
+                self._apply_canvas_colors(cid, fill="#ff9090", outline="#ff9090")
+                touched.add(cid)
+            for cid in parts.get("radius", []):
+                restore_style(cid)
+                touched.add(cid)
+        else:
+            for cid in obj["canvas_ids"]:
+                if cid in anchors:
+                    continue
+                self._apply_canvas_colors(cid, outline="#ff5a5f")
+                touched.add(cid)
+
+        for cid in obj["canvas_ids"]:
+            if cid in anchors or cid in touched:
+                continue
+            restore_style(cid)
 
     def can_rotate(self, item):
         return "Yaw" in item
