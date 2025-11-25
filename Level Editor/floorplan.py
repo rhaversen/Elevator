@@ -93,8 +93,9 @@ class FloorplanEditor:
 
         for text, value in [("Select", "select"), ("Cubicle", "add_cubicle"),
                             ("Wall", "add_wall"), ("Door", "add_door"),
-                            ("Window", "add_window"), ("Spawn", "add_spawn"),
-                            ("RoomTone", "add_roomtone"), ("Floor+Ceiling", "add_floor_ceiling")]:
+                            ("Window", "add_window"), ("Elevator", "add_elevator"),
+                            ("Spawn", "add_spawn"), ("RoomTone", "add_roomtone"),
+                            ("Floor+Ceiling", "add_floor_ceiling")]:
             tk.Radiobutton(
                 mode_frame,
                 text=text,
@@ -627,7 +628,7 @@ class FloorplanEditor:
         mode = self.mode.get()
         if self.pending_line:
             pending_mode = self.pending_line.get("mode")
-            if pending_mode != mode or mode not in ("add_wall", "add_door", "add_window"):
+            if pending_mode != mode or mode not in ("add_wall", "add_door", "add_window", "add_elevator"):
                 self.clear_pending_line()
 
     def draw_background_grid(self):
@@ -901,6 +902,108 @@ class FloorplanEditor:
                 ex_world,
                 ey_world,
                 color="#1f78d1",
+                meta={"kind": "endpoint", "endpoint": "end"},
+            )
+            anchors.extend([anchor_start, anchor_end])
+            canvas_ids.extend([anchor_start, anchor_end])
+
+            center_world_x = (sx_world + ex_world) / 2.0
+            center_world_y = (sy_world + ey_world) / 2.0
+            center_anchor = self.create_anchor_marker(
+                center_world_x,
+                center_world_y,
+                color="#777777",
+                size=5,
+                meta={"kind": "center", "center": (center_world_x, center_world_y)},
+            )
+            anchors.append(center_anchor)
+            canvas_ids.append(center_anchor)
+
+        elif t == "Elevator":
+            # Draw elevator as a wall line with a cab (rectangle) behind it
+            s = item.get("Start", {})
+            e = item.get("End", {})
+            sx_world = float(s.get("X", 0.0))
+            sy_world = float(s.get("Y", 0.0))
+            ex_world = float(e.get("X", 0.0))
+            ey_world = float(e.get("Y", 0.0))
+            x0, y0 = self.world_to_screen(sx_world, sy_world)
+            x1, y1 = self.world_to_screen(ex_world, ey_world)
+
+            wall_color = "#9b59b6"  # Purple for elevator wall
+            cab_color = "#e8daef"   # Light purple for cab interior
+
+            dx = x1 - x0
+            dy = y1 - y0
+            length = math.hypot(dx, dy)
+
+            if length > 1e-6:
+                # Perpendicular direction pointing "into" the cab (behind the wall)
+                # The cab extends perpendicular to the wall line
+                perp_x = -dy / length
+                perp_y = dx / length
+
+                # Cab depth in screen pixels (scaled based on world units)
+                cab_depth_world = 250.0  # Approximate cab depth in world units
+                # Convert to screen scale
+                wx0, wy0, wx1, wy1 = self.world_bbox
+                width, height = self.current_canvas_size()
+                scale_x = width / (wx1 - wx0) if wx1 != wx0 else 1
+                cab_depth_screen = cab_depth_world * scale_x
+
+                # Calculate cab rectangle corners (behind the wall)
+                cab_corners = [
+                    x0, y0,
+                    x1, y1,
+                    x1 + perp_x * cab_depth_screen, y1 + perp_y * cab_depth_screen,
+                    x0 + perp_x * cab_depth_screen, y0 + perp_y * cab_depth_screen,
+                ]
+
+                # Draw cab rectangle first (behind)
+                cab_rect = self.canvas.create_polygon(
+                    cab_corners,
+                    fill=cab_color,
+                    outline="#c39bd3",
+                    width=1
+                )
+                canvas_ids.append(cab_rect)
+                register_part(cab_rect, "cab")
+                self.canvas.tag_lower(cab_rect)  # Send to back
+
+            # Draw the elevator wall/door line (flat against the opening)
+            wall_line = self.canvas.create_line(x0, y0, x1, y1,
+                                                fill=wall_color,
+                                                width=4,
+                                                capstyle=tk.PROJECTING)
+            canvas_ids.append(wall_line)
+            register_part(wall_line, "line")
+
+            # Draw door split indicator in the center (only if we have valid perpendicular)
+            if length > 1e-6:
+                mx = (x0 + x1) / 2
+                my = (y0 + y1) / 2
+                # Small perpendicular tick to indicate door split
+                tick_len = 8
+                perp_nx = -dy / length
+                perp_ny = dx / length
+                tick_line = self.canvas.create_line(
+                    mx - perp_nx * tick_len, my - perp_ny * tick_len,
+                    mx + perp_nx * tick_len, my + perp_ny * tick_len,
+                    fill=wall_color, width=2)
+                canvas_ids.append(tick_line)
+                register_part(tick_line, "line")
+
+            # Add anchors
+            anchor_start = self.create_anchor_marker(
+                sx_world,
+                sy_world,
+                color="#9b59b6",
+                meta={"kind": "endpoint", "endpoint": "start"},
+            )
+            anchor_end = self.create_anchor_marker(
+                ex_world,
+                ey_world,
+                color="#9b59b6",
                 meta={"kind": "endpoint", "endpoint": "end"},
             )
             anchors.extend([anchor_start, anchor_end])
@@ -1843,6 +1946,13 @@ class FloorplanEditor:
             for cid in parts.get("radius", []):
                 restore_style(cid)
                 touched.add(cid)
+        elif t == "Elevator":
+            for cid in parts.get("line", []):
+                self._apply_canvas_colors(cid, fill="#d896ff", outline="#d896ff")
+                touched.add(cid)
+            for cid in parts.get("cab", []):
+                self._apply_canvas_colors(cid, fill="#f5eef8", outline="#d896ff")
+                touched.add(cid)
         else:
             for cid in obj["canvas_ids"]:
                 if cid in anchors:
@@ -1910,7 +2020,7 @@ class FloorplanEditor:
             obj = self.id_to_obj.get(cid)
             if obj is not None:
                 t = obj["data"].get("Type")
-                if t in ("Wall", "Door", "Window", "Cubicle", "Floor", "Ceiling", "SpawnPoint", "CeilingLight", "RoomTone"):
+                if t in ("Wall", "Door", "Window", "Elevator", "Cubicle", "Floor", "Ceiling", "SpawnPoint", "CeilingLight", "RoomTone"):
                     return obj
         return None
 
@@ -2292,7 +2402,7 @@ class FloorplanEditor:
         mode = self.mode.get()
         wx, wy = self.screen_to_world(event.x, event.y)
 
-        if mode not in ("add_wall", "add_door", "add_window", "add_floor_ceiling"):
+        if mode not in ("add_wall", "add_door", "add_window", "add_elevator", "add_floor_ceiling"):
             self.clear_pending_line()
 
         if mode == "select":
@@ -2323,7 +2433,7 @@ class FloorplanEditor:
             self.add_roomtone_at(wx, wy)
         elif mode == "add_floor_ceiling":
             self.handle_floor_ceiling_press(event)
-        elif mode in ("add_wall", "add_door", "add_window"):
+        elif mode in ("add_wall", "add_door", "add_window", "add_elevator"):
             self.handle_line_press(mode, event)
 
     def on_drag(self, event):
@@ -2509,6 +2619,7 @@ class FloorplanEditor:
             "add_wall": "#222222",
             "add_door": "#2b8a45",
             "add_window": "#1d6bd6",
+            "add_elevator": "#9b59b6",
             "add_floor_ceiling": "#9966cc",
         }.get(mode, "#555555")
     
@@ -2679,6 +2790,9 @@ class FloorplanEditor:
         elif mode == "add_door":
             t = "Door"
             thickness = 1.0
+        elif mode == "add_elevator":
+            t = "Elevator"
+            thickness = None  # Elevator doesn't use thickness
         else:
             t = "Window"
             thickness = 1.0
@@ -2687,8 +2801,9 @@ class FloorplanEditor:
             "Type": t,
             "Start": {"X": float(start_x), "Y": float(start_y)},
             "End": {"X": float(end_x), "Y": float(end_y)},
-            "Thickness": float(thickness)
         }
+        if thickness is not None:
+            item["Thickness"] = float(thickness)
         self.data.append(item)
         obj = self.draw_item(item)
         if obj is not None:
@@ -2804,7 +2919,7 @@ class FloorplanEditor:
         
         for obj in self.objects:
             item_type = obj["data"].get("Type")
-            if item_type not in ("Wall", "Door", "Window", "Cubicle", "SpawnPoint", "CeilingLight", "RoomTone", "Floor", "Ceiling"):
+            if item_type not in ("Wall", "Door", "Window", "Elevator", "Cubicle", "SpawnPoint", "CeilingLight", "RoomTone", "Floor", "Ceiling"):
                 continue
 
             group = self._get_linked_selection_group(obj) if self.lock_floor_ceiling.get() and item_type in ("Floor", "Ceiling") else [obj]
