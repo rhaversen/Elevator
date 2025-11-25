@@ -2114,20 +2114,144 @@ class FloorplanEditor:
         
         self.save_state()  # Save state for undo
         
-        # Rotate all selected objects
-        any_rotated = False
-        for obj in self.selected_objects:
+        # If only one object selected, rotate it around its own center
+        if len(self.selected_objects) == 1:
+            obj = self.selected_objects[0]
             item = obj["data"]
             if self.can_rotate(item):
                 self.apply_rotation(item, delta_deg)
                 if self.snap_to_grid.get():
                     self.snap_object(item)
-                any_rotated = True
+                self.rebuild_canvas(preserve_selection=True)
+            elif hasattr(self.root, "bell"):
+                self.root.bell()
+            return
         
-        if any_rotated:
-            self.rebuild_canvas(preserve_selection=True)
-        elif hasattr(self.root, "bell"):
-            self.root.bell()
+        # Multiple objects: rotate around common center
+        # First, calculate common center of all selected objects
+        all_points = []
+        for obj in self.selected_objects:
+            item = obj["data"]
+            center = self._get_object_center(item)
+            if center:
+                all_points.append(center)
+        
+        if not all_points:
+            return
+        
+        # Calculate centroid
+        center_x = sum(p[0] for p in all_points) / len(all_points)
+        center_y = sum(p[1] for p in all_points) / len(all_points)
+        
+        # Rotate each object around the common center
+        angle_rad = math.radians(delta_deg)
+        cos_a = math.cos(angle_rad)
+        sin_a = math.sin(angle_rad)
+        
+        for obj in self.selected_objects:
+            item = obj["data"]
+            self._rotate_object_around_point(item, center_x, center_y, cos_a, sin_a, delta_deg)
+            if self.snap_to_grid.get():
+                self.snap_object(item)
+        
+        self.rebuild_canvas(preserve_selection=True)
+
+    def _get_object_center(self, item):
+        """Get the center point of an object in world coordinates."""
+        item_type = item.get("Type", "")
+        
+        if item_type == "Cubicle":
+            start = item.get("Start", {})
+            yaw = self.normalize_yaw(float(item.get("Yaw", 0.0)))
+            display_width = float(self.cubicle_display_width.get())
+            display_depth = float(self.cubicle_display_depth.get())
+            dim = {"X": display_width, "Y": display_depth}
+            vis_yaw = self.normalize_yaw(yaw + 90.0)
+            w, h = self.get_axis_size(dim, vis_yaw)
+            x0 = float(start.get("X", 0.0))
+            y0 = float(start.get("Y", 0.0))
+            return (x0 + w / 2, y0 + h / 2)
+        
+        elif "Start" in item and "End" in item:
+            # Rectangle or line-based objects (Wall, Door, Window, Floor, Ceiling, etc.)
+            s = item["Start"]
+            e = item["End"]
+            x0 = float(s.get("X", 0.0))
+            y0 = float(s.get("Y", 0.0))
+            x1 = float(e.get("X", 0.0))
+            y1 = float(e.get("Y", 0.0))
+            return ((x0 + x1) / 2, (y0 + y1) / 2)
+        
+        elif "Start" in item:
+            # Point-based objects (SpawnPoint, RoomTone)
+            s = item["Start"]
+            return (float(s.get("X", 0.0)), float(s.get("Y", 0.0)))
+        
+        return None
+
+    def _rotate_object_around_point(self, item, cx, cy, cos_a, sin_a, delta_deg):
+        """Rotate an object around a given center point."""
+        item_type = item.get("Type", "")
+        
+        def rotate_point(x, y):
+            """Rotate point (x, y) around (cx, cy)."""
+            dx = x - cx
+            dy = y - cy
+            new_x = cx + dx * cos_a - dy * sin_a
+            new_y = cy + dx * sin_a + dy * cos_a
+            return new_x, new_y
+        
+        if item_type == "Cubicle":
+            # Get current center
+            start = item.get("Start", {})
+            yaw_old = self.normalize_yaw(float(item.get("Yaw", 0.0)))
+            display_width = float(self.cubicle_display_width.get())
+            display_depth = float(self.cubicle_display_depth.get())
+            dim = {"X": display_width, "Y": display_depth}
+            vis_yaw_old = self.normalize_yaw(yaw_old + 90.0)
+            w_old, h_old = self.get_axis_size(dim, vis_yaw_old)
+            x0 = float(start.get("X", 0.0))
+            y0 = float(start.get("Y", 0.0))
+            obj_cx = x0 + w_old / 2
+            obj_cy = y0 + h_old / 2
+            
+            # Rotate center around common center
+            new_cx, new_cy = rotate_point(obj_cx, obj_cy)
+            
+            # Update yaw
+            yaw_new = self.normalize_yaw(yaw_old + delta_deg)
+            item["Yaw"] = yaw_new
+            
+            # Calculate new start position based on new center and new dimensions
+            vis_yaw_new = self.normalize_yaw(yaw_new + 90.0)
+            w_new, h_new = self.get_axis_size(dim, vis_yaw_new)
+            start["X"] = new_cx - w_new / 2
+            start["Y"] = new_cy - h_new / 2
+        
+        elif "Start" in item and "End" in item:
+            # Rotate both endpoints
+            s = item["Start"]
+            e = item["End"]
+            x0, y0 = float(s.get("X", 0.0)), float(s.get("Y", 0.0))
+            x1, y1 = float(e.get("X", 0.0)), float(e.get("Y", 0.0))
+            
+            new_x0, new_y0 = rotate_point(x0, y0)
+            new_x1, new_y1 = rotate_point(x1, y1)
+            
+            s["X"], s["Y"] = new_x0, new_y0
+            e["X"], e["Y"] = new_x1, new_y1
+        
+        elif "Start" in item:
+            # Point-based objects
+            s = item["Start"]
+            x, y = float(s.get("X", 0.0)), float(s.get("Y", 0.0))
+            new_x, new_y = rotate_point(x, y)
+            s["X"], s["Y"] = new_x, new_y
+            
+            # Also rotate object's yaw if it has one
+            if self.can_rotate(item):
+                yaw_old = self.normalize_yaw(item.get("Yaw", 0.0))
+                item["Yaw"] = self.normalize_yaw(yaw_old + delta_deg)
 
     def apply_rotation(self, item, delta_deg):
         yaw_old = self.normalize_yaw(item.get("Yaw", 0.0))
