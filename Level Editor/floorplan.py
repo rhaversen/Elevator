@@ -73,8 +73,8 @@ class FloorplanEditor:
         self.grid_size = tk.DoubleVar(value=100.0)
         self.show_lamps = tk.BooleanVar(value=True)
         self.lock_floor_ceiling = tk.BooleanVar(value=True)
-        self.cubicle_display_width = tk.DoubleVar(value=300.0)
-        self.cubicle_display_depth = tk.DoubleVar(value=250.0)
+        self.cubicle_display_width = tk.DoubleVar(value=196.874405)
+        self.cubicle_display_depth = tk.DoubleVar(value=112.691925)
 
         # Set up traces
         self.current_mode.trace_add("write", self.on_mode_changed)
