@@ -33,6 +33,10 @@ struct FElevatorDayProgramEntry
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Day")
     TArray<FName> SoundsToPlay;
+
+    /** Element override set IDs to apply for this day (from ElementOverrides.json) */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Day")
+    TArray<FName> ElementOverrideSets;
 };
 
 USTRUCT()
@@ -48,6 +52,10 @@ struct FElevatorDaySchedule
 
     UPROPERTY()
     TArray<FName> DefaultLockedButtons;
+
+    /** Default element override set IDs applied to all days unless overridden */
+    UPROPERTY()
+    TArray<FName> DefaultElementOverrideSets;
 };
 
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnElevatorDayChanged, int32 /*DayIndex*/, const FElevatorDayProgramEntry& /*Config*/);
@@ -71,6 +79,10 @@ public:
 
     int32 GetCurrentDay() const { return CurrentDayIndex; }
     FName GetActiveProgramId() const { return ActiveProgramId; }
+    const FElevatorDayProgramEntry& GetActiveDayConfig() const { return ActiveDayConfig; }
+
+    /** Get the currently active element override set IDs (merged from defaults and day-specific) */
+    const TArray<FName>& GetActiveElementOverrideSets() const { return CurrentElementOverrideSets; }
 
     bool IsTaskComplete() const { return bTaskComplete; }
     void SetTaskComplete(bool bCompleted);
@@ -95,6 +107,7 @@ private:
     FElevatorDayProgramEntry MakeDefaultEntry(int32 DayIndex) const;
     const FElevatorDayProgramEntry* FindConfigForDay(int32 DayIndex) const;
     TSet<FName> BuildLockedButtonSet(const FElevatorDayProgramEntry& Entry) const;
+    TArray<FName> BuildElementOverrideSetList(const FElevatorDayProgramEntry& Entry) const;
 
     FElevatorDaySchedule Schedule;
     int32 CurrentDayIndex = 0;
@@ -102,6 +115,7 @@ private:
     FName ActiveProgramId = NAME_None;
     FElevatorDayProgramEntry ActiveDayConfig;
     TSet<FName> CurrentLockedButtons;
+    TArray<FName> CurrentElementOverrideSets;
 
     FOnElevatorDayChanged DayChangedDelegate;
     FOnElevatorTaskStateChanged TaskStateChangedDelegate;

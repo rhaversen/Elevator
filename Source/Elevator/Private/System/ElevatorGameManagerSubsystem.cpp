@@ -243,6 +243,21 @@ void UElevatorGameManagerSubsystem::LoadSchedule()
         }
     }
 
+    // Parse DefaultElementOverrideSets
+    const TArray<TSharedPtr<FJsonValue>>* DefaultOverrideSetsArray = nullptr;
+    if (RootObject->TryGetArrayField(TEXT("DefaultElementOverrideSets"), DefaultOverrideSetsArray))
+    {
+        Schedule.DefaultElementOverrideSets.Reset();
+        for (const TSharedPtr<FJsonValue>& Value : *DefaultOverrideSetsArray)
+        {
+            FString SetIdString;
+            if (Value.IsValid() && Value->TryGetString(SetIdString))
+            {
+                Schedule.DefaultElementOverrideSets.Add(FName(*SetIdString));
+            }
+        }
+    }
+
     const TArray<TSharedPtr<FJsonValue>>* DaysArray = nullptr;
     if (RootObject->TryGetArrayField(TEXT("Days"), DaysArray))
     {
@@ -290,11 +305,12 @@ void UElevatorGameManagerSubsystem::LoadSchedule()
         Schedule.Days.Add(MakeDefaultEntry(0));
     }
 
-    UE_LOG(LogTemp, Log, TEXT("[Manager] Loaded day schedule from %s. DayCount=%d DefaultProgram=%s DefaultLocked=%s"),
+    UE_LOG(LogTemp, Log, TEXT("[Manager] Loaded day schedule from %s. DayCount=%d DefaultProgram=%s DefaultLocked=%s DefaultOverrideSets=%s"),
         *SchedulePath,
         Schedule.Days.Num(),
         *Schedule.DefaultProgramId.ToString(),
-        *JoinNames(Schedule.DefaultLockedButtons));
+        *JoinNames(Schedule.DefaultLockedButtons),
+        *JoinNames(Schedule.DefaultElementOverrideSets));
 }
 
 void UElevatorGameManagerSubsystem::ApplyCurrentDayConfig(bool bBroadcast)
@@ -309,11 +325,13 @@ void UElevatorGameManagerSubsystem::ApplyCurrentDayConfig(bool bBroadcast)
     }
 
     CurrentLockedButtons = BuildLockedButtonSet(ActiveDayConfig);
+    CurrentElementOverrideSets = BuildElementOverrideSetList(ActiveDayConfig);
 
-    UE_LOG(LogTemp, Log, TEXT("[Manager] Day %d config applied. Program=%s LockedButtons=%s"),
+    UE_LOG(LogTemp, Log, TEXT("[Manager] Day %d config applied. Program=%s LockedButtons=%s OverrideSets=%s"),
         CurrentDayIndex,
         *ActiveProgramId.ToString(),
-        *JoinNames(CurrentLockedButtons));
+        *JoinNames(CurrentLockedButtons),
+        *JoinNames(CurrentElementOverrideSets));
 
     if (bBroadcast)
     {
@@ -328,6 +346,7 @@ FElevatorDayProgramEntry UElevatorGameManagerSubsystem::MakeDefaultEntry(int32 D
     Entry.DayNumber = DayIndex;
     Entry.ProgramId = Schedule.DefaultProgramId.IsNone() ? ScreenProgramIds::SimpleButton : Schedule.DefaultProgramId;
     Entry.LockedButtons = Schedule.DefaultLockedButtons;
+    Entry.ElementOverrideSets = Schedule.DefaultElementOverrideSets;
     return Entry;
 }
 
@@ -368,6 +387,31 @@ TSet<FName> UElevatorGameManagerSubsystem::BuildLockedButtonSet(const FElevatorD
         if (!ButtonId.IsNone())
         {
             Result.Add(ButtonId);
+        }
+    }
+
+    return Result;
+}
+
+TArray<FName> UElevatorGameManagerSubsystem::BuildElementOverrideSetList(const FElevatorDayProgramEntry& Entry) const
+{
+    TArray<FName> Result;
+
+    // Add default override sets first
+    for (const FName& SetId : Schedule.DefaultElementOverrideSets)
+    {
+        if (!SetId.IsNone())
+        {
+            Result.AddUnique(SetId);
+        }
+    }
+
+    // Add day-specific override sets (these can override defaults)
+    for (const FName& SetId : Entry.ElementOverrideSets)
+    {
+        if (!SetId.IsNone())
+        {
+            Result.AddUnique(SetId);
         }
     }
 

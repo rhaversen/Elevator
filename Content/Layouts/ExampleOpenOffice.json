@@ -46,6 +46,7 @@
       "VolumeMultiplier": 0.1
     },
     {
+      "Id": "MainCubicle",
       "Type": "Cubicle",
       "Start": { "X": 600.0, "Y": -300.0 },
       "Dimensions": { "X": 300.0, "Y": 250.0 },
@@ -143,6 +144,7 @@
       "End":   { "X": -1800.0, "Y": 100.0 }
     },
     {
+      "Id": "MainElevator",
       "Type": "Elevator",
       "Start": { "X": -2300.0, "Y": 100.0 },
       "End":   { "X": -2050.0, "Y": 100.0 }

@@ -65,6 +65,22 @@ public:
     UFUNCTION(BlueprintPure, Category = "Elevator")
     float GetDoorFraction(EProceduralElevatorDoorSlot Slot) const;
 
+    /** Sets the elevator locked state. When locked, doors stay closed and buttons don't work. */
+    UFUNCTION(BlueprintCallable, Category = "Elevator")
+    void SetLocked(bool bLocked);
+
+    /** Returns true if the elevator is locked. */
+    UFUNCTION(BlueprintPure, Category = "Elevator")
+    bool IsLocked() const { return bDoorsLocked; }
+
+    /** Sets the element ID for this elevator (used for override lookups). */
+    UFUNCTION(BlueprintCallable, Category = "Elevator")
+    void SetElementId(FName InElementId) { ElementId = InElementId; }
+
+    /** Gets the element ID for this elevator. */
+    UFUNCTION(BlueprintPure, Category = "Elevator")
+    FName GetElementId() const { return ElementId; }
+
     /** Helper to check if a component is one of our interactive buttons */
     UFUNCTION(BlueprintPure, Category = "Interaction")
     bool IsInteractiveButton(UPrimitiveComponent* Component) const;
@@ -251,7 +267,14 @@ private:
 
     TUniquePtr<FProceduralElevatorDoorController> DoorController;
 
-    bool bDoorsLocked = false;
+    /** Element ID for this elevator, used for override lookups. Serialized so it persists to PIE. */
+    UPROPERTY()
+    FName ElementId;
+
+    /** Whether the elevator is locked (doors stay closed, buttons don't work). Serialized so it persists to PIE. */
+    UPROPERTY()
+    bool bDoorsLocked = true;  // Elevators are locked by default
+    
     FTimerHandle DoorUnlockTimerHandle;
     mutable TWeakObjectPtr<UPrimitiveComponent> LastHighlightedButton;
 };

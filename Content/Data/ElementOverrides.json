@@ -1,0 +1,17 @@
+{
+	"OverrideSets": [
+		{
+			"SetId": "Day1",
+			"Overrides": [
+				{
+					"ElementId": "MainCubicle",
+					"bPoweredOn": true
+				},
+				{
+					"ElementId": "MainElevator",
+					"bLocked": false
+				}
+			]
+		}
+	]
+}

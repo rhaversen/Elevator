@@ -5,6 +5,7 @@
 #include "Interactable.h"
 #include "InteractionFocusProvider.h"
 #include "Audio/ProceduralAudioSettings.h"
+#include "Procedural/ElementOverrides.h"
 #include "ProceduralOfficeGenerator.generated.h"
 
 class UChildActorComponent;
@@ -37,6 +38,10 @@ USTRUCT(BlueprintType)
 struct FOfficeElementDefinition
 {
     GENERATED_BODY()
+
+    /** Optional unique identifier for this element, used for property overrides */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
+    FName Id = NAME_None;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layout")
     EOfficeElementType Type = EOfficeElementType::Floor;
@@ -135,22 +140,40 @@ public:
     // IInteractionFocusProvider interface
     virtual bool EvaluateInteractionFocus_Implementation(APawn* PlayerPawn, const FHitResult& Hit, float AssistRadius, UPrimitiveComponent*& OutHighlightComponent) override;
 
+    /** Check if an element is locked by its ID. Returns true (locked) if element not found. */
+    UFUNCTION(BlueprintPure, Category = "Elevator")
+    bool IsElementLocked(FName ElementId) const;
+
+    /** Ensure element overrides are loaded (used by child actors spawned via child actor components). */
+    void EnsureElementOverridesLoaded() const;
+
 protected:
     bool LoadLayoutData(FOfficeLayout& OutLayout) const;
+    bool LoadElementOverrides() const;
     void BuildFromLayout(const FOfficeLayout& Layout);
     void BuildElement(const FOfficeElementDefinition& Element);
+    
+    /** Get the property override for an element, returns nullptr if no override exists */
+    const FElementPropertyOverride* GetElementOverride(FName ElementId) const;
+    
     void PlaceSurface(EOfficeElementType Type, const FVector2D& Start, const FVector2D& End);
     void PlaceWall(const FVector2D& Start, const FVector2D& End);
     void PlaceWindow(const FVector2D& Start, const FVector2D& End, float Thickness, int32 SectionCount);
     void PlaceSpawnPoint(const FVector2D& Location, float HeightOffset, float Yaw);
-    void PlaceCubicle(const FVector2D& Center, const FVector2D& Size, float Yaw);
+    void PlaceCubicle(const FVector2D& Center, const FVector2D& Size, float Yaw, FName ElementId = NAME_None, const FElementPropertyOverride* Override = nullptr);
     void PlaceCeilingLights(const FVector2D& Start, const FVector2D& End, const FVector2D& Spacing, const FVector2D& Padding, float DirectionYawDegrees);
     void PlaceDoor(const FOfficeElementDefinition& Element);
-    void PlaceElevator(const FOfficeElementDefinition& Element);
+    void PlaceElevator(const FOfficeElementDefinition& Element, const FElementPropertyOverride* Override = nullptr);
     void PlaceRoomTone(const FOfficeElementDefinition& Element);
 
     UInstancedStaticMeshComponent* GetOrCreateISMC(UStaticMesh* Mesh, const FName& ComponentName, UMaterialInterface* OverrideMaterial = nullptr);
     void DestroySpawnedComponents();
+
+    /** Cached element overrides data loaded from JSON (mutable for lazy-loading in const methods) */
+    mutable FElementOverridesData ElementOverridesData;
+    
+    /** Currently active element override set IDs (mutable for lazy-loading in const methods) */
+    mutable TArray<FName> ActiveOverrideSetIds;
 
     UPROPERTY(VisibleAnywhere, Category = "Generation")
     TObjectPtr<USceneComponent> Root;
@@ -596,6 +619,12 @@ protected:
     int32 FindClosestComputerInstance(const FVector& WorldPoint, float Radius) const;
     UStaticMeshComponent* GetOrCreateComputerHighlightProxy(UInstancedStaticMeshComponent* SourceComponent);
 
+    /** Check if a workstation at a given instance index is powered on (based on element overrides) */
+    bool IsWorkstationPoweredOn(int32 InstanceIndex) const;
+    
+    /** Check if an elevator with the given element ID is locked */
+    bool IsElevatorLocked(FName ElementId) const;
+
     UPROPERTY()
     TMap<FName, TObjectPtr<UInstancedStaticMeshComponent>> InstancedCache;
 
@@ -625,6 +654,12 @@ protected:
 
     UPROPERTY(Transient)
     bool bBootPendingForCurrentInteraction = false;
+
+    /** Maps workstation instance index to the element ID (for looking up overrides) */
+    TMap<int32, FName> WorkstationInstanceToElementId;
+    
+    /** Maps elevator child actor component to its element ID */
+    TMap<TObjectPtr<UChildActorComponent>, FName> ElevatorComponentToElementId;
 
     void NotifyComputerLookedAt(const UPrimitiveComponent* Component, int32 InstanceIndex);
 };

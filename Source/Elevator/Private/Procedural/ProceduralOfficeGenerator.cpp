@@ -2,6 +2,7 @@
 #include "Procedural/ProceduralOfficeGenerator.Helpers.h"
 #include "Procedural/ProceduralOfficeGenerator.Log.h"
 #include "Procedural/ProceduralElevator.h"
+#include "Procedural/ElementOverrides.h"
 #include "UI/InteractiveScreenComponent.h"
 #include "UI/Programs/SimpleButtonProgram.h"
 #include "System/ElevatorGameManagerSubsystem.h"
@@ -397,6 +398,9 @@ void AProceduralOfficeGenerator::GenerateFromData()
 {
     DestroySpawnedComponents();
 
+    // Load element overrides from JSON
+    LoadElementOverrides();
+
     FOfficeLayout Layout;
     if (!LoadLayoutData(Layout))
     {
@@ -444,6 +448,151 @@ bool AProceduralOfficeGenerator::LoadLayoutData(FOfficeLayout &OutLayout) const
     return true;
 }
 
+bool AProceduralOfficeGenerator::LoadElementOverrides() const
+{
+    ElementOverridesData = FElementOverridesData();
+    ActiveOverrideSetIds.Empty();
+    
+    // Load the overrides data from JSON
+    if (!FElementOverridesManager::LoadFromDefaultPath(ElementOverridesData))
+    {
+        UE_LOG(LogProceduralOffice, Log, TEXT("No element overrides loaded (file may not exist)."));
+    }
+    
+    // Get the active override sets from the game manager (only available during PIE/runtime)
+    if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
+    {
+        ActiveOverrideSetIds = Manager->GetActiveElementOverrideSets();
+        UE_LOG(LogProceduralOffice, Log, TEXT("Using %d element override sets from manager for current day."), ActiveOverrideSetIds.Num());
+    }
+    else
+    {
+        // In editor (before PIE), use the default override sets directly from DaySchedule.json
+        // This allows the editor preview to show the correct state
+        const FString SchedulePath = TEXT("Data/DaySchedule.json");
+        const FString AbsolutePath = FPaths::ConvertRelativePathToFull(
+            FPaths::Combine(FPaths::ProjectContentDir(), SchedulePath));
+        
+        FString FileContents;
+        if (FFileHelper::LoadFileToString(FileContents, *AbsolutePath))
+        {
+            TSharedPtr<FJsonObject> RootObject;
+            TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(FileContents);
+            if (FJsonSerializer::Deserialize(Reader, RootObject) && RootObject.IsValid())
+            {
+                const TArray<TSharedPtr<FJsonValue>>* DefaultSetsArray = nullptr;
+                if (RootObject->TryGetArrayField(TEXT("DefaultElementOverrideSets"), DefaultSetsArray))
+                {
+                    for (const TSharedPtr<FJsonValue>& Value : *DefaultSetsArray)
+                    {
+                        FString SetIdString;
+                        if (Value->TryGetString(SetIdString))
+                        {
+                            ActiveOverrideSetIds.Add(FName(*SetIdString));
+                        }
+                    }
+                }
+            }
+        }
+        UE_LOG(LogProceduralOffice, Log, TEXT("Editor mode: Using %d default element override sets."), ActiveOverrideSetIds.Num());
+    }
+    
+    return ElementOverridesData.OverrideSets.Num() > 0;
+}
+
+const FElementPropertyOverride* AProceduralOfficeGenerator::GetElementOverride(FName ElementId) const
+{
+    if (ElementId.IsNone() || ActiveOverrideSetIds.Num() == 0)
+    {
+        return nullptr;
+    }
+    
+    // Check override sets in order, return first match
+    for (const FName& SetId : ActiveOverrideSetIds)
+    {
+        if (const FElementPropertyOverride* Override = ElementOverridesData.FindElementOverride(SetId, ElementId))
+        {
+            return Override;
+        }
+    }
+    
+    return nullptr;
+}
+
+bool AProceduralOfficeGenerator::IsWorkstationPoweredOn(int32 InstanceIndex) const
+{
+    // Read the power state directly from the per-instance custom data we set at generation time
+    // Custom data index 0 = power state (0.0 = off, 1.0 = on)
+    if (ComputerMeshComponent && InstanceIndex != INDEX_NONE && ComputerMeshComponent->NumCustomDataFloats > 0)
+    {
+        const int32 CustomDataIndex = InstanceIndex * ComputerMeshComponent->NumCustomDataFloats;
+        if (ComputerMeshComponent->PerInstanceSMCustomData.IsValidIndex(CustomDataIndex))
+        {
+            const float PowerValue = ComputerMeshComponent->PerInstanceSMCustomData[CustomDataIndex];
+            return PowerValue > 0.5f;
+        }
+    }
+    
+    // Fallback: check override data if custom data isn't available
+    const FName* ElementIdPtr = WorkstationInstanceToElementId.Find(InstanceIndex);
+    if (ElementIdPtr && !ElementIdPtr->IsNone())
+    {
+        if (const FElementPropertyOverride* Override = GetElementOverride(*ElementIdPtr))
+        {
+            return Override->bPoweredOn;
+        }
+    }
+    
+    return false;
+}
+
+bool AProceduralOfficeGenerator::IsElevatorLocked(FName ElementId) const
+{
+    // If no element ID, elevator is LOCKED by default
+    if (ElementId.IsNone())
+    {
+        return true;
+    }
+    
+    // Check override - only explicit overrides can unlock it
+    if (const FElementPropertyOverride* Override = GetElementOverride(ElementId))
+    {
+        return Override->bLocked;
+    }
+    
+    // Default to locked if no override found
+    return true;
+}
+
+bool AProceduralOfficeGenerator::IsElementLocked(FName ElementId) const
+{
+    // Ensure element overrides are loaded (they may not be in PIE duplicated actors)
+    EnsureElementOverridesLoaded();
+    
+    if (ElementId.IsNone())
+    {
+        return true; // Default to locked if no ID
+    }
+    
+    const FElementPropertyOverride* Override = GetElementOverride(ElementId);
+    if (Override)
+    {
+        return Override->bLocked;
+    }
+    
+    // Default to locked if no override found
+    return true;
+}
+
+void AProceduralOfficeGenerator::EnsureElementOverridesLoaded() const
+{
+    // Reload element overrides if empty (happens with PIE-duplicated actors)
+    if (ElementOverridesData.OverrideSets.IsEmpty())
+    {
+        LoadElementOverrides();
+    }
+}
+
 void AProceduralOfficeGenerator::BuildFromLayout(const FOfficeLayout &Layout)
 {
     if (Layout.Elements.IsEmpty())
@@ -451,6 +600,10 @@ void AProceduralOfficeGenerator::BuildFromLayout(const FOfficeLayout &Layout)
         UE_LOG(LogProceduralOffice, Warning, TEXT("Layout contains no elements."));
         return;
     }
+    
+    // Clear tracking maps before rebuilding
+    WorkstationInstanceToElementId.Empty();
+    ElevatorComponentToElementId.Empty();
 
     for (const FOfficeElementDefinition &Element : Layout.Elements)
     {
@@ -464,6 +617,9 @@ void AProceduralOfficeGenerator::BuildFromLayout(const FOfficeLayout &Layout)
 
 void AProceduralOfficeGenerator::BuildElement(const FOfficeElementDefinition &Element)
 {
+    // Get override for this element if it has an ID
+    const FElementPropertyOverride* Override = Element.Id.IsNone() ? nullptr : GetElementOverride(Element.Id);
+    
     switch (Element.Type)
     {
         case EOfficeElementType::Floor:
@@ -482,7 +638,7 @@ void AProceduralOfficeGenerator::BuildElement(const FOfficeElementDefinition &El
             PlaceSpawnPoint(Element.Start, Element.HeightOffset, Element.Yaw);
             break;
         case EOfficeElementType::Cubicle:
-            PlaceCubicle(Element.Start, Element.Dimensions, Element.Yaw);
+            PlaceCubicle(Element.Start, Element.Dimensions, Element.Yaw, Element.Id, Override);
             break;
         case EOfficeElementType::CeilingLight:
             PlaceCeilingLights(Element.Start, Element.End, Element.Spacing, Element.Padding, Element.Yaw);
@@ -491,7 +647,7 @@ void AProceduralOfficeGenerator::BuildElement(const FOfficeElementDefinition &El
             PlaceDoor(Element);
             break;
         case EOfficeElementType::Elevator:
-            PlaceElevator(Element);
+            PlaceElevator(Element, Override);
             break;
         case EOfficeElementType::RoomTone:
             PlaceRoomTone(Element);
@@ -572,6 +728,14 @@ UInstancedStaticMeshComponent *AProceduralOfficeGenerator::GetOrCreateISMC(UStat
     {
         NewComponent->SetMaterial(0, OverrideMaterial);
     }
+    
+    // Set up custom data floats for workstation monitors BEFORE registering
+    // This is needed for per-instance material control (e.g., emissive on/off)
+    if (ComponentName == WorkstationMonitorComponentKey)
+    {
+        NewComponent->NumCustomDataFloats = 1; // Index 0 = power state
+    }
+    
     NewComponent->SetupAttachment(Root);
     NewComponent->RegisterComponent();
 
@@ -653,6 +817,13 @@ bool AProceduralOfficeGenerator::EvaluateInteractionFocus_Implementation(APawn *
         return false;
     }
 
+    // Don't highlight unpowered workstations
+    if (!IsWorkstationPoweredOn(InstanceIndex))
+    {
+        HideComputerHighlight();
+        return false;
+    }
+
     NotifyComputerLookedAt(ActiveComputerComponent, InstanceIndex);
 
     FTransform InstanceTransform;
@@ -684,7 +855,19 @@ bool AProceduralOfficeGenerator::EvaluateInteractionFocus_Implementation(APawn *
 
 bool AProceduralOfficeGenerator::CanInteract_Implementation(APawn *PlayerPawn) const
 {
-    return HoveredComputerInstanceIndex != INDEX_NONE && bHasPendingWorkstationViewTransform;
+    if (HoveredComputerInstanceIndex == INDEX_NONE || !bHasPendingWorkstationViewTransform)
+    {
+        return false;
+    }
+    
+    // Check if this workstation is powered on via element overrides
+    if (!IsWorkstationPoweredOn(HoveredComputerInstanceIndex))
+    {
+        UE_LOG(LogProceduralOffice, Verbose, TEXT("Workstation at instance %d is powered off."), HoveredComputerInstanceIndex);
+        return false;
+    }
+    
+    return true;
 }
 
 void AProceduralOfficeGenerator::OnInteract_Implementation(APawn *PlayerPawn)

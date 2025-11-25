@@ -2,14 +2,24 @@
 #include "Procedural/ProceduralOfficeGenerator.Helpers.h"
 #include "Procedural/ProceduralOfficeGenerator.Log.h"
 #include "Procedural/ProceduralElevator.h"
+#include "Procedural/ElementOverrides.h"
 
 #include "Components/ChildActorComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/RectLightComponent.h"
 #include "Components/SceneComponent.h"
 
-void AProceduralOfficeGenerator::PlaceElevator(const FOfficeElementDefinition &Element)
+void AProceduralOfficeGenerator::PlaceElevator(const FOfficeElementDefinition &Element, const FElementPropertyOverride* Override)
 {
+    // Log override information if present
+    if (Override)
+    {
+        UE_LOG(LogProceduralOffice, Log, TEXT("Elevator '%s' override: bLocked=%s bPoweredOn=%s"),
+            *Element.Id.ToString(),
+            Override->bLocked ? TEXT("true") : TEXT("false"),
+            Override->bPoweredOn ? TEXT("true") : TEXT("false"));
+    }
+    
     float TotalSpan = 0.0f;
     FVector2D UnitDirection2D = ProceduralOffice::Utils::CalculateUnitDirection(Element.Start, Element.End, TotalSpan);
     FVector2D Center2D = Element.Start;
@@ -75,9 +85,33 @@ void AProceduralOfficeGenerator::PlaceElevator(const FOfficeElementDefinition &E
             if (AActor *ChildActor = ElevatorComponent->GetChildActor())
             {
                 ChildActor->SetActorTransform(ElevatorComponent->GetComponentTransform());
+                
+                // Apply locked state and element ID from override (elevators are locked by default)
+                if (AProceduralElevator* Elevator = Cast<AProceduralElevator>(ChildActor))
+                {
+                    // Store the element ID as a component tag on the ChildActorComponent
+                    // Component tags ARE preserved through PIE duplication, unlike child actor properties
+                    if (!Element.Id.IsNone())
+                    {
+                        ElevatorComponent->ComponentTags.Add(Element.Id);
+                    }
+                    
+                    // Also set it directly on the elevator for editor use
+                    Elevator->SetElementId(Element.Id);
+                    
+                    // bLocked defaults to true in FElementPropertyOverride, so unlocked elevators need explicit bLocked=false
+                    const bool bShouldBeLocked = Override ? Override->bLocked : true;
+                    Elevator->SetLocked(bShouldBeLocked);
+                }
             }
 
             SpawnedChildActors.Add(ElevatorComponent);
+            
+            // Track elevator component to element ID mapping for override lookups
+            if (!Element.Id.IsNone())
+            {
+                ElevatorComponentToElementId.Add(ElevatorComponent, Element.Id);
+            }
         }
     }
     else

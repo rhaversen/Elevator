@@ -1,9 +1,11 @@
 #include "Procedural/ProceduralElevator.h"
 
 #include "Procedural/ProceduralElevatorDoorController.h"
+#include "Procedural/ProceduralOfficeGenerator.h"
 #include "Procedural/DoorInterpolationFunctions.h"
 #include "System/ElevatorGameManagerSubsystem.h"
 
+#include "Components/ChildActorComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/EngineTypes.h"
@@ -183,12 +185,50 @@ void AProceduralElevator::BeginPlay()
 {
     Super::BeginPlay();
 
+    // Recover ElementId from parent ChildActorComponent's tags (needed for PIE)
+    // Child actors are recreated during PIE, and component tags ARE preserved
+    if (ElementId.IsNone())
+    {
+        if (UChildActorComponent* OwningChildActorComponent = GetParentComponent())
+        {
+            if (OwningChildActorComponent->ComponentTags.Num() > 0)
+            {
+                ElementId = OwningChildActorComponent->ComponentTags[0];
+            }
+        }
+    }
+
     if (DoorController)
     {
         DoorController->CloseDoors();
     }
 
-    RequestOpenDoors(true);
+    // Query the parent office generator for our locked state using our ElementId
+    if (!ElementId.IsNone())
+    {
+        // For child actors, get owner from parent component
+        if (UChildActorComponent* OwningComp = GetParentComponent())
+        {
+            if (AActor* OwnerActor = OwningComp->GetOwner())
+            {
+                if (AProceduralOfficeGenerator* OfficeGenerator = Cast<AProceduralOfficeGenerator>(OwnerActor))
+                {
+                    bDoorsLocked = OfficeGenerator->IsElementLocked(ElementId);
+                }
+            }
+        }
+    }
+    else
+    {
+        // No ElementId means default to locked
+        bDoorsLocked = true;
+    }
+
+    // Only open doors at startup if the elevator is not locked
+    if (!bDoorsLocked)
+    {
+        RequestOpenDoors(true);
+    }
 }
 
 void AProceduralElevator::OpenAllDoors()
@@ -247,6 +287,17 @@ void AProceduralElevator::SetAllDoorFractions(float Fraction)
 float AProceduralElevator::GetDoorFraction(EProceduralElevatorDoorSlot Slot) const
 {
     return DoorController ? DoorController->GetDoorFraction(Slot) : 0.0f;
+}
+
+void AProceduralElevator::SetLocked(bool bLocked)
+{
+    bDoorsLocked = bLocked;
+    
+    if (bDoorsLocked)
+    {
+        // When locked, immediately close doors
+        CloseAllDoors();
+    }
 }
 
 void AProceduralElevator::ApplyDoorOffset(EProceduralElevatorDoorSlot Slot)
@@ -795,6 +846,15 @@ FName AProceduralElevator::GetButtonId(const UPrimitiveComponent* Component) con
 AProceduralElevator::FElevatorButtonInteractionState AProceduralElevator::GetButtonInteractionState(const UPrimitiveComponent* Component) const
 {
     FElevatorButtonInteractionState State;
+
+    // If the elevator is locked, no buttons are interactable
+    if (bDoorsLocked)
+    {
+        State.bIsInteractable = false;
+        State.bConsumesPress = false;
+        State.LockReason = AProceduralElevator::EElevatorButtonLockReason::ManagerDisabled;
+        return State;
+    }
 
     if (!Component)
     {

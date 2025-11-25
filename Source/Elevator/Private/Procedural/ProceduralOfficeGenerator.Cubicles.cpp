@@ -1,10 +1,11 @@
 #include "Procedural/ProceduralOfficeGenerator.h"
 #include "Procedural/ProceduralOfficeGenerator.Log.h"
+#include "Procedural/ElementOverrides.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/EngineTypes.h"
 
-void AProceduralOfficeGenerator::PlaceCubicle(const FVector2D &Center, const FVector2D &Size, float Yaw)
+void AProceduralOfficeGenerator::PlaceCubicle(const FVector2D &Center, const FVector2D &Size, float Yaw, FName ElementId, const FElementPropertyOverride* Override)
 {
     if (!CubiclePartitionMesh)
     {
@@ -97,17 +98,20 @@ void AProceduralOfficeGenerator::PlaceCubicle(const FVector2D &Center, const FVe
     const float ComputerYaw = Yaw + CubicleComputerYawOffset;
     const FTransform StationTransform(FRotator(0.0f, ComputerYaw, 0.0f), ComputerLocation, FVector::OneVector);
 
-    auto AddAccessoryInstance = [&](UStaticMesh* Mesh, UMaterialInterface* Material, const FVector& RelativeLocation, const FRotator& RelativeRotation, const FVector& RelativeScale, const FName& ComponentKey)
+    // Track the instance index for the workstation monitor so we can look up overrides later
+    int32 MonitorInstanceIndex = INDEX_NONE;
+
+    auto AddAccessoryInstance = [&](UStaticMesh* Mesh, UMaterialInterface* Material, const FVector& RelativeLocation, const FRotator& RelativeRotation, const FVector& RelativeScale, const FName& ComponentKey) -> int32
     {
         if (!Mesh)
         {
-            return;
+            return INDEX_NONE;
         }
 
         UInstancedStaticMeshComponent* Component = GetOrCreateISMC(Mesh, ComponentKey, Material);
         if (!Component)
         {
-            return;
+            return INDEX_NONE;
         }
 
         if (ComponentKey == AProceduralOfficeGenerator::WorkstationMonitorComponentKey)
@@ -125,10 +129,25 @@ void AProceduralOfficeGenerator::PlaceCubicle(const FVector2D &Center, const FVe
 
         const FTransform RelativeTransform(RelativeRotation, RelativeLocation, RelativeScale);
         const FTransform WorldTransform = RelativeTransform * StationTransform;
-        Component->AddInstance(WorldTransform);
+        return Component->AddInstance(WorldTransform);
     };
 
-    AddAccessoryInstance(CubicleComputerMesh.Get(), CubicleComputerMaterialOverride.Get(), CubicleComputerRelativeLocation, CubicleComputerRelativeRotation, CubicleComputerScale, AProceduralOfficeGenerator::WorkstationMonitorComponentKey);
+    MonitorInstanceIndex = AddAccessoryInstance(CubicleComputerMesh.Get(), CubicleComputerMaterialOverride.Get(), CubicleComputerRelativeLocation, CubicleComputerRelativeRotation, CubicleComputerScale, AProceduralOfficeGenerator::WorkstationMonitorComponentKey);
+    
+    // Set the power state custom data for this monitor instance
+    // Custom data index 0: 1.0 = powered on (emissive), 0.0 = powered off (no emissive)
+    if (MonitorInstanceIndex != INDEX_NONE && ComputerMeshComponent)
+    {
+        const bool bPoweredOn = Override ? Override->bPoweredOn : false;
+        ComputerMeshComponent->SetCustomDataValue(MonitorInstanceIndex, 0, bPoweredOn ? 1.0f : 0.0f);
+    }
+
+    // Map the instance index to element ID so we can look up power state when interacting
+    if (MonitorInstanceIndex != INDEX_NONE && !ElementId.IsNone())
+    {
+        WorkstationInstanceToElementId.Add(MonitorInstanceIndex, ElementId);
+    }
+    
     AddAccessoryInstance(CubicleKeyboardMesh.Get(), CubicleKeyboardMaterialOverride.Get(), CubicleKeyboardRelativeLocation, CubicleKeyboardRelativeRotation, CubicleKeyboardScale, FName(TEXT("CubicleKeyboard")));
     AddAccessoryInstance(CubicleMouseMesh.Get(), CubicleMouseMaterialOverride.Get(), CubicleMouseRelativeLocation, CubicleMouseRelativeRotation, CubicleMouseScale, FName(TEXT("CubicleMouse")));
     AddAccessoryInstance(CubicleDeskLampMesh.Get(), CubicleDeskLampMaterialOverride.Get(), CubicleDeskLampRelativeLocation, CubicleDeskLampRelativeRotation, CubicleDeskLampScale, FName(TEXT("CubicleDeskLamp")));
