@@ -300,7 +300,8 @@ class FloorplanEditor:
     
     def on_cubicle_display_changed(self, *args):
         """Rebuild canvas when cubicle display dimensions change"""
-        self.rebuild_canvas()
+        if hasattr(self, 'canvas'):
+            self.rebuild_canvas()
 
     def get_grid_size(self):
         try:
@@ -1415,6 +1416,40 @@ class FloorplanEditor:
             anchors.append(anchor_id)
             canvas_ids.append(anchor_id)
 
+        # Draw ID label if the item has an Id
+        item_id = item.get("Id")
+        if item_id and canvas_ids:
+            # Calculate label position based on object type
+            label_pos = self._get_id_label_position(item)
+            if label_pos is not None:
+                label_x, label_y = label_pos
+                sx, sy = self.world_to_screen(label_x, label_y)
+                # Create background rectangle for better readability
+                temp_text = self.canvas.create_text(0, 0, text=item_id, font=("Segoe UI", 8, "bold"))
+                bbox = self.canvas.bbox(temp_text)
+                self.canvas.delete(temp_text)
+                if bbox:
+                    tw = bbox[2] - bbox[0]
+                    th = bbox[3] - bbox[1]
+                    pad = 3
+                    bg_id = self.canvas.create_rectangle(
+                        sx - tw/2 - pad, sy - th/2 - pad,
+                        sx + tw/2 + pad, sy + th/2 + pad,
+                        fill="#ffffff", outline="#4a148c", width=1
+                    )
+                    canvas_ids.append(bg_id)
+                    register_part(bg_id, "id_label_bg")
+                # Create the text
+                text_id = self.canvas.create_text(
+                    sx, sy,
+                    text=item_id,
+                    fill="#4a148c",
+                    font=("Segoe UI", 8, "bold"),
+                    anchor="center"
+                )
+                canvas_ids.append(text_id)
+                register_part(text_id, "id_label")
+
         if canvas_ids:
             obj = {
                 "data": item,
@@ -1517,6 +1552,9 @@ class FloorplanEditor:
         if pair_primary is not None:
             tk.Label(type_frame, text="Linked Floor/Ceiling", font=("Segoe UI", 9),
                      bg="#e3f2fd", fg="#005a9e").pack(pady=(0, 4))
+        
+        # Id property (optional, shown for all types)
+        self._add_id_property(item)
         
         # Common properties
         if "Start" in item:
@@ -1670,6 +1708,10 @@ class FloorplanEditor:
         item_type = item.get("Type", "")
         parts = []
 
+        # Show Id first if present
+        if "Id" in item:
+            parts.append(f"[{item['Id']}]")
+
         if "Start" in item:
             s = item["Start"]
             x = float(s.get("X", 0))
@@ -1677,7 +1719,7 @@ class FloorplanEditor:
             parts.append(f"({x:.0f}, {y:.0f})")
 
         if item_type == "RoomTone" and "AudioId" in item:
-            parts.insert(0, item["AudioId"])
+            parts.insert(1 if "Id" in item else 0, item["AudioId"])
 
         return " ".join(parts) if parts else ""
 
@@ -1701,6 +1743,46 @@ class FloorplanEditor:
         self.selected_objects.clear()
         self.selected_obj = None
         self.update_properties_panel()
+
+    def _add_id_property(self, item):
+        """Add an optional Id property field."""
+        frame = tk.Frame(self.props_inner, bg="#fafafa")
+        frame.pack(fill=tk.X, padx=8, pady=4)
+        
+        tk.Label(frame, text="Id:", width=10, anchor="w", bg="#fafafa",
+                font=("Segoe UI", 9)).pack(side=tk.LEFT)
+        
+        current_id = item.get("Id", "")
+        var = tk.StringVar(value=current_id)
+        entry = tk.Entry(frame, textvariable=var, width=18)
+        entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # Debounce to avoid excessive saves
+        timer_id = [None]
+        
+        def callback(*args):
+            if timer_id[0] is not None:
+                self.root.after_cancel(timer_id[0])
+            
+            def apply_change():
+                try:
+                    old_val = item.get("Id", "")
+                    new_val = var.get().strip()
+                    if old_val != new_val:
+                        self.save_state()
+                        if new_val:
+                            item["Id"] = new_val
+                        elif "Id" in item:
+                            # Remove Id if empty
+                            del item["Id"]
+                        # No need to rebuild canvas for Id change
+                except (ValueError, tk.TclError):
+                    pass
+                timer_id[0] = None
+            
+            timer_id[0] = self.root.after(300, apply_change)
+        
+        var.trace_add("write", callback)
     
     def _add_property_section(self, title, parent_item, data_dict, keys):
         """Add a property section with multiple fields"""
@@ -2188,6 +2270,36 @@ class FloorplanEditor:
             return (float(s.get("X", 0.0)), float(s.get("Y", 0.0)))
         
         return None
+
+    def _get_id_label_position(self, item):
+        """Get the position for an ID label on an object."""
+        item_type = item.get("Type", "")
+        
+        # For line-based objects (Wall, Door, Window, Elevator), offset the label perpendicular to the line
+        if item_type in ("Wall", "Door", "Window", "Elevator"):
+            s = item.get("Start", {})
+            e = item.get("End", {})
+            x0 = float(s.get("X", 0.0))
+            y0 = float(s.get("Y", 0.0))
+            x1 = float(e.get("X", 0.0))
+            y1 = float(e.get("Y", 0.0))
+            # Center of the line
+            cx = (x0 + x1) / 2
+            cy = (y0 + y1) / 2
+            # Offset perpendicular to the line for better visibility
+            dx = x1 - x0
+            dy = y1 - y0
+            length = (dx * dx + dy * dy) ** 0.5
+            if length > 1e-6:
+                # Perpendicular offset (30 world units)
+                offset = 30
+                perp_x = -dy / length * offset
+                perp_y = dx / length * offset
+                return (cx + perp_x, cy + perp_y)
+            return (cx, cy)
+        
+        # For other objects, use the center
+        return self._get_object_center(item)
 
     def _rotate_object_around_point(self, item, cx, cy, cos_a, sin_a, delta_deg):
         """Rotate an object around a given center point."""
