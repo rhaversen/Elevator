@@ -5,7 +5,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/EngineTypes.h"
 
-void AProceduralOfficeGenerator::PlaceCubicle(const FVector2D &Center, const FVector2D &Size, float Yaw, FName ElementId, const FElementPropertyOverride* Override)
+void AProceduralOfficeGenerator::PlaceCubicle(const FVector2D &Center, float Yaw, FName ElementId, const FElementPropertyOverride* Override)
 {
     if (!CubiclePartitionMesh)
     {
@@ -13,12 +13,11 @@ void AProceduralOfficeGenerator::PlaceCubicle(const FVector2D &Center, const FVe
         return;
     }
 
-    const float Width = FMath::Max(Size.X, 50.0f);
-    const float AdjustedWidth = FMath::Max(Width * CubiclePartitionWidthScale, 10.0f);
-    const float Depth = FMath::Max(Size.Y, 50.0f);
-    const float AdjustedDepth = FMath::Max(Depth * CubiclePartitionDepthScale, 10.0f);
-    const float HalfDepth = Depth * 0.5f;
-    const float HalfAdjustedDepth = AdjustedDepth * 0.5f;
+    // Center is the anchor point at the middle of the back wall.
+    // The cubicle extends forward (positive local Y) from this anchor.
+    const float Width = FMath::Max(CubicleWidth, 50.0f);
+    const float Depth = FMath::Max(CubicleDepth, 50.0f);
+    const float HalfWidth = Width * 0.5f;
     const float PartitionHeight = FMath::Max(CubiclePartitionHeight, 10.0f);
     const float PartitionThickness = FMath::Max(CubiclePartitionThickness, 1.0f);
 
@@ -50,24 +49,26 @@ void AProceduralOfficeGenerator::PlaceCubicle(const FVector2D &Center, const FVe
         Component->AddInstance(InstanceTransform);
     };
 
-    const FVector2D LocalBackCenter(0.0f, -HalfDepth);
-    const float SideCenterY = -HalfDepth + HalfAdjustedDepth;
-    const FVector2D LocalLeftCenter(-AdjustedWidth * 0.5f, SideCenterY);
-    const FVector2D LocalRightCenter(AdjustedWidth * 0.5f, SideCenterY);
+    // Back wall is at Y=0 (the anchor), side walls extend from Y=0 to Y=Depth
+    const FVector2D LocalBackCenter(0.0f, 0.0f);
+    const float SideCenterY = Depth * 0.5f;
+    const FVector2D LocalLeftCenter(-HalfWidth, SideCenterY);
+    const FVector2D LocalRightCenter(HalfWidth, SideCenterY);
 
-    AddPartitionSegment(LocalBackCenter, Yaw, AdjustedWidth);
-    AddPartitionSegment(LocalLeftCenter, Yaw + 90.0f, AdjustedDepth);
-    AddPartitionSegment(LocalRightCenter, Yaw + 90.0f, AdjustedDepth);
+    AddPartitionSegment(LocalBackCenter, Yaw, Width);
+    AddPartitionSegment(LocalLeftCenter, Yaw + 90.0f, Depth);
+    AddPartitionSegment(LocalRightCenter, Yaw + 90.0f, Depth);
+
+    // Desk is placed at a fixed offset from the anchor (back wall center)
+    const FVector2D LocalDeskOffset(CubicleDeskOffset.X, CubicleDeskOffset.Y);
+    const FVector2D DeskOffset = Rotate2D(LocalDeskOffset);
+    const FVector DeskLocation(Center.X + DeskOffset.X, Center.Y + DeskOffset.Y, FloorHeight + CubicleDeskHeightOffset);
 
     if (CubicleDeskMesh)
     {
         UInstancedStaticMeshComponent *DeskComponent = GetOrCreateISMC(CubicleDeskMesh.Get(), FName(TEXT("CubicleDesk")), CubicleDeskMaterialOverride.Get());
         if (DeskComponent)
         {
-            const float ClampedRatio = FMath::Clamp(CubicleDeskBackOffsetRatio, 0.0f, 0.45f);
-            const FVector2D LocalDeskOffset(0.0f, -Depth * (0.5f - ClampedRatio));
-            const FVector2D DeskOffset = Rotate2D(LocalDeskOffset);
-            const FVector DeskLocation(Center.X + DeskOffset.X, Center.Y + DeskOffset.Y, FloorHeight + CubicleDeskHeightOffset);
             const FTransform DeskTransform(FRotator(0.0f, Yaw, 0.0f), DeskLocation, CubicleDeskScale);
             DeskComponent->AddInstance(DeskTransform);
         }
@@ -78,6 +79,7 @@ void AProceduralOfficeGenerator::PlaceCubicle(const FVector2D &Center, const FVe
         UInstancedStaticMeshComponent *ChairComponent = GetOrCreateISMC(CubicleChairMesh.Get(), FName(TEXT("CubicleChair")), CubicleChairMaterialOverride.Get());
         if (ChairComponent)
         {
+            // Chair position is relative to back wall anchor
             const FVector2D LocalChairOffset(CubicleChairRelativeLocation.X, CubicleChairRelativeLocation.Y);
             const FVector2D ChairOffset = Rotate2D(LocalChairOffset);
             const FVector ChairLocation(Center.X + ChairOffset.X, Center.Y + ChairOffset.Y, FloorHeight + CubicleChairRelativeLocation.Z);
@@ -87,16 +89,13 @@ void AProceduralOfficeGenerator::PlaceCubicle(const FVector2D &Center, const FVe
         }
     }
 
-    const float BackBoundary = -HalfDepth + 1.0f;
-    const float FrontBoundary = -HalfDepth + AdjustedDepth - 1.0f;
-    const float LocalComputerY = FMath::Clamp(CubicleComputerOffset.Y, BackBoundary, FrontBoundary);
-    const FVector2D ComputerLocalOffset(CubicleComputerOffset.X, LocalComputerY);
-    const FVector2D ComputerOffset = Rotate2D(ComputerLocalOffset);
-    const FVector CorrectedComputerOffset(ComputerOffset.X, ComputerOffset.Y, 0.0f);
-    const float ComputerHeight = FloorHeight + CubicleDeskHeightOffset + CubicleComputerHeightOffset;
-    const FVector ComputerLocation(Center.X + CorrectedComputerOffset.X, Center.Y + CorrectedComputerOffset.Y, ComputerHeight);
-    const float ComputerYaw = Yaw + CubicleComputerYawOffset;
-    const FTransform StationTransform(FRotator(0.0f, ComputerYaw, 0.0f), ComputerLocation, FVector::OneVector);
+    // Workstation dressing (monitor, keyboard, etc.) is positioned relative to the desk
+    const FVector2D WorkstationLocalOffset(CubicleComputerOffset.X, CubicleComputerOffset.Y);
+    const FVector2D WorkstationOffset = Rotate2D(WorkstationLocalOffset);
+    const float WorkstationHeight = DeskLocation.Z + CubicleComputerHeightOffset;
+    const FVector WorkstationLocation(DeskLocation.X + WorkstationOffset.X, DeskLocation.Y + WorkstationOffset.Y, WorkstationHeight);
+    const float WorkstationYaw = Yaw + CubicleComputerYawOffset;
+    const FTransform StationTransform(FRotator(0.0f, WorkstationYaw, 0.0f), WorkstationLocation, FVector::OneVector);
 
     // Track the instance index for the workstation monitor so we can look up overrides later
     int32 MonitorInstanceIndex = INDEX_NONE;

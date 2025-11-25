@@ -49,19 +49,16 @@
       "Id": "MainCubicle",
       "Type": "Cubicle",
       "Start": { "X": 600.0, "Y": -300.0 },
-      "Dimensions": { "X": 300.0, "Y": 250.0 },
       "Yaw": 0.0
     },
     {
       "Type": "Cubicle",
       "Start": { "X": 600.0, "Y": 250.0 },
-      "Dimensions": { "X": 300.0, "Y": 250.0 },
       "Yaw": 0.0
     },
     {
       "Type": "Cubicle",
       "Start": { "X": 0.0, "Y": -300.0 },
-      "Dimensions": { "X": 300.0, "Y": 250.0 },
       "Yaw": 90.0
     },
     {

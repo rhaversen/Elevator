@@ -291,12 +291,12 @@ void AProceduralOfficeGenerator::PostEditChangeProperty(FPropertyChangedEvent &P
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubiclePartitionThickness) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleDeskHeightOffset) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleDeskScale) ||
-            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleDeskBackOffsetRatio) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleDeskOffset) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleChairRotation) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleChairScale) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleChairRelativeLocation) ||
-            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubiclePartitionWidthScale) ||
-            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubiclePartitionDepthScale) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleWidth) ||
+            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleDepth) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleComputerMesh) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleComputerMaterialOverride) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CubicleComputerOffset) ||
@@ -638,7 +638,7 @@ void AProceduralOfficeGenerator::BuildElement(const FOfficeElementDefinition &El
             PlaceSpawnPoint(Element.Start, Element.HeightOffset, Element.Yaw);
             break;
         case EOfficeElementType::Cubicle:
-            PlaceCubicle(Element.Start, Element.Dimensions, Element.Yaw, Element.Id, Override);
+            PlaceCubicle(Element.Start, Element.Yaw, Element.Id, Override);
             break;
         case EOfficeElementType::CeilingLight:
             PlaceCeilingLights(Element.Start, Element.End, Element.Spacing, Element.Padding, Element.Yaw);
