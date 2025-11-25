@@ -75,6 +75,22 @@ class FloorplanEditor:
         self.lock_floor_ceiling = tk.BooleanVar(value=True)
         self.cubicle_display_width = tk.DoubleVar(value=196.874405)
         self.cubicle_display_depth = tk.DoubleVar(value=112.691925)
+        self.cubicle_snap_divisions = tk.IntVar(value=1)
+        self._cubicle_snap_options = [
+            (1, "1"),
+            (2, "1/2"),
+            (4, "1/4"),
+            (8, "1/8"),
+        ]
+        self._cubicle_snap_value_to_label = {
+            value: label for value, label in self._cubicle_snap_options
+        }
+        self._cubicle_snap_label_to_value = {
+            label: value for value, label in self._cubicle_snap_options
+        }
+        self._cubicle_snap_selection = tk.StringVar(
+            value=self._cubicle_snap_value_to_label[self.cubicle_snap_divisions.get()]
+        )
 
         # Set up traces
         self.current_mode.trace_add("write", self.on_mode_changed)
@@ -82,6 +98,10 @@ class FloorplanEditor:
         self.show_grid.trace_add("write", self.on_grid_setting_changed)
         self.cubicle_display_width.trace_add("write", self.on_cubicle_display_changed)
         self.cubicle_display_depth.trace_add("write", self.on_cubicle_display_changed)
+        self.cubicle_snap_divisions.trace_add("write", self.on_cubicle_display_changed)
+        self._cubicle_snap_selection.trace_add(
+            "write", self._on_cubicle_snap_selection_changed
+        )
 
         self._build_ui()
         
@@ -267,6 +287,12 @@ class FloorplanEditor:
         tk.Label(frame, text="D:", bg=bg).pack(side=tk.LEFT, padx=(2, 2))
         tk.Spinbox(frame, from_=50, to=1000, increment=10, width=7,
                    textvariable=self.cubicle_display_depth).pack(side=tk.LEFT, padx=2)
+        tk.Label(frame, text="Snap:", bg=bg).pack(side=tk.LEFT, padx=(8, 2))
+        snap_labels = [label for _, label in self._cubicle_snap_options]
+        snap_menu = tk.OptionMenu(frame, self._cubicle_snap_selection, *snap_labels)
+        snap_menu.configure(width=4, bg=bg, highlightthickness=0)
+        snap_menu.pack(side=tk.LEFT, padx=2)
+        snap_menu["menu"].configure(bg="#ffffff")
 
     def _build_properties_panel(self):
         """Build the properties panel."""
@@ -371,6 +397,14 @@ class FloorplanEditor:
             value = 100.0
         return max(value, 1.0)
 
+    def get_cubicle_snap_steps(self):
+        width = max(self.cubicle_display_width.get(), 1.0)
+        depth = max(self.cubicle_display_depth.get(), 1.0)
+        divisions = max(self.cubicle_snap_divisions.get(), 1)
+        step_x = width / divisions
+        step_y = depth / divisions
+        return step_x, step_y
+
     def snap_point_to_grid(self, x, y):
         """Snap a point to grid if snapping is enabled."""
         if not self.snap_enabled.get():
@@ -383,12 +417,11 @@ class FloorplanEditor:
         if not self.snap_enabled.get():
             return float(x), float(y)
         # Use cubicle dimensions as the grid
-        width = max(self.cubicle_display_width.get(), 1.0)
-        depth = max(self.cubicle_display_depth.get(), 1.0)
+        step_x, step_y = self.get_cubicle_snap_steps()
         # Snap X to width grid (along cubicle back wall)
         # Snap Y to depth grid (cubicle depth forward)
-        snapped_x = round(x / width) * width
-        snapped_y = round(y / depth) * depth
+        snapped_x = round(x / step_x) * step_x
+        snapped_y = round(y / step_y) * step_y
         return snapped_x, snapped_y
 
     def on_grid_setting_changed(self, *_):
@@ -396,8 +429,41 @@ class FloorplanEditor:
             self.rebuild_canvas(preserve_selection=True)
 
     def on_cubicle_display_changed(self, *_):
+        current_value = max(self.cubicle_snap_divisions.get(), 1)
+        label = self._cubicle_snap_value_to_label.get(current_value)
+        if label is None:
+            label = "1" if current_value == 1 else f"1/{current_value}"
+            self._cubicle_snap_value_to_label[current_value] = label
+            self._cubicle_snap_label_to_value[label] = current_value
+        if self._cubicle_snap_selection.get() != label:
+            self._cubicle_snap_selection.set(label)
         if hasattr(self, "canvas"):
             self.rebuild_canvas(preserve_selection=True)
+
+    def _on_cubicle_snap_selection_changed(self, *_):
+        label = self._cubicle_snap_selection.get()
+        value = self._cubicle_snap_label_to_value.get(label)
+        if value is None:
+            # Attempt to parse fractional strings like "1/2"
+            if isinstance(label, str) and "/" in label:
+                num, _, denom = label.partition("/")
+                try:
+                    numerator = float(num) if num else 1.0
+                    denominator = float(denom)
+                    if numerator <= 0 or denominator <= 0:
+                        raise ValueError
+                    value = max(int(round(denominator / numerator)), 1)
+                except (TypeError, ValueError, ZeroDivisionError):
+                    value = 1
+            else:
+                try:
+                    value = int(label)
+                except (TypeError, ValueError):
+                    value = 1
+        if value <= 0:
+            value = 1
+        if self.cubicle_snap_divisions.get() != value:
+            self.cubicle_snap_divisions.set(value)
 
     def on_floor_ceiling_link_changed(self, *_):
         # Sync UI state to EditorState
@@ -1193,8 +1259,7 @@ class FloorplanEditor:
                 for obj in self.selected_objects
             )
             if all_cubicles:
-                grid_x = max(self.cubicle_display_width.get(), 1.0)
-                grid_y = max(self.cubicle_display_depth.get(), 1.0)
+                grid_x, grid_y = self.get_cubicle_snap_steps()
             else:
                 grid_x = grid_y = self.get_grid_size()
             
@@ -1558,14 +1623,13 @@ class FloorplanEditor:
         item_type = item.get("Type")
         
         if item_type == "Cubicle":
-            width = max(self.cubicle_display_width.get(), 1.0)
-            depth = max(self.cubicle_display_depth.get(), 1.0)
+            step_x, step_y = self.get_cubicle_snap_steps()
             if "Start" in item:
                 start = item["Start"]
                 old_x = float(start.get("X", 0))
                 old_y = float(start.get("Y", 0))
-                new_x = round(old_x / width) * width
-                new_y = round(old_y / depth) * depth
+                new_x = round(old_x / step_x) * step_x
+                new_y = round(old_y / step_y) * step_y
                 if abs(new_x - old_x) > 0.01 or abs(new_y - old_y) > 0.01:
                     start["X"] = new_x
                     start["Y"] = new_y
