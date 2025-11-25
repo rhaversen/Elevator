@@ -1501,8 +1501,8 @@ class FloorplanEditor:
             if self.lock_floor_ceiling.get():
                 pair_primary = self._get_floor_ceiling_primary()
             if pair_primary is None:
-                tk.Label(self.props_inner, text=f"{len(self.selected_objects)} objects selected",
-                        font=("Segoe UI", 10, "bold"), bg="#fafafa").pack(pady=10, padx=10)
+                # Show list of selected objects with remove buttons
+                self._show_multi_selection_panel()
                 return
             effective_obj = pair_primary
 
@@ -1574,6 +1574,133 @@ class FloorplanEditor:
                     step=0.1,
                     precision=2,
                 )
+
+    def _show_multi_selection_panel(self):
+        """Show panel with list of selected objects and remove buttons."""
+        # Header
+        header_frame = tk.Frame(self.props_inner, bg="#e3f2fd", relief=tk.FLAT, bd=1)
+        header_frame.pack(fill=tk.X, padx=8, pady=8)
+        tk.Label(
+            header_frame,
+            text=f"{len(self.selected_objects)} objects selected",
+            font=("Segoe UI", 10, "bold"),
+            bg="#e3f2fd",
+            fg="#0078d7",
+        ).pack(pady=6, padx=8)
+
+        # Clear all button
+        btn_frame = tk.Frame(self.props_inner, bg="#fafafa")
+        btn_frame.pack(fill=tk.X, padx=8, pady=(0, 8))
+        tk.Button(
+            btn_frame,
+            text="Clear Selection",
+            command=self._clear_all_selection,
+            bg="#f0f0f0",
+            activebackground="#e0e0e0",
+            relief=tk.RAISED,
+            bd=1,
+            padx=8,
+            pady=2,
+            font=("Segoe UI", 9),
+        ).pack(side=tk.LEFT, padx=2)
+
+        # List frame with separator
+        list_label = tk.Label(
+            self.props_inner,
+            text="Selected Objects:",
+            font=("Segoe UI", 9, "bold"),
+            bg="#fafafa",
+            anchor="w",
+        )
+        list_label.pack(fill=tk.X, padx=8, pady=(8, 4))
+
+        # Create list of objects
+        for idx, obj in enumerate(self.selected_objects):
+            item = obj["data"]
+            item_type = item.get("Type", "Unknown")
+
+            # Get a brief description
+            desc = self._get_object_description(item)
+
+            row_frame = tk.Frame(self.props_inner, bg="#ffffff", relief=tk.SOLID, bd=1)
+            row_frame.pack(fill=tk.X, padx=8, pady=2)
+
+            # Object info
+            info_frame = tk.Frame(row_frame, bg="#ffffff")
+            info_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4, pady=4)
+
+            type_label = tk.Label(
+                info_frame,
+                text=item_type,
+                font=("Segoe UI", 9, "bold"),
+                bg="#ffffff",
+                fg="#333333",
+                anchor="w",
+            )
+            type_label.pack(fill=tk.X)
+
+            if desc:
+                desc_label = tk.Label(
+                    info_frame,
+                    text=desc,
+                    font=("Segoe UI", 8),
+                    bg="#ffffff",
+                    fg="#666666",
+                    anchor="w",
+                )
+                desc_label.pack(fill=tk.X)
+
+            # Remove button
+            remove_btn = tk.Button(
+                row_frame,
+                text="×",
+                command=lambda o=obj: self._remove_from_selection(o),
+                bg="#ffcccc",
+                activebackground="#ff9999",
+                relief=tk.FLAT,
+                bd=0,
+                font=("Segoe UI", 10, "bold"),
+                width=2,
+                height=1,
+            )
+            remove_btn.pack(side=tk.RIGHT, padx=4, pady=4)
+
+    def _get_object_description(self, item):
+        """Get a brief text description for an object."""
+        item_type = item.get("Type", "")
+        parts = []
+
+        if "Start" in item:
+            s = item["Start"]
+            x = float(s.get("X", 0))
+            y = float(s.get("Y", 0))
+            parts.append(f"({x:.0f}, {y:.0f})")
+
+        if item_type == "RoomTone" and "AudioId" in item:
+            parts.insert(0, item["AudioId"])
+
+        return " ".join(parts) if parts else ""
+
+    def _remove_from_selection(self, obj):
+        """Remove a single object from the selection."""
+        if obj not in self.selected_objects:
+            return
+
+        self.selected_objects.remove(obj)
+        self.style_object(obj, selected=False)
+
+        if self.selected_obj is obj:
+            self.selected_obj = self.selected_objects[0] if self.selected_objects else None
+
+        self.update_properties_panel()
+
+    def _clear_all_selection(self):
+        """Clear all selected objects."""
+        for obj in self.selected_objects:
+            self.style_object(obj, selected=False)
+        self.selected_objects.clear()
+        self.selected_obj = None
+        self.update_properties_panel()
     
     def _add_property_section(self, title, parent_item, data_dict, keys):
         """Add a property section with multiple fields"""
