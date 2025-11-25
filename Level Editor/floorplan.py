@@ -98,7 +98,8 @@ class FloorplanEditor:
                             ("Wall", "add_wall"), ("Door", "add_door"),
                             ("Window", "add_window"), ("Elevator", "add_elevator"),
                             ("Spawn", "add_spawn"), ("RoomTone", "add_roomtone"),
-                            ("Floor+Ceiling", "add_floor_ceiling")]:
+                            ("Floor+Ceiling", "add_floor_ceiling"),
+                            ("CeilingLight", "add_ceiling_light")]:
             tk.Radiobutton(
                 mode_frame,
                 text=text,
@@ -632,7 +633,7 @@ class FloorplanEditor:
         mode = self.mode.get()
         if self.pending_line:
             pending_mode = self.pending_line.get("mode")
-            if pending_mode != mode or mode not in ("add_wall", "add_door", "add_window", "add_elevator"):
+            if pending_mode != mode or mode not in ("add_wall", "add_door", "add_window", "add_elevator", "add_floor_ceiling", "add_ceiling_light"):
                 self.clear_pending_line()
 
     def draw_background_grid(self):
@@ -2778,7 +2779,7 @@ class FloorplanEditor:
         mode = self.mode.get()
         wx, wy = self.screen_to_world(event.x, event.y)
 
-        if mode not in ("add_wall", "add_door", "add_window", "add_elevator", "add_floor_ceiling"):
+        if mode not in ("add_wall", "add_door", "add_window", "add_elevator", "add_floor_ceiling", "add_ceiling_light"):
             self.clear_pending_line()
 
         if mode == "select":
@@ -2833,6 +2834,8 @@ class FloorplanEditor:
             self.add_roomtone_at(wx, wy)
         elif mode == "add_floor_ceiling":
             self.handle_floor_ceiling_press(event)
+        elif mode == "add_ceiling_light":
+            self.handle_ceiling_light_press(event)
         elif mode in ("add_wall", "add_door", "add_window", "add_elevator"):
             self.handle_line_press(mode, event)
 
@@ -3086,6 +3089,7 @@ class FloorplanEditor:
             "add_window": "#1d6bd6",
             "add_elevator": "#9b59b6",
             "add_floor_ceiling": "#9966cc",
+            "add_ceiling_light": "#ffa500",
         }.get(mode, "#555555")
     
     def handle_floor_ceiling_press(self, event):
@@ -3153,6 +3157,63 @@ class FloorplanEditor:
                 self.set_selected(obj)
                 break
 
+    def handle_ceiling_light_press(self, event):
+        """Handle placement of CeilingLight using rectangle drawing"""
+        wx, wy = self.screen_to_world(event.x, event.y)
+        wx, wy = self.snap_point(wx, wy)
+        
+        pending = self.pending_line
+        mode = "add_ceiling_light"
+        
+        if pending and pending.get("mode") != mode:
+            self.clear_pending_line()
+            pending = None
+        
+        if pending is None:
+            self.begin_pending_line(mode, (wx, wy))
+            return
+        
+        if pending.get("dragged"):
+            # user finished previous drag; start a fresh segment from current point
+            self.clear_pending_line()
+            self.begin_pending_line(mode, (wx, wy))
+            return
+        
+        start_world = pending.get("start_world")
+        if start_world and math.isclose(start_world[0], wx, abs_tol=1e-6) and math.isclose(start_world[1], wy, abs_tol=1e-6):
+            return
+        
+        self.create_ceiling_light(start_world, (wx, wy))
+        self.clear_pending_line()
+    
+    def create_ceiling_light(self, start_world, end_world):
+        """Create a CeilingLight object"""
+        if start_world == end_world:
+            return
+        
+        self.save_state()  # Save state for undo
+        
+        start_x, start_y = self.snap_point(*start_world)
+        end_x, end_y = self.snap_point(*end_world)
+        
+        # Create CeilingLight with default spacing and padding
+        ceiling_light_item = {
+            "Type": "CeilingLight",
+            "Start": {"X": float(start_x), "Y": float(start_y)},
+            "End": {"X": float(end_x), "Y": float(end_y)},
+            "Spacing": {"X": 500.0, "Y": 600.0},
+            "Padding": {"X": 200.0, "Y": 200.0},
+            "Yaw": 0.0
+        }
+        self.data.append(ceiling_light_item)
+        
+        # Rebuild and select the ceiling light
+        self.rebuild_canvas(preserve_selection=False)
+        for obj in self.objects:
+            if obj["data"] is ceiling_light_item:
+                self.set_selected(obj)
+                break
+
     def handle_line_press(self, mode, event):
         wx, wy = self.screen_to_world(event.x, event.y)
         wx, wy = self.snap_point(wx, wy)
@@ -3183,8 +3244,8 @@ class FloorplanEditor:
         color = self.line_mode_color(mode)
         sx, sy = self.world_to_screen(*start_world)
         
-        # For floor_ceiling mode, use rectangle instead of line
-        if mode == "add_floor_ceiling":
+        # For rectangle-based modes, use rectangle instead of line
+        if mode in ("add_floor_ceiling", "add_ceiling_light"):
             preview_id = self.canvas.create_rectangle(sx, sy, sx, sy,
                                                      outline=color, dash=(8, 4), width=2,
                                                      fill="", tags=("preview",))
@@ -3216,7 +3277,15 @@ class FloorplanEditor:
         start_wx, start_wy = self.pending_line["start_world"]
         sx0, sy0 = self.world_to_screen(start_wx, start_wy)
         sx1, sy1 = self.world_to_screen(wx, wy)
-        self.canvas.coords(self.pending_line["preview_id"], sx0, sy0, sx1, sy1)
+        
+        mode = self.pending_line.get("mode")
+        if mode in ("add_floor_ceiling", "add_ceiling_light"):
+            # Rectangle needs 4 coords: x0, y0, x1, y1
+            self.canvas.coords(self.pending_line["preview_id"], sx0, sy0, sx1, sy1)
+        else:
+            # Line uses 4 coords too but interprets them as endpoints
+            self.canvas.coords(self.pending_line["preview_id"], sx0, sy0, sx1, sy1)
+        
         self.pending_line["current_end_world"] = (wx, wy)
         if (wx, wy) != (start_wx, start_wy):
             self.pending_line["dragged"] = True
@@ -3236,6 +3305,8 @@ class FloorplanEditor:
         mode = pending.get("mode")
         if mode == "add_floor_ceiling":
             self.create_floor_ceiling_pair(start_world, end_world)
+        elif mode == "add_ceiling_light":
+            self.create_ceiling_light(start_world, end_world)
         else:
             self.create_line_item(mode, start_world, end_world)
         self.clear_pending_line()
