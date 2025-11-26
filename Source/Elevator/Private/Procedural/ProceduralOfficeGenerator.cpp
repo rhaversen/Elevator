@@ -28,8 +28,25 @@
 
 DEFINE_LOG_CATEGORY(LogProceduralOffice);
 
-const FName AProceduralOfficeGenerator::WorkstationMonitorComponentKey(TEXT("CubicleComputer"));
-const FName AProceduralOfficeGenerator::WorkstationMonitorTag(TEXT("WorkstationMonitor"));
+const TCHAR* AProceduralOfficeGenerator::GetWorkstationMonitorComponentKeyString()
+{
+    return TEXT("CubicleComputer");
+}
+
+const TCHAR* AProceduralOfficeGenerator::GetWorkstationMonitorTagString()
+{
+    return TEXT("WorkstationMonitor");
+}
+
+FName AProceduralOfficeGenerator::GetWorkstationMonitorComponentKey()
+{
+    return FName(GetWorkstationMonitorComponentKeyString());
+}
+
+FName AProceduralOfficeGenerator::GetWorkstationMonitorTag()
+{
+    return FName(GetWorkstationMonitorTagString());
+}
 
 AProceduralOfficeGenerator::AProceduralOfficeGenerator()
 {
@@ -754,7 +771,7 @@ UInstancedStaticMeshComponent *AProceduralOfficeGenerator::GetOrCreateISMC(UStat
     
     // Set up custom data floats for workstation monitors BEFORE registering
     // This is needed for per-instance material control (e.g., emissive on/off)
-    if (ComponentName == WorkstationMonitorComponentKey)
+    if (ComponentName == GetWorkstationMonitorComponentKey())
     {
         NewComponent->NumCustomDataFloats = 1; // Index 0 = power state
     }
@@ -1271,7 +1288,7 @@ UInstancedStaticMeshComponent* AProceduralOfficeGenerator::ResolveComputerMeshCo
         return ComputerMeshComponent;
     }
 
-    if (TObjectPtr<UInstancedStaticMeshComponent>* Found = InstancedCache.Find(AProceduralOfficeGenerator::WorkstationMonitorComponentKey))
+    if (TObjectPtr<UInstancedStaticMeshComponent>* Found = InstancedCache.Find(AProceduralOfficeGenerator::GetWorkstationMonitorComponentKey()))
     {
         if (IsValid(Found->Get()))
         {
@@ -1284,19 +1301,19 @@ UInstancedStaticMeshComponent* AProceduralOfficeGenerator::ResolveComputerMeshCo
     UE_LOG(LogProceduralOffice, Warning, TEXT("ResolveComputerMeshComponent: Monitor cache invalid, scanning instanced components."));
     TArray<UInstancedStaticMeshComponent*> InstancedComponents;
     GetComponents<UInstancedStaticMeshComponent>(InstancedComponents);
-    const FString MonitorNamePrefix = AProceduralOfficeGenerator::WorkstationMonitorComponentKey.ToString();
+    const FString MonitorNamePrefix = AProceduralOfficeGenerator::GetWorkstationMonitorComponentKey().ToString();
     
     // Priority 1: Search for component with specific tag
     UInstancedStaticMeshComponent** TagMatch = InstancedComponents.FindByPredicate([](UInstancedStaticMeshComponent* Component)
     {
-        return IsValid(Component) && Component->ComponentTags.Contains(AProceduralOfficeGenerator::WorkstationMonitorTag);
+        return IsValid(Component) && Component->ComponentTags.Contains(AProceduralOfficeGenerator::GetWorkstationMonitorTag());
     });
 
     if (TagMatch)
     {
         UE_LOG(LogProceduralOffice, Display, TEXT("ResolveComputerMeshComponent: Found tagged monitor component: %s"), *(*TagMatch)->GetName());
         ComputerMeshComponent = *TagMatch;
-        InstancedCache.FindOrAdd(AProceduralOfficeGenerator::WorkstationMonitorComponentKey) = ComputerMeshComponent;
+        InstancedCache.FindOrAdd(AProceduralOfficeGenerator::GetWorkstationMonitorComponentKey()) = ComputerMeshComponent;
         return ComputerMeshComponent;
     }
 
@@ -1318,7 +1335,7 @@ UInstancedStaticMeshComponent* AProceduralOfficeGenerator::ResolveComputerMeshCo
     {
         UE_LOG(LogProceduralOffice, Display, TEXT("ResolveComputerMeshComponent: Found monitor by name match: %s"), *(*NameMatch)->GetName());
         ComputerMeshComponent = *NameMatch;
-        InstancedCache.FindOrAdd(AProceduralOfficeGenerator::WorkstationMonitorComponentKey) = ComputerMeshComponent;
+        InstancedCache.FindOrAdd(AProceduralOfficeGenerator::GetWorkstationMonitorComponentKey()) = ComputerMeshComponent;
         return ComputerMeshComponent;
     }
 

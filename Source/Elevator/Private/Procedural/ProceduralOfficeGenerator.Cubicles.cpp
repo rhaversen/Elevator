@@ -113,16 +113,16 @@ void AProceduralOfficeGenerator::PlaceCubicle(const FVector2D &Center, float Yaw
             return INDEX_NONE;
         }
 
-        if (ComponentKey == AProceduralOfficeGenerator::WorkstationMonitorComponentKey)
+        if (ComponentKey == AProceduralOfficeGenerator::GetWorkstationMonitorComponentKey())
         {
             ComputerMeshComponent = Component;
             Component->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
             Component->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
             
             // Ensure the tag is always present, even if component was retrieved from cache
-            if (!Component->ComponentTags.Contains(AProceduralOfficeGenerator::WorkstationMonitorTag))
+            if (!Component->ComponentTags.Contains(AProceduralOfficeGenerator::GetWorkstationMonitorTag()))
             {
-                Component->ComponentTags.AddUnique(AProceduralOfficeGenerator::WorkstationMonitorTag);
+                Component->ComponentTags.AddUnique(AProceduralOfficeGenerator::GetWorkstationMonitorTag());
             }
         }
 
@@ -131,7 +131,7 @@ void AProceduralOfficeGenerator::PlaceCubicle(const FVector2D &Center, float Yaw
         return Component->AddInstance(WorldTransform);
     };
 
-    MonitorInstanceIndex = AddAccessoryInstance(CubicleComputerMesh.Get(), CubicleComputerMaterialOverride.Get(), CubicleComputerRelativeLocation, CubicleComputerRelativeRotation, CubicleComputerScale, AProceduralOfficeGenerator::WorkstationMonitorComponentKey);
+    MonitorInstanceIndex = AddAccessoryInstance(CubicleComputerMesh.Get(), CubicleComputerMaterialOverride.Get(), CubicleComputerRelativeLocation, CubicleComputerRelativeRotation, CubicleComputerScale, AProceduralOfficeGenerator::GetWorkstationMonitorComponentKey());
     
     // Set the power state custom data for this monitor instance
     // Custom data index 0: 1.0 = powered on (emissive), 0.0 = powered off (no emissive)

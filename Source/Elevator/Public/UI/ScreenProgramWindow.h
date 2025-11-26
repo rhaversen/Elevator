@@ -5,7 +5,7 @@
 #include "InputCoreTypes.h"
 #include "Math/Box2D.h"
 #include "Templates/Function.h"
-#include "UI/IScreenProgram.h"
+#include "UI/ScreenProgramBase.h"
 #include "Widgets/SCanvas.h"
 
 enum class EScreenProgramWindowHitRegion : uint8
@@ -63,37 +63,27 @@ private:
     FWindowedScreenProgramBase& Owner;
 };
 
-class ELEVATOR_API FWindowedScreenProgramBase : public IScreenProgram, public TSharedFromThis<FWindowedScreenProgramBase>
+class ELEVATOR_API FWindowedScreenProgramBase : public FScreenProgramBase
 {
 public:
     virtual ~FWindowedScreenProgramBase() override = default;
 
-    virtual TSharedRef<SWidget> CreateWidget(const FVector2D& Size, const FScreenProgramStyle& Style) override final;
-    virtual void OnPointerMoved(const FScreenPointerEvent& Event) override final;
-    virtual void OnPointerPressed(const FScreenPointerEvent& Event) override final;
-    virtual void OnPointerReleased(const FScreenPointerEvent& Event) override final;
-    virtual void OnScreenResized(const FVector2D& NewSize) override final;
-    virtual EMouseCursor::Type GetCursorType() const override final;
-    virtual bool IsTaskComplete() const override { return bTaskComplete; }
-
 protected:
     FWindowedScreenProgramBase();
 
+    virtual TSharedRef<SWidget> BuildProgramWidget() override;
     virtual void BuildWindowLayout(FScreenProgramWindowBuilder& Builder) = 0;
+    virtual TSharedRef<SWidget> BuildProgramContent();
 
-    virtual void HandlePointerMoved(const FScreenPointerEvent& Event, bool bHandledByChrome);
-    virtual void HandlePointerPressed(const FScreenPointerEvent& Event, bool bHandledByChrome);
-    virtual void HandlePointerReleased(const FScreenPointerEvent& Event, bool bHandledByChrome);
-    virtual void HandleScreenResized(const FVector2D& NewSize);
-    virtual void HandleTaskCompletionChanged(bool bCompleted);
+    virtual bool PreHandlePointerMoved(const FScreenPointerEvent& Event) override;
+    virtual bool PreHandlePointerPressed(const FScreenPointerEvent& Event) override;
+    virtual bool PreHandlePointerReleased(const FScreenPointerEvent& Event) override;
 
-    void SetTaskComplete(bool bCompleted);
-    bool GetTaskComplete() const { return bTaskComplete; }
+    virtual void HandlePointerMoved(const FScreenPointerEvent& Event, bool bHandledByChrome) override;
+    virtual void HandlePointerPressed(const FScreenPointerEvent& Event, bool bHandledByChrome) override;
+    virtual void HandlePointerReleased(const FScreenPointerEvent& Event, bool bHandledByChrome) override;
+    virtual void HandleScreenResized(const FVector2D& NewSize) override;
 
-    void SetCursorOverride(TOptional<EMouseCursor::Type> CursorOverride);
-
-    const FVector2D& GetProgramSize() const { return ProgramSize; }
-    const FScreenProgramStyle& GetProgramStyle() const { return ActiveStyle; }
     FName GetHoveredWindowId() const { return HoveredWindowId; }
     bool TryGetWindowMetrics(FName WindowId, FScreenProgramWindowMetrics& OutMetrics) const;
 
@@ -155,13 +145,6 @@ private:
     TSharedPtr<SCanvas> RootCanvas;
     TArray<FWindowInstance> WindowInstances;
     FInteractionState Interaction;
-    FVector2D ProgramSize = FVector2D::ZeroVector;
-    FScreenProgramStyle ActiveStyle;
     FName HoveredWindowId = NAME_None;
-    FVector2D LastPointerNormalized = FVector2D(0.5f, 0.5f);
-    FVector2D LastPointerPixel = FVector2D::ZeroVector;
     int32 NextZOrder = 0;
-    bool bTaskComplete = false;
-    TOptional<EMouseCursor::Type> CursorOverride;
-    EMouseCursor::Type BaseCursor = EMouseCursor::Default;
 };

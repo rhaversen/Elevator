@@ -35,9 +35,4 @@ private:
     FKey ActiveButtonPointerKey = EKeys::Invalid;
     bool bCompleteButtonHovered = false;
     bool bCompleteButtonPressed = false;
-    static constexpr float CompleteButtonWidth = 200.0f;
-    static constexpr float CompleteButtonHeight = 60.0f;
-    static constexpr float TitleBarHeight = 30.0f;
-    static constexpr float ResizeHandleSize = 20.0f;
-    static constexpr float MinWindowSize = 100.0f;
 };

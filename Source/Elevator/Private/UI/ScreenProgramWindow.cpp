@@ -26,38 +26,29 @@ FWindowedScreenProgramBase::FWindowedScreenProgramBase()
     Interaction.Reset();
 }
 
-TSharedRef<SWidget> FWindowedScreenProgramBase::CreateWidget(const FVector2D& Size, const FScreenProgramStyle& Style)
+TSharedRef<SWidget> FWindowedScreenProgramBase::BuildProgramWidget()
 {
-    RootCanvas.Reset();
+    RootCanvas = SNew(SCanvas);
     WindowInstances.Reset();
     Interaction.Reset();
-    CursorOverride.Reset();
-    BaseCursor = EMouseCursor::Default;
     HoveredWindowId = NAME_None;
-    LastPointerNormalized = FVector2D(0.5f, 0.5f);
-    LastPointerPixel = FVector2D::ZeroVector;
     NextZOrder = 0;
-
-    ProgramSize = FVector2D(FMath::Max(Size.X, 1.0f), FMath::Max(Size.Y, 1.0f));
-    ActiveStyle = Style;
-
-    RootCanvas = SNew(SCanvas);
 
     FScreenProgramWindowBuilder Builder(*this);
     BuildWindowLayout(Builder);
 
     if (WindowInstances.Num() == 0)
     {
-        return RootCanvas.ToSharedRef();
+        return BuildProgramContent();
     }
 
-    TSharedRef<FWindowedScreenProgramBase> SharedThis = AsShared();
+    TSharedRef<FWindowedScreenProgramBase> SharedThis = StaticCastSharedRef<FWindowedScreenProgramBase>(AsShared());
 
     for (FWindowInstance& Instance : WindowInstances)
     {
         ClampWindowToViewport(Instance);
 
-        const TSharedRef<SWidget> WindowWidget = BuildWindowWidget(Instance, ActiveStyle);
+        const TSharedRef<SWidget> WindowWidget = BuildWindowWidget(Instance, GetProgramStyle());
         Instance.RootWidget = WindowWidget;
 
         RootCanvas->AddSlot()
@@ -71,49 +62,27 @@ TSharedRef<SWidget> FWindowedScreenProgramBase::CreateWidget(const FVector2D& Si
             ];
     }
 
-    HandleScreenResized(ProgramSize);
-
     return RootCanvas.ToSharedRef();
 }
 
-void FWindowedScreenProgramBase::OnPointerMoved(const FScreenPointerEvent& Event)
+TSharedRef<SWidget> FWindowedScreenProgramBase::BuildProgramContent()
 {
-    const bool bHandled = ProcessPointerMoved(Event);
-    HandlePointerMoved(Event, bHandled);
+    return RootCanvas.IsValid() ? RootCanvas.ToSharedRef() : SNullWidget::NullWidget;
 }
 
-void FWindowedScreenProgramBase::OnPointerPressed(const FScreenPointerEvent& Event)
+bool FWindowedScreenProgramBase::PreHandlePointerMoved(const FScreenPointerEvent& Event)
 {
-    const bool bHandled = ProcessPointerPressed(Event);
-    HandlePointerPressed(Event, bHandled);
+    return ProcessPointerMoved(Event);
 }
 
-void FWindowedScreenProgramBase::OnPointerReleased(const FScreenPointerEvent& Event)
+bool FWindowedScreenProgramBase::PreHandlePointerPressed(const FScreenPointerEvent& Event)
 {
-    const bool bHandled = ProcessPointerReleased(Event);
-    HandlePointerReleased(Event, bHandled);
+    return ProcessPointerPressed(Event);
 }
 
-void FWindowedScreenProgramBase::OnScreenResized(const FVector2D& NewSize)
+bool FWindowedScreenProgramBase::PreHandlePointerReleased(const FScreenPointerEvent& Event)
 {
-    ProgramSize = FVector2D(FMath::Max(NewSize.X, 1.0f), FMath::Max(NewSize.Y, 1.0f));
-
-    for (FWindowInstance& Instance : WindowInstances)
-    {
-        ClampWindowToViewport(Instance);
-    }
-
-    HandleScreenResized(ProgramSize);
-}
-
-EMouseCursor::Type FWindowedScreenProgramBase::GetCursorType() const
-{
-    if (CursorOverride.IsSet())
-    {
-        return CursorOverride.GetValue();
-    }
-
-    return BaseCursor;
+    return ProcessPointerReleased(Event);
 }
 
 void FWindowedScreenProgramBase::HandlePointerMoved(const FScreenPointerEvent&, bool)
@@ -128,28 +97,13 @@ void FWindowedScreenProgramBase::HandlePointerReleased(const FScreenPointerEvent
 {
 }
 
-void FWindowedScreenProgramBase::HandleScreenResized(const FVector2D&)
+void FWindowedScreenProgramBase::HandleScreenResized(const FVector2D& NewSize)
 {
-}
-
-void FWindowedScreenProgramBase::HandleTaskCompletionChanged(bool)
-{
-}
-
-void FWindowedScreenProgramBase::SetTaskComplete(bool bCompleted)
-{
-    if (bTaskComplete == bCompleted)
+    for (FWindowInstance& Instance : WindowInstances)
     {
-        return;
+        ClampWindowToViewport(Instance);
     }
-
-    bTaskComplete = bCompleted;
-    HandleTaskCompletionChanged(bTaskComplete);
-}
-
-void FWindowedScreenProgramBase::SetCursorOverride(TOptional<EMouseCursor::Type> InCursorOverride)
-{
-    CursorOverride = InCursorOverride;
+    SetBaseCursor(EMouseCursor::Default);
 }
 
 bool FWindowedScreenProgramBase::TryGetWindowMetrics(FName WindowId, FScreenProgramWindowMetrics& OutMetrics) const
@@ -265,14 +219,15 @@ void FWindowedScreenProgramBase::ClampWindowToViewport(FWindowInstance& Instance
         return;
     }
 
-    const float MaxWidth = FMath::Max(ProgramSize.X - Instance.Position.X, Instance.Config.MinimumSize.X);
-    const float MaxHeight = FMath::Max(ProgramSize.Y - Instance.Position.Y, Instance.Config.MinimumSize.Y);
+    const FVector2D AvailableSize = GetProgramSize();
+    const float MaxWidth = FMath::Max(AvailableSize.X - Instance.Position.X, Instance.Config.MinimumSize.X);
+    const float MaxHeight = FMath::Max(AvailableSize.Y - Instance.Position.Y, Instance.Config.MinimumSize.Y);
 
     Instance.Size.X = FMath::Clamp(Instance.Size.X, Instance.Config.MinimumSize.X, MaxWidth);
     Instance.Size.Y = FMath::Clamp(Instance.Size.Y, Instance.Config.MinimumSize.Y, MaxHeight);
 
-    const float LimitX = FMath::Max(ProgramSize.X - Instance.Size.X, 0.0f);
-    const float LimitY = FMath::Max(ProgramSize.Y - Instance.Size.Y, 0.0f);
+    const float LimitX = FMath::Max(AvailableSize.X - Instance.Size.X, 0.0f);
+    const float LimitY = FMath::Max(AvailableSize.Y - Instance.Size.Y, 0.0f);
 
     Instance.Position.X = FMath::Clamp(Instance.Position.X, 0.0f, LimitX);
     Instance.Position.Y = FMath::Clamp(Instance.Position.Y, 0.0f, LimitY);
@@ -328,15 +283,12 @@ FWindowedScreenProgramBase::FWindowHitResult FWindowedScreenProgramBase::HitTest
 
 bool FWindowedScreenProgramBase::ProcessPointerPressed(const FScreenPointerEvent& Event)
 {
-    LastPointerNormalized = Event.ProgramNormalizedPosition;
-    LastPointerPixel = Event.ProgramPixelPosition;
-
     FWindowHitResult Hit = HitTestWindows(Event.ProgramPixelPosition);
     UpdateHoverState(Hit);
 
     if (Hit.WindowId == NAME_None)
     {
-        BaseCursor = EMouseCursor::Default;
+        SetBaseCursor(EMouseCursor::Default);
         return false;
     }
 
@@ -376,16 +328,13 @@ bool FWindowedScreenProgramBase::ProcessPointerPressed(const FScreenPointerEvent
 
 bool FWindowedScreenProgramBase::ProcessPointerMoved(const FScreenPointerEvent& Event)
 {
-    LastPointerNormalized = Event.ProgramNormalizedPosition;
-    LastPointerPixel = Event.ProgramPixelPosition;
-
     if (Interaction.IsActive())
     {
         FWindowInstance* Instance = FindWindow(Interaction.WindowId);
         if (!Instance)
         {
             Interaction.Reset();
-            BaseCursor = EMouseCursor::Default;
+            SetBaseCursor(EMouseCursor::Default);
             return false;
         }
 
@@ -415,9 +364,6 @@ bool FWindowedScreenProgramBase::ProcessPointerMoved(const FScreenPointerEvent& 
 
 bool FWindowedScreenProgramBase::ProcessPointerReleased(const FScreenPointerEvent& Event)
 {
-    LastPointerNormalized = Event.ProgramNormalizedPosition;
-    LastPointerPixel = Event.ProgramPixelPosition;
-
     if (!Interaction.IsActive())
     {
         FWindowHitResult Hit = HitTestWindows(Event.ProgramPixelPosition);
@@ -454,27 +400,27 @@ void FWindowedScreenProgramBase::UpdateBaseCursorForHit(const FWindowHitResult& 
 
     if (Hit.WindowId == NAME_None)
     {
-        BaseCursor = EMouseCursor::Default;
+        SetBaseCursor(EMouseCursor::Default);
         return;
     }
 
     const FWindowInstance* Instance = FindWindow(Hit.WindowId);
     if (!Instance)
     {
-        BaseCursor = EMouseCursor::Default;
+        SetBaseCursor(EMouseCursor::Default);
         return;
     }
 
     switch (Hit.Region)
     {
     case EScreenProgramWindowHitRegion::ResizeHandle:
-        BaseCursor = Instance->Config.bCanResize ? EMouseCursor::ResizeSouthEast : EMouseCursor::Default;
+        SetBaseCursor(Instance->Config.bCanResize ? EMouseCursor::ResizeSouthEast : EMouseCursor::Default);
         break;
     case EScreenProgramWindowHitRegion::TitleBar:
-        BaseCursor = Instance->Config.bCanMove ? EMouseCursor::Hand : EMouseCursor::Default;
+        SetBaseCursor(Instance->Config.bCanMove ? EMouseCursor::Hand : EMouseCursor::Default);
         break;
     default:
-        BaseCursor = EMouseCursor::Default;
+        SetBaseCursor(EMouseCursor::Default);
         break;
     }
 }
@@ -484,13 +430,13 @@ void FWindowedScreenProgramBase::UpdateCursorFromInteraction()
     switch (Interaction.Region)
     {
     case EScreenProgramWindowHitRegion::TitleBar:
-        BaseCursor = EMouseCursor::GrabHand;
+        SetBaseCursor(EMouseCursor::GrabHand);
         break;
     case EScreenProgramWindowHitRegion::ResizeHandle:
-        BaseCursor = EMouseCursor::ResizeSouthEast;
+        SetBaseCursor(EMouseCursor::ResizeSouthEast);
         break;
     default:
-        BaseCursor = EMouseCursor::Default;
+        SetBaseCursor(EMouseCursor::Default);
         break;
     }
 }
@@ -499,6 +445,15 @@ TSharedRef<SWidget> FWindowedScreenProgramBase::BuildWindowWidget(FWindowInstanc
 {
     const FSlateBrush* SolidBrush = FCoreStyle::Get().GetBrush("WhiteBrush");
     const FSlateBrush* TransparentBrush = FCoreStyle::Get().GetBrush("NoBrush");
+
+    // Use style-based title bar height if config uses default, otherwise use config value
+    const float DefaultTitleBarHeight = 30.0f;
+    const float TitleBarHeight = FMath::IsNearlyEqual(Instance.Config.TitleBarHeight, DefaultTitleBarHeight)
+        ? Style.GetTitleBarHeight()
+        : Instance.Config.TitleBarHeight;
+
+    // Update instance config so metrics are accurate
+    Instance.Config.TitleBarHeight = TitleBarHeight;
 
     return SNew(SBorder)
         .BorderImage(SolidBrush)
@@ -515,12 +470,12 @@ TSharedRef<SWidget> FWindowedScreenProgramBase::BuildWindowWidget(FWindowInstanc
                 .AutoHeight()
                 [
                     SNew(SBox)
-                    .HeightOverride(Instance.Config.TitleBarHeight)
+                    .HeightOverride(TitleBarHeight)
                     [
                         SNew(SBorder)
                         .BorderImage(TransparentBrush)
                         .BorderBackgroundColor(Instance.Chrome.TitleBarColor)
-                        .Padding(FMargin(10.0f, 8.0f))
+                        .Padding(Style.GetTitleBarPadding())
                         [
                             SNew(STextBlock)
                             .Text(Instance.Config.Title)

@@ -107,8 +107,10 @@ class ELEVATOR_API AProceduralOfficeGenerator : public AActor, public IInteracta
     GENERATED_BODY()
 
 public:
-    static const FName WorkstationMonitorComponentKey;
-    static const FName WorkstationMonitorTag;
+    static const TCHAR* GetWorkstationMonitorComponentKeyString();
+    static const TCHAR* GetWorkstationMonitorTagString();
+    static FName GetWorkstationMonitorComponentKey();
+    static FName GetWorkstationMonitorTag();
 
     AProceduralOfficeGenerator();
     virtual ~AProceduralOfficeGenerator();
