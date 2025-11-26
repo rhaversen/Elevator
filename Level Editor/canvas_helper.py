@@ -277,12 +277,33 @@ class CanvasHelper:
 def draw_grid(
     helper: CanvasHelper,
     grid_size: float,
-    axis_color: str = "#d0d0d0",
-    grid_color: str = "#eeeeee",
+    axis_color: str = "#959595",
+    grid_color: str = "#c4c4c4",
+    grid_size_y: Optional[float] = None,
+    rotation: float = 0.0,
+    offset_x: float = 0.0,
+    offset_y: float = 0.0,
 ) -> List[int]:
-    """Draw a grid and return the canvas IDs."""
+    """Draw a grid and return the canvas IDs.
+    
+    Args:
+        helper: Canvas helper for coordinate transforms
+        grid_size: Grid spacing for X axis (or both if grid_size_y is None)
+        axis_color: Color for axis lines
+        grid_color: Color for grid lines
+        grid_size_y: Grid spacing for Y axis (optional, defaults to grid_size)
+        rotation: Rotation of the grid in degrees (0 = aligned with world axes)
+        offset_x: Offset for grid lines in X direction (in local/rotated space)
+        offset_y: Offset for grid lines in Y direction (in local/rotated space)
+    """
     if grid_size <= 0:
         return []
+    
+    grid_x = grid_size
+    grid_y = grid_size_y if grid_size_y is not None else grid_size
+    
+    if grid_y <= 0:
+        grid_y = grid_x
     
     ids = []
     wx0, wy0, wx1, wy1 = helper.get_world_bbox()
@@ -291,34 +312,97 @@ def draw_grid(
     if wy0 > wy1:
         wy0, wy1 = wy1, wy0
     
-    start_x = math.floor(wx0 / grid_size)
-    end_x = math.ceil(wx1 / grid_size)
-    start_y = math.floor(wy0 / grid_size)
-    end_y = math.ceil(wy1 / grid_size)
-    
-    for i in range(start_x, end_x + 1):
-        x = i * grid_size
-        sx0, sy0 = helper.world_to_screen(x, wy0)
-        sx1, sy1 = helper.world_to_screen(x, wy1)
-        is_axis = abs(x) < 1e-6
-        color = axis_color if is_axis else grid_color
-        width = 2 if is_axis else 1
-        line = helper.canvas.create_line(
-            sx0, sy0, sx1, sy1, fill=color, width=width, tags=("grid",)
-        )
-        ids.append(line)
-    
-    for j in range(start_y, end_y + 1):
-        y = j * grid_size
-        sx0, sy0 = helper.world_to_screen(wx0, y)
-        sx1, sy1 = helper.world_to_screen(wx1, y)
-        is_axis = abs(y) < 1e-6
-        color = axis_color if is_axis else grid_color
-        width = 2 if is_axis else 1
-        line = helper.canvas.create_line(
-            sx0, sy0, sx1, sy1, fill=color, width=width, tags=("grid",)
-        )
-        ids.append(line)
+    # For rotated grids, we need to cover a larger area to account for diagonal reach
+    if abs(rotation) > 0.01:
+        # Rotation in radians
+        rot_rad = math.radians(rotation)
+        cos_r = math.cos(rot_rad)
+        sin_r = math.sin(rot_rad)
+        
+        # Expand bounds to cover rotated area
+        cx = (wx0 + wx1) / 2
+        cy = (wy0 + wy1) / 2
+        half_w = (wx1 - wx0) / 2
+        half_h = (wy1 - wy0) / 2
+        diag = math.sqrt(half_w**2 + half_h**2) * 1.5  # Extra margin
+        
+        # Transform world coords to rotated local coords for line calculation
+        def world_to_local(wx, wy):
+            dx, dy = wx - cx, wy - cy
+            lx = dx * cos_r + dy * sin_r
+            ly = -dx * sin_r + dy * cos_r
+            return lx, ly
+        
+        def local_to_world(lx, ly):
+            wx = lx * cos_r - ly * sin_r + cx
+            wy = lx * sin_r + ly * cos_r + cy
+            return wx, wy
+        
+        # Draw lines in local (rotated) coordinate system with offset
+        # Lines along local X axis (width lines, perpendicular to width direction)
+        start_x = math.floor((-diag - offset_x) / grid_x)
+        end_x = math.ceil((diag - offset_x) / grid_x)
+        for i in range(start_x, end_x + 1):
+            lx = i * grid_x + offset_x
+            # Line from top to bottom in local Y
+            p0_world = local_to_world(lx, -diag)
+            p1_world = local_to_world(lx, diag)
+            sx0, sy0 = helper.world_to_screen(*p0_world)
+            sx1, sy1 = helper.world_to_screen(*p1_world)
+            color = grid_color
+            width = 1
+            line = helper.canvas.create_line(
+                sx0, sy0, sx1, sy1, fill=color, width=width, tags=("grid",)
+            )
+            ids.append(line)
+        
+        # Lines along local Y axis (depth lines, perpendicular to depth direction)
+        start_y = math.floor((-diag - offset_y) / grid_y)
+        end_y = math.ceil((diag - offset_y) / grid_y)
+        for j in range(start_y, end_y + 1):
+            ly = j * grid_y + offset_y
+            # Line from left to right in local X
+            p0_world = local_to_world(-diag, ly)
+            p1_world = local_to_world(diag, ly)
+            sx0, sy0 = helper.world_to_screen(*p0_world)
+            sx1, sy1 = helper.world_to_screen(*p1_world)
+            color = grid_color
+            width = 1
+            line = helper.canvas.create_line(
+                sx0, sy0, sx1, sy1, fill=color, width=width, tags=("grid",)
+            )
+            ids.append(line)
+    else:
+        # Non-rotated grid with offset
+        # Vertical lines (X spacing)
+        start_x = math.floor((wx0 - offset_x) / grid_x)
+        end_x = math.ceil((wx1 - offset_x) / grid_x)
+        for i in range(start_x, end_x + 1):
+            x = i * grid_x + offset_x
+            sx0, sy0 = helper.world_to_screen(x, wy0)
+            sx1, sy1 = helper.world_to_screen(x, wy1)
+            is_axis = abs(x) < 1e-6
+            color = axis_color if is_axis else grid_color
+            width = 2 if is_axis else 1
+            line = helper.canvas.create_line(
+                sx0, sy0, sx1, sy1, fill=color, width=width, tags=("grid",)
+            )
+            ids.append(line)
+        
+        # Horizontal lines (Y spacing)
+        start_y = math.floor((wy0 - offset_y) / grid_y)
+        end_y = math.ceil((wy1 - offset_y) / grid_y)
+        for j in range(start_y, end_y + 1):
+            y = j * grid_y + offset_y
+            sx0, sy0 = helper.world_to_screen(wx0, y)
+            sx1, sy1 = helper.world_to_screen(wx1, y)
+            is_axis = abs(y) < 1e-6
+            color = axis_color if is_axis else grid_color
+            width = 2 if is_axis else 1
+            line = helper.canvas.create_line(
+                sx0, sy0, sx1, sy1, fill=color, width=width, tags=("grid",)
+            )
+            ids.append(line)
     
     helper.canvas.tag_lower("grid")
     return ids

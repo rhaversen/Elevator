@@ -32,14 +32,19 @@ Point = Tuple[float, float]
 # Z-order layer tags (bottom to top)
 # Objects are placed in these layers to ensure consistent visual stacking
 Z_ORDER = [
-    "floor_layer",    # Floor rectangles (bottommost objects)
-    "ceiling_layer",  # Ceiling rectangles
-    "furniture_layer",# Cubicles and other furniture
-    "light_layer",    # Ceiling lights
-    "structure_layer",# Walls, doors, windows, elevators
-    "label_layer",    # ID labels and text
-    "grid",           # Background grid
-    "anchor_layer",   # Anchors (topmost, for interaction)
+    "floor_layer",      # Floor rectangles (bottommost)
+    "ceiling_layer",    # Ceiling rectangles
+    "cubicle_layer",    # Cubicles
+    "light_layer",      # Ceiling lights
+    "elevator_layer",   # Elevators
+    "grid",             # Background grid
+    "wall_layer",       # Walls
+    "door_layer",       # Doors
+    "window_layer",     # Windows
+    "roomtone_layer",   # Room tones
+    "spawn_layer",      # Spawn points
+    "label_layer",      # ID labels and text
+    "anchor_layer",     # Anchors (topmost, for interaction)
 ]
 
 
@@ -364,10 +369,12 @@ class ObjectRenderer:
                            {"kind": "center", "center": (cx, cy)},
                            anchors, canvas_ids)
         
-        # Place all non-anchor elements in structure layer
+        # Place all non-anchor elements in type-specific layer
+        layer_map = {"Wall": "wall_layer", "Door": "door_layer", "Window": "window_layer"}
+        layer = layer_map.get(item_type, "wall_layer")
         for cid in canvas_ids:
             if cid not in anchors:
-                self._place_in_layer(cid, "structure_layer")
+                self._place_in_layer(cid, layer)
     
     def _draw_elevator(
         self,
@@ -448,10 +455,10 @@ class ObjectRenderer:
                            {"kind": "center", "center": (cx, cy)},
                            anchors, canvas_ids)
         
-        # Place all non-anchor elements in structure layer
+        # Place all non-anchor elements in elevator layer
         for cid in canvas_ids:
             if cid not in anchors:
-                self._place_in_layer(cid, "structure_layer")
+                self._place_in_layer(cid, "elevator_layer")
     
     def _draw_ceiling_light(
         self,
@@ -632,9 +639,9 @@ class ObjectRenderer:
         canvas_ids.append(arrow_id)
         register_part(arrow_id, "arrow")
         
-        # Place cubicle body elements in furniture layer
+        # Place cubicle body elements in cubicle layer
         for c in [cid, arrow_id]:
-            self._place_in_layer(c, "furniture_layer")
+            self._place_in_layer(c, "cubicle_layer")
         
         # Corner anchors (axis-aligned bounds suffice for 90° increments)
         xs = [corner[0] for corner in world_corners]
@@ -695,9 +702,9 @@ class ObjectRenderer:
         canvas_ids.append(arrow_id)
         register_part(arrow_id, "arrow")
         
-        # Place spawn point elements in structure layer
+        # Place spawn point elements in spawn layer
         for c in [cid, arrow_id]:
-            self._place_in_layer(c, "structure_layer")
+            self._place_in_layer(c, "spawn_layer")
         
         # Center anchor
         self._create_anchor(wx, wy, "#00cc66", 5,
@@ -743,9 +750,9 @@ class ObjectRenderer:
         canvas_ids.append(cid)
         register_part(cid, "body")
         
-        # Place room tone elements in structure layer
+        # Place room tone elements in roomtone layer
         for c in [radius_cid, cid]:
-            self._place_in_layer(c, "structure_layer")
+            self._place_in_layer(c, "roomtone_layer")
         
         # Audio ID label
         audio_id = item.get("AudioId", "")
