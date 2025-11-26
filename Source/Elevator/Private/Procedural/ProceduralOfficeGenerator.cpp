@@ -36,7 +36,7 @@ AProceduralOfficeGenerator::AProceduralOfficeGenerator()
     Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
     SetRootComponent(Root);
 
-    LayoutFileRelativePath = TEXT("Layouts/ExampleOpenOffice.json");
+    LayoutFileRelativePath = TEXT("Layouts/DefaultOffice.json");
 
     ElevatorActorClass = AProceduralElevator::StaticClass();
 
@@ -212,6 +212,25 @@ void AProceduralOfficeGenerator::HandleDayChanged(int32 DayIndex, const FElevato
     BootedComputerIndicesThisDay.Empty();
     CurrentInteractionInstanceIndex = INDEX_NONE;
     bBootPendingForCurrentInteraction = false;
+
+    // Determine the new layout path using convention-based resolution
+    FString NewLayoutPath = Config.OfficeLayout.IsEmpty() ? LayoutFileRelativePath : ResolveLayoutPath(Config.OfficeLayout);
+    
+    // If layout changed, regenerate the office
+    if (NewLayoutPath != ActiveLayoutPath)
+    {
+        UE_LOG(LogProceduralOffice, Log, TEXT("Day %d: Layout changed from '%s' to '%s', regenerating office."), 
+            DayIndex, *ActiveLayoutPath, *NewLayoutPath);
+        ActiveLayoutPath = NewLayoutPath;
+        GenerateFromData();
+    }
+    else
+    {
+        // Layout same but overrides may have changed, regenerate anyway
+        UE_LOG(LogProceduralOffice, Log, TEXT("Day %d: Regenerating office with same layout '%s' for updated overrides."), 
+            DayIndex, *ActiveLayoutPath);
+        GenerateFromData();
+    }
 
     if (MonitorScreenComponent)
     {
@@ -401,10 +420,24 @@ void AProceduralOfficeGenerator::GenerateFromData()
     // Load element overrides from JSON
     LoadElementOverrides();
 
+    FString DesiredLayoutPath = ActiveLayoutPath;
+    if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
+    {
+        const FElevatorDayProgramEntry& DayConfig = Manager->GetActiveDayConfig();
+        DesiredLayoutPath = DayConfig.OfficeLayout.IsEmpty() ? LayoutFileRelativePath : ResolveLayoutPath(DayConfig.OfficeLayout);
+    }
+
+    if (DesiredLayoutPath.IsEmpty())
+    {
+        DesiredLayoutPath = LayoutFileRelativePath;
+    }
+
+    ActiveLayoutPath = DesiredLayoutPath;
+
     FOfficeLayout Layout;
     if (!LoadLayoutData(Layout))
     {
-        UE_LOG(LogProceduralOffice, Warning, TEXT("Failed to load office layout: %s"), *LayoutFileRelativePath);
+        UE_LOG(LogProceduralOffice, Warning, TEXT("Failed to load office layout: %s"), *ActiveLayoutPath);
         return;
     }
 
@@ -420,12 +453,15 @@ void AProceduralOfficeGenerator::ClearGeneratedContent()
 
 bool AProceduralOfficeGenerator::LoadLayoutData(FOfficeLayout &OutLayout) const
 {
-    if (LayoutFileRelativePath.IsEmpty())
+    // Use ActiveLayoutPath if set, otherwise fall back to LayoutFileRelativePath
+    const FString& LayoutPath = ActiveLayoutPath.IsEmpty() ? LayoutFileRelativePath : ActiveLayoutPath;
+    
+    if (LayoutPath.IsEmpty())
     {
         return false;
     }
 
-    const FString AbsolutePath = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectContentDir(), LayoutFileRelativePath));
+    const FString AbsolutePath = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectContentDir(), LayoutPath));
     if (!FPaths::FileExists(AbsolutePath))
     {
         UE_LOG(LogProceduralOffice, Error, TEXT("Layout file does not exist: %s"), *AbsolutePath);
@@ -446,6 +482,23 @@ bool AProceduralOfficeGenerator::LoadLayoutData(FOfficeLayout &OutLayout) const
     }
 
     return true;
+}
+
+FString AProceduralOfficeGenerator::ResolveLayoutPath(const FString& LayoutId)
+{
+    if (LayoutId.IsEmpty())
+    {
+        return FString();
+    }
+    
+    // If it already looks like a path (contains / or .json), use as-is
+    if (LayoutId.Contains(TEXT("/")) || LayoutId.EndsWith(TEXT(".json")))
+    {
+        return LayoutId;
+    }
+    
+    // Convention: LayoutId -> Layouts/LayoutId.json
+    return FString::Printf(TEXT("Layouts/%s.json"), *LayoutId);
 }
 
 bool AProceduralOfficeGenerator::LoadElementOverrides() const

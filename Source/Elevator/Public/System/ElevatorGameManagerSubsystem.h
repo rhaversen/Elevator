@@ -53,6 +53,9 @@ struct FElevatorDaySchedule
     UPROPERTY()
     TArray<FName> DefaultLockedButtons;
 
+    UPROPERTY()
+    FString DefaultOfficeLayout;
+
     /** Default element override set IDs applied to all days unless overridden */
     UPROPERTY()
     TArray<FName> DefaultElementOverrideSets;

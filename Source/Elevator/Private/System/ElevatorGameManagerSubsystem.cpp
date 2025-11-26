@@ -9,6 +9,7 @@
 #include "Templates/SharedPointer.h"
 #include "UI/ScreenProgramIds.h"
 #include "UI/ScreenProgramRegistry.h"
+#include "Algo/Sort.h"
 
 namespace
 {
@@ -244,6 +245,12 @@ void UElevatorGameManagerSubsystem::LoadSchedule()
     }
 
     // Parse DefaultElementOverrideSets
+    FString DefaultOfficeLayoutString;
+    if (RootObject->TryGetStringField(TEXT("DefaultOfficeLayout"), DefaultOfficeLayoutString))
+    {
+        Schedule.DefaultOfficeLayout = DefaultOfficeLayoutString;
+    }
+
     const TArray<TSharedPtr<FJsonValue>>* DefaultOverrideSetsArray = nullptr;
     if (RootObject->TryGetArrayField(TEXT("DefaultElementOverrideSets"), DefaultOverrideSetsArray))
     {
@@ -259,6 +266,8 @@ void UElevatorGameManagerSubsystem::LoadSchedule()
     }
 
     const TArray<TSharedPtr<FJsonValue>>* DaysArray = nullptr;
+    TSet<int32> RegisteredDayNumbers;
+
     if (RootObject->TryGetArrayField(TEXT("Days"), DaysArray))
     {
         Schedule.Days.Reset();
@@ -275,8 +284,23 @@ void UElevatorGameManagerSubsystem::LoadSchedule()
             {
                 if (Entry.DayNumber == INDEX_NONE)
                 {
-                    Entry.DayNumber = Index;
+                    UE_LOG(LogTemp, Warning, TEXT("Day schedule entry at index %d is missing required DayNumber. Entry will be ignored."), Index);
+                    continue;
                 }
+
+                if (Entry.DayNumber < 0)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("Day schedule entry at index %d has invalid DayNumber %d. Entry will be ignored."), Index, Entry.DayNumber);
+                    continue;
+                }
+
+                if (RegisteredDayNumbers.Contains(Entry.DayNumber))
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("Duplicate day schedule entry for Day %d detected. Only the first occurrence will be used."), Entry.DayNumber);
+                    continue;
+                }
+
+                RegisteredDayNumbers.Add(Entry.DayNumber);
                 Schedule.Days.Add(Entry);
             }
         }
@@ -289,9 +313,21 @@ void UElevatorGameManagerSubsystem::LoadSchedule()
         {
             if (Entry.DayNumber == INDEX_NONE)
             {
-                Entry.DayNumber = 0;
+                UE_LOG(LogTemp, Warning, TEXT("Day schedule root-level entry is missing required DayNumber. Entry will be ignored."));
             }
-            Schedule.Days.Add(Entry);
+            else if (Entry.DayNumber < 0)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Day schedule root-level entry has invalid DayNumber %d. Entry will be ignored."), Entry.DayNumber);
+            }
+            else if (RegisteredDayNumbers.Contains(Entry.DayNumber))
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Duplicate day schedule entry for Day %d detected at root level. Entry will be ignored."), Entry.DayNumber);
+            }
+            else
+            {
+                RegisteredDayNumbers.Add(Entry.DayNumber);
+                Schedule.Days.Add(Entry);
+            }
         }
     }
 
@@ -299,6 +335,11 @@ void UElevatorGameManagerSubsystem::LoadSchedule()
     {
         Schedule.DefaultProgramId = ScreenProgramIds::SimpleButton;
     }
+
+    Schedule.Days.Sort([](const FElevatorDayProgramEntry& LHS, const FElevatorDayProgramEntry& RHS)
+    {
+        return LHS.DayNumber < RHS.DayNumber;
+    });
 
     if (Schedule.Days.Num() == 0)
     {
@@ -315,8 +356,51 @@ void UElevatorGameManagerSubsystem::LoadSchedule()
 
 void UElevatorGameManagerSubsystem::ApplyCurrentDayConfig(bool bBroadcast)
 {
-    const FElevatorDayProgramEntry* Entry = FindConfigForDay(CurrentDayIndex);
-    ActiveDayConfig = Entry ? *Entry : MakeDefaultEntry(CurrentDayIndex);
+    const FElevatorDayProgramEntry* OverrideEntry = FindConfigForDay(CurrentDayIndex);
+    FElevatorDayProgramEntry DefaultEntry = MakeDefaultEntry(CurrentDayIndex);
+
+    if (OverrideEntry)
+    {
+        FElevatorDayProgramEntry MergedEntry = DefaultEntry;
+
+        if (!OverrideEntry->ProgramId.IsNone())
+        {
+            MergedEntry.ProgramId = OverrideEntry->ProgramId;
+        }
+
+        if (OverrideEntry->LockedButtons.Num() > 0)
+        {
+            MergedEntry.LockedButtons = OverrideEntry->LockedButtons;
+        }
+
+        if (!OverrideEntry->OfficeLayout.IsEmpty())
+        {
+            MergedEntry.OfficeLayout = OverrideEntry->OfficeLayout;
+        }
+
+        if (OverrideEntry->EnabledMonitors.Num() > 0)
+        {
+            MergedEntry.EnabledMonitors = OverrideEntry->EnabledMonitors;
+        }
+
+        if (OverrideEntry->SoundsToPlay.Num() > 0)
+        {
+            MergedEntry.SoundsToPlay = OverrideEntry->SoundsToPlay;
+        }
+
+        if (OverrideEntry->ElementOverrideSets.Num() > 0)
+        {
+            MergedEntry.ElementOverrideSets = OverrideEntry->ElementOverrideSets;
+        }
+
+        ActiveDayConfig = MergedEntry;
+    }
+    else
+    {
+        ActiveDayConfig = DefaultEntry;
+    }
+
+    ActiveDayConfig.DayNumber = CurrentDayIndex;
 
     ActiveProgramId = ActiveDayConfig.ProgramId.IsNone() ? Schedule.DefaultProgramId : ActiveDayConfig.ProgramId;
     if (ActiveProgramId.IsNone())
@@ -346,28 +430,22 @@ FElevatorDayProgramEntry UElevatorGameManagerSubsystem::MakeDefaultEntry(int32 D
     Entry.DayNumber = DayIndex;
     Entry.ProgramId = Schedule.DefaultProgramId.IsNone() ? ScreenProgramIds::SimpleButton : Schedule.DefaultProgramId;
     Entry.LockedButtons = Schedule.DefaultLockedButtons;
+    Entry.OfficeLayout = Schedule.DefaultOfficeLayout;
     Entry.ElementOverrideSets = Schedule.DefaultElementOverrideSets;
     return Entry;
 }
 
 const FElevatorDayProgramEntry* UElevatorGameManagerSubsystem::FindConfigForDay(int32 DayIndex) const
 {
-    for (int32 Index = 0; Index < Schedule.Days.Num(); ++Index)
+    for (const FElevatorDayProgramEntry& Entry : Schedule.Days)
     {
-        const FElevatorDayProgramEntry& Entry = Schedule.Days[Index];
-        const int32 EntryDay = (Entry.DayNumber >= 0) ? Entry.DayNumber : Index;
-        if (EntryDay == DayIndex)
+        if (Entry.DayNumber == DayIndex)
         {
             return &Entry;
         }
     }
 
-    if (Schedule.Days.IsValidIndex(DayIndex))
-    {
-        return &Schedule.Days[DayIndex];
-    }
-
-    return Schedule.Days.Num() > 0 ? &Schedule.Days.Last() : nullptr;
+    return nullptr;
 }
 
 TSet<FName> UElevatorGameManagerSubsystem::BuildLockedButtonSet(const FElevatorDayProgramEntry& Entry) const

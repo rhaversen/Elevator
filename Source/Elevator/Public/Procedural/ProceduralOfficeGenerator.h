@@ -168,12 +168,18 @@ protected:
 
     UInstancedStaticMeshComponent* GetOrCreateISMC(UStaticMesh* Mesh, const FName& ComponentName, UMaterialInterface* OverrideMaterial = nullptr);
     void DestroySpawnedComponents();
+    
+    /** Convert a layout ID to a file path using convention: ID -> Layouts/ID.json */
+    static FString ResolveLayoutPath(const FString& LayoutId);
 
     /** Cached element overrides data loaded from JSON (mutable for lazy-loading in const methods) */
     mutable FElementOverridesData ElementOverridesData;
     
     /** Currently active element override set IDs (mutable for lazy-loading in const methods) */
     mutable TArray<FName> ActiveOverrideSetIds;
+
+    /** The currently active layout path (may be overridden by day schedule) */
+    FString ActiveLayoutPath;
 
     UPROPERTY(VisibleAnywhere, Category = "Generation")
     TObjectPtr<USceneComponent> Root;

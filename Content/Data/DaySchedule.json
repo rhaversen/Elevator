@@ -1,11 +1,16 @@
 {
 	"DefaultProgramId": "SimpleButton",
-	"DefaultElementOverrideSets": ["Day1"],
+	"DefaultElementOverrideSets": ["Default"],
 	"DefaultLockedButtons": ["Alarm", "CallUp"],
+	"DefaultOfficeLayout": "DefaultOffice",
 	"Days": [
 		{
-			"ProgramId": "SimpleButton",
-			"ElementOverrideSets": ["Day1"]
+			"DayNumber": 0,
+			"ProgramId": "SimpleButton"
+		},
+		{
+			"DayNumber": 1,
+			"ProgramId": "SimpleButton"
 		}
 	]
 }

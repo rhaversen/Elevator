@@ -1,7 +1,7 @@
 {
 	"OverrideSets": [
 		{
-			"SetId": "Day1",
+			"SetId": "Default",
 			"Overrides": [
 				{
 					"ElementId": "MainCubicle",
