@@ -277,8 +277,8 @@ class CanvasHelper:
 def draw_grid(
     helper: CanvasHelper,
     grid_size: float,
-    axis_color: str = "#d0d0d0",
-    grid_color: str = "#eeeeee",
+    axis_color: str = "#959595",
+    grid_color: str = "#c4c4c4",
 ) -> List[int]:
     """Draw a grid and return the canvas IDs."""
     if grid_size <= 0:

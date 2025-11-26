@@ -36,9 +36,9 @@ Z_ORDER = [
     "ceiling_layer",  # Ceiling rectangles
     "furniture_layer",# Cubicles and other furniture
     "light_layer",    # Ceiling lights
+    "grid",           # Background grid
     "structure_layer",# Walls, doors, windows, elevators
     "label_layer",    # ID labels and text
-    "grid",           # Background grid
     "anchor_layer",   # Anchors (topmost, for interaction)
 ]
 
