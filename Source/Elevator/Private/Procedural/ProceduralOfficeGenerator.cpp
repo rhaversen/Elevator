@@ -213,25 +213,6 @@ void AProceduralOfficeGenerator::HandleDayChanged(int32 DayIndex, const FElevato
     CurrentInteractionInstanceIndex = INDEX_NONE;
     bBootPendingForCurrentInteraction = false;
 
-    // Determine the new layout path using convention-based resolution
-    FString NewLayoutPath = Config.OfficeLayout.IsEmpty() ? LayoutFileRelativePath : ResolveLayoutPath(Config.OfficeLayout);
-    
-    // If layout changed, regenerate the office
-    if (NewLayoutPath != ActiveLayoutPath)
-    {
-        UE_LOG(LogProceduralOffice, Log, TEXT("Day %d: Layout changed from '%s' to '%s', regenerating office."), 
-            DayIndex, *ActiveLayoutPath, *NewLayoutPath);
-        ActiveLayoutPath = NewLayoutPath;
-        GenerateFromData();
-    }
-    else
-    {
-        // Layout same but overrides may have changed, regenerate anyway
-        UE_LOG(LogProceduralOffice, Log, TEXT("Day %d: Regenerating office with same layout '%s' for updated overrides."), 
-            DayIndex, *ActiveLayoutPath);
-        GenerateFromData();
-    }
-
     if (MonitorScreenComponent)
     {
         MonitorScreenComponent->SetProgram(TSharedPtr<IScreenProgram>());
@@ -420,19 +401,8 @@ void AProceduralOfficeGenerator::GenerateFromData()
     // Load element overrides from JSON
     LoadElementOverrides();
 
-    FString DesiredLayoutPath = ActiveLayoutPath;
-    if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
-    {
-        const FElevatorDayProgramEntry& DayConfig = Manager->GetActiveDayConfig();
-        DesiredLayoutPath = DayConfig.OfficeLayout.IsEmpty() ? LayoutFileRelativePath : ResolveLayoutPath(DayConfig.OfficeLayout);
-    }
-
-    if (DesiredLayoutPath.IsEmpty())
-    {
-        DesiredLayoutPath = LayoutFileRelativePath;
-    }
-
-    ActiveLayoutPath = DesiredLayoutPath;
+    // Always use the default layout path
+    ActiveLayoutPath = LayoutFileRelativePath;
 
     FOfficeLayout Layout;
     if (!LoadLayoutData(Layout))
