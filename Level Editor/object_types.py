@@ -427,6 +427,17 @@ class CubicleType(PointBasedType):
     defaults = {"Yaw": 0.0}  # Cubicles use global width/depth, not per-item Dimensions
     
     @classmethod
+    def rotate(cls, item: Dict, delta_deg: float, center: Optional[Point] = None):
+        """Rotate cubicle around its anchor point (back wall center), not around center.
+        
+        This ensures cubicles rotate in place around their Start position.
+        """
+        # Only update yaw - don't move the position
+        # The anchor point (Start) stays fixed, cubicle rotates around it
+        current_yaw = float(item.get("Yaw", 0.0))
+        item["Yaw"] = (current_yaw + delta_deg) % 360
+    
+    @classmethod
     def get_bounds(cls, item: Dict, display_dims: Optional[Tuple[float, float]] = None) -> Optional[BBox]:
         start, _ = cls.get_start_end(item)
         if start is None:

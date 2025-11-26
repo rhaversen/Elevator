@@ -88,27 +88,19 @@ class FloorplanEditor:
         self.current_mode = tk.StringVar(value="select")
         self.show_grid = tk.BooleanVar(value=True)
         self.snap_enabled = tk.BooleanVar(value=True)
-        self.grid_size = tk.DoubleVar(value=100.0)
         self.show_lamps = tk.BooleanVar(value=True)
         self.lock_floor_ceiling = tk.BooleanVar(value=True)
+        
+        # Grid snap options (base 100, with halving subdivisions)
+        self._grid_base = 100.0
+        self._grid_snap_divisions_list = [1, 2, 4, 8, 16]  # Powers of 2
+        self.grid_snap_divisions = tk.IntVar(value=1)
+        
+        # Cubicle display and snap options
         self.cubicle_display_width = tk.DoubleVar(value=196.874405)
         self.cubicle_display_depth = tk.DoubleVar(value=112.691925)
+        self._cubicle_snap_divisions_list = [1, 2, 4, 8, 16]  # Powers of 2
         self.cubicle_snap_divisions = tk.IntVar(value=1)
-        self._cubicle_snap_options = [
-            (1, "1"),
-            (2, "1/2"),
-            (4, "1/4"),
-            (8, "1/8"),
-        ]
-        self._cubicle_snap_value_to_label = {
-            value: label for value, label in self._cubicle_snap_options
-        }
-        self._cubicle_snap_label_to_value = {
-            label: value for value, label in self._cubicle_snap_options
-        }
-        self._cubicle_snap_selection = tk.StringVar(
-            value=self._cubicle_snap_value_to_label[self.cubicle_snap_divisions.get()]
-        )
 
         # File state tracking
         self._prod_file_path: str | None = None  # Original "prod" file
@@ -117,14 +109,11 @@ class FloorplanEditor:
 
         # Set up traces
         self.current_mode.trace_add("write", self.on_mode_changed)
-        self.grid_size.trace_add("write", self.on_grid_setting_changed)
+        self.grid_snap_divisions.trace_add("write", self.on_grid_setting_changed)
         self.show_grid.trace_add("write", self.on_grid_setting_changed)
         self.cubicle_display_width.trace_add("write", self.on_cubicle_display_changed)
         self.cubicle_display_depth.trace_add("write", self.on_cubicle_display_changed)
         self.cubicle_snap_divisions.trace_add("write", self.on_cubicle_display_changed)
-        self._cubicle_snap_selection.trace_add(
-            "write", self._on_cubicle_snap_selection_changed
-        )
 
         self._build_ui()
         
@@ -293,8 +282,23 @@ class FloorplanEditor:
         tk.Checkbutton(frame, text="Snap", variable=self.snap_enabled,
                        bg=bg, activebackground=bg, selectcolor=bg).pack(side=tk.LEFT, padx=2)
         tk.Label(frame, text="Size:", bg=bg).pack(side=tk.LEFT, padx=(5, 2))
-        tk.Spinbox(frame, from_=10, to=2000, increment=10, width=6,
-                   textvariable=self.grid_size).pack(side=tk.LEFT, padx=2)
+        
+        # Grid size with +/- buttons in a compact group
+        snap_group = tk.Frame(frame, bg=bg)
+        snap_group.pack(side=tk.LEFT, padx=2)
+        
+        btn_style = {"font": ("Segoe UI", 8), "width": 2, "height": 1, 
+                     "relief": tk.FLAT, "bg": "#d0d0d0", "activebackground": "#b0b0b0",
+                     "cursor": "hand2", "bd": 0, "highlightthickness": 0}
+        
+        tk.Button(snap_group, text="−", command=self._grid_snap_decrease,
+                  **btn_style).pack(side=tk.LEFT)
+        self._grid_snap_label = tk.Label(snap_group, text="100", width=4, bg="#f0f0f0",
+                                          font=("Segoe UI", 9), relief=tk.SUNKEN, bd=1)
+        self._grid_snap_label.pack(side=tk.LEFT, padx=1)
+        tk.Button(snap_group, text="+", command=self._grid_snap_increase,
+                  **btn_style).pack(side=tk.LEFT)
+        
         tk.Checkbutton(frame, text="Show", variable=self.show_grid,
                        bg=bg, activebackground=bg, selectcolor=bg).pack(side=tk.LEFT, padx=(5, 2))
 
@@ -308,18 +312,34 @@ class FloorplanEditor:
                        command=lambda: self.rebuild_canvas(preserve_selection=True),
                        bg=bg, activebackground=bg, selectcolor=bg).pack(side=tk.LEFT, padx=2)
 
-        tk.Label(frame, text="Cubicle W:", bg=bg).pack(side=tk.LEFT, padx=(8, 2))
-        tk.Spinbox(frame, from_=50, to=1000, increment=10, width=7,
+        # Cubicle settings in its own frame
+        cub_frame = tk.LabelFrame(parent, text="Cubicle", padx=8, pady=4, bg=bg,
+                                   relief=tk.GROOVE, bd=1)
+        cub_frame.pack(side=tk.LEFT, padx=5, pady=4)
+
+        tk.Label(cub_frame, text="W:", bg=bg).pack(side=tk.LEFT, padx=(0, 2))
+        tk.Spinbox(cub_frame, from_=50, to=1000, increment=10, width=6,
                    textvariable=self.cubicle_display_width).pack(side=tk.LEFT, padx=2)
-        tk.Label(frame, text="D:", bg=bg).pack(side=tk.LEFT, padx=(2, 2))
-        tk.Spinbox(frame, from_=50, to=1000, increment=10, width=7,
+        tk.Label(cub_frame, text="D:", bg=bg).pack(side=tk.LEFT, padx=(4, 2))
+        tk.Spinbox(cub_frame, from_=50, to=1000, increment=10, width=6,
                    textvariable=self.cubicle_display_depth).pack(side=tk.LEFT, padx=2)
-        tk.Label(frame, text="Snap:", bg=bg).pack(side=tk.LEFT, padx=(8, 2))
-        snap_labels = [label for _, label in self._cubicle_snap_options]
-        snap_menu = tk.OptionMenu(frame, self._cubicle_snap_selection, *snap_labels)
-        snap_menu.configure(width=4, bg=bg, highlightthickness=0)
-        snap_menu.pack(side=tk.LEFT, padx=2)
-        snap_menu["menu"].configure(bg="#ffffff")
+        tk.Label(cub_frame, text="Snap:", bg=bg).pack(side=tk.LEFT, padx=(8, 2))
+        
+        # Cubicle snap with +/- buttons in a compact group
+        cub_snap_group = tk.Frame(cub_frame, bg=bg)
+        cub_snap_group.pack(side=tk.LEFT, padx=2)
+        
+        btn_style = {"font": ("Segoe UI", 8), "width": 2, "height": 1, 
+                     "relief": tk.FLAT, "bg": "#d0d0d0", "activebackground": "#b0b0b0",
+                     "cursor": "hand2", "bd": 0, "highlightthickness": 0}
+        
+        tk.Button(cub_snap_group, text="−", command=self._cubicle_snap_decrease,
+                  **btn_style).pack(side=tk.LEFT)
+        self._cubicle_snap_label = tk.Label(cub_snap_group, text="1", width=4, bg="#f0f0f0",
+                                             font=("Segoe UI", 9), relief=tk.SUNKEN, bd=1)
+        self._cubicle_snap_label.pack(side=tk.LEFT, padx=1)
+        tk.Button(cub_snap_group, text="+", command=self._cubicle_snap_increase,
+                  **btn_style).pack(side=tk.LEFT)
 
     def _build_properties_panel(self):
         """Build the properties panel."""
@@ -491,11 +511,96 @@ class FloorplanEditor:
     # =========================================================================
 
     def get_grid_size(self):
-        try:
-            value = float(self.grid_size.get())
-        except (tk.TclError, ValueError):
-            value = 100.0
-        return max(value, 1.0)
+        """Get current grid size based on base and subdivisions."""
+        divisions = max(self.grid_snap_divisions.get(), 1)
+        return self._grid_base / divisions
+
+    def _get_selected_cubicle(self):
+        """Get the first selected cubicle, or None."""
+        for obj in self.selected_objects:
+            if obj.get("data", {}).get("Type") == "Cubicle":
+                return obj
+        return None
+
+    def _get_cubicle_grid_params(self, cubicle_data=None):
+        """Get cubicle grid parameters based on cubicle.
+        
+        Args:
+            cubicle_data: Optional dict with cubicle data. If None, uses selected cubicle.
+        
+        Returns (grid_x, grid_y, rotation, offset_x, offset_y) where:
+        - grid_x = cubicle width step (always width, rotation handles orientation)
+        - grid_y = cubicle depth step (always depth, rotation handles orientation)
+        - rotation = cubicle yaw in degrees
+        - offset_x = half cubicle width (so anchor aligns with grid)
+        - offset_y = 0 (no offset in depth direction)
+        """
+        step_width, step_depth = self.get_cubicle_snap_steps()
+        half_width = self.cubicle_display_width.get() / 2.0
+        
+        if cubicle_data is None:
+            cubicle = self._get_selected_cubicle()
+            if not cubicle:
+                return step_width, step_depth, 0.0, half_width, 0.0
+            cubicle_data = cubicle.get("data", {})
+        
+        yaw = cubicle_data.get("Yaw", 0)
+        return step_width, step_depth, yaw, half_width, 0.0
+
+    def get_display_grid_params(self, cubicle_data=None):
+        """Get full grid parameters for display: (grid_x, grid_y, rotation, offset_x, offset_y).
+        
+        Args:
+            cubicle_data: Optional dict with cubicle data to use instead of selection.
+        
+        If a cubicle is selected (or cubicle_data provided), returns cubicle-based grid with rotation.
+        Otherwise returns regular grid with no rotation and no offset.
+        """
+        if cubicle_data is not None or self._selection_has_cubicle():
+            return self._get_cubicle_grid_params(cubicle_data)
+        grid_size = self.get_grid_size()
+        return grid_size, grid_size, 0.0, 0.0, 0.0
+
+    def get_display_grid_size(self):
+        """Get the grid size to display - uses cubicle grid if a cubicle is selected.
+        
+        For backwards compatibility, returns a single value (minimum of x, y).
+        """
+        gx, gy, _, _, _ = self.get_display_grid_params()
+        return min(gx, gy)
+
+    def _selection_has_cubicle(self):
+        """Check if current selection includes a cubicle."""
+        for obj in self.selected_objects:
+            if obj.get("data", {}).get("Type") == "Cubicle":
+                return True
+        return False
+
+    def _grid_snap_increase(self):
+        """Increase grid subdivisions (smaller grid)."""
+        current = self.grid_snap_divisions.get()
+        idx = self._grid_snap_divisions_list.index(current) if current in self._grid_snap_divisions_list else 0
+        if idx < len(self._grid_snap_divisions_list) - 1:
+            self.grid_snap_divisions.set(self._grid_snap_divisions_list[idx + 1])
+            self._update_grid_snap_label()
+
+    def _grid_snap_decrease(self):
+        """Decrease grid subdivisions (larger grid)."""
+        current = self.grid_snap_divisions.get()
+        idx = self._grid_snap_divisions_list.index(current) if current in self._grid_snap_divisions_list else 0
+        if idx > 0:
+            self.grid_snap_divisions.set(self._grid_snap_divisions_list[idx - 1])
+            self._update_grid_snap_label()
+
+    def _update_grid_snap_label(self):
+        """Update the grid snap label to show current size."""
+        if hasattr(self, '_grid_snap_label'):
+            size = self.get_grid_size()
+            # Show as integer if whole number, otherwise with decimals
+            if size == int(size):
+                self._grid_snap_label.config(text=str(int(size)))
+            else:
+                self._grid_snap_label.config(text=f"{size:.2f}")
 
     def get_cubicle_snap_steps(self):
         width = max(self.cubicle_display_width.get(), 1.0)
@@ -526,7 +631,7 @@ class FloorplanEditor:
     def _snap_cubicle_center_position(self, center_x: float, center_y: float, item):
         yaw = float(item.get("Yaw", 0.0))
         back_x, back_y = self._cubicle_back_from_center(center_x, center_y, yaw)
-        snapped_back_x, snapped_back_y = self.snap_point_for_cubicle(back_x, back_y)
+        snapped_back_x, snapped_back_y = self.snap_point_for_cubicle(back_x, back_y, yaw)
         return self._cubicle_center_from_back(snapped_back_x, snapped_back_y, yaw)
 
     def snap_point_to_grid(self, x, y):
@@ -536,58 +641,73 @@ class FloorplanEditor:
         grid = self.get_grid_size()
         return snap_point((x, y), grid)
 
-    def snap_point_for_cubicle(self, x, y):
-        """Snap the back-wall anchor point of a cubicle to its dimension grid."""
+    def snap_point_for_cubicle(self, x, y, yaw=0.0):
+        """Snap the back-wall anchor point of a cubicle to its dimension grid.
+        
+        The grid is rotated to match the cubicle orientation.
+        """
         if not self.snap_enabled.get():
             return float(x), float(y)
         # Use cubicle dimensions as the grid
         step_x, step_y = self.get_cubicle_snap_steps()
-        # Snap X to width grid (along cubicle back wall)
-        # Snap Y to depth grid (cubicle depth forward)
-        snapped_x = round(x / step_x) * step_x
-        snapped_y = round(y / step_y) * step_y
+        
+        # Rotate point into local cubicle space, snap, then rotate back
+        import math
+        rad = math.radians(-yaw)  # Negative to go from world to local
+        cos_r = math.cos(rad)
+        sin_r = math.sin(rad)
+        
+        # World to local
+        lx = x * cos_r - y * sin_r
+        ly = x * sin_r + y * cos_r
+        
+        # Snap in local space (width along local X, depth along local Y)
+        snapped_lx = round(lx / step_x) * step_x
+        snapped_ly = round(ly / step_y) * step_y
+        
+        # Local back to world
+        rad_back = math.radians(yaw)
+        cos_rb = math.cos(rad_back)
+        sin_rb = math.sin(rad_back)
+        snapped_x = snapped_lx * cos_rb - snapped_ly * sin_rb
+        snapped_y = snapped_lx * sin_rb + snapped_ly * cos_rb
+        
         return snapped_x, snapped_y
 
     def on_grid_setting_changed(self, *_):
+        self._update_grid_snap_label()
         if hasattr(self, "canvas"):
             self.rebuild_canvas(preserve_selection=True)
 
     def on_cubicle_display_changed(self, *_):
-        current_value = max(self.cubicle_snap_divisions.get(), 1)
-        label = self._cubicle_snap_value_to_label.get(current_value)
-        if label is None:
-            label = "1" if current_value == 1 else f"1/{current_value}"
-            self._cubicle_snap_value_to_label[current_value] = label
-            self._cubicle_snap_label_to_value[label] = current_value
-        if self._cubicle_snap_selection.get() != label:
-            self._cubicle_snap_selection.set(label)
+        self._update_cubicle_snap_label()
         if hasattr(self, "canvas"):
             self.rebuild_canvas(preserve_selection=True)
 
-    def _on_cubicle_snap_selection_changed(self, *_):
-        label = self._cubicle_snap_selection.get()
-        value = self._cubicle_snap_label_to_value.get(label)
-        if value is None:
-            # Attempt to parse fractional strings like "1/2"
-            if isinstance(label, str) and "/" in label:
-                num, _, denom = label.partition("/")
-                try:
-                    numerator = float(num) if num else 1.0
-                    denominator = float(denom)
-                    if numerator <= 0 or denominator <= 0:
-                        raise ValueError
-                    value = max(int(round(denominator / numerator)), 1)
-                except (TypeError, ValueError, ZeroDivisionError):
-                    value = 1
+    def _cubicle_snap_increase(self):
+        """Increase cubicle subdivisions (finer snapping)."""
+        current = self.cubicle_snap_divisions.get()
+        idx = self._cubicle_snap_divisions_list.index(current) if current in self._cubicle_snap_divisions_list else 0
+        if idx < len(self._cubicle_snap_divisions_list) - 1:
+            self.cubicle_snap_divisions.set(self._cubicle_snap_divisions_list[idx + 1])
+            self._update_cubicle_snap_label()
+
+    def _cubicle_snap_decrease(self):
+        """Decrease cubicle subdivisions (coarser snapping)."""
+        current = self.cubicle_snap_divisions.get()
+        idx = self._cubicle_snap_divisions_list.index(current) if current in self._cubicle_snap_divisions_list else 0
+        if idx > 0:
+            self.cubicle_snap_divisions.set(self._cubicle_snap_divisions_list[idx - 1])
+            self._update_cubicle_snap_label()
+
+    def _update_cubicle_snap_label(self):
+        """Update the cubicle snap label to show current subdivision."""
+        if hasattr(self, '_cubicle_snap_label'):
+            divisions = self.cubicle_snap_divisions.get()
+            if divisions == 1:
+                self._cubicle_snap_label.config(text="1")
             else:
-                try:
-                    value = int(label)
-                except (TypeError, ValueError):
-                    value = 1
-        if value <= 0:
-            value = 1
-        if self.cubicle_snap_divisions.get() != value:
-            self.cubicle_snap_divisions.set(value)
+                self._cubicle_snap_label.config(text=f"1/{divisions}")
 
     def on_floor_ceiling_link_changed(self, *_):
         # Sync UI state to EditorState
@@ -897,6 +1017,13 @@ class FloorplanEditor:
         selected_data = [o["data"] for o in self.selected_objects] if preserve_selection else []
         primary_data = self.selected_obj["data"] if preserve_selection and self.selected_obj else None
         
+        # Check if selection includes cubicle BEFORE clearing and save its data for grid
+        cubicle_data = None
+        for d in selected_data:
+            if d.get("Type") == "Cubicle":
+                cubicle_data = d
+                break
+        
         # Clear selection styling
         for obj in self.selected_objects:
             self.style_object(obj, selected=False)
@@ -912,9 +1039,14 @@ class FloorplanEditor:
         self.id_to_obj.clear()
         self.anchor_meta.clear()
 
-        # Draw grid
+        # Draw grid (use cubicle grid if cubicle was selected)
         if self.show_grid.get():
-            self.canvas_grid_ids = draw_grid(self.canvas_helper, self.get_grid_size())
+            if cubicle_data is not None:
+                gx, gy, rotation, off_x, off_y = self.get_display_grid_params(cubicle_data)
+                self.canvas_grid_ids = draw_grid(self.canvas_helper, gx, grid_size_y=gy, rotation=rotation, offset_x=off_x, offset_y=off_y)
+            else:
+                grid_size = self.get_grid_size()
+                self.canvas_grid_ids = draw_grid(self.canvas_helper, grid_size)
 
         # Draw items
         to_select = []
@@ -958,6 +1090,35 @@ class FloorplanEditor:
         self.update_properties_panel()
         self.draw_selection_anchors()
         self._update_title()
+
+    def _redraw_grid(self):
+        """Redraw just the grid without rebuilding the entire canvas."""
+        if not self.show_grid.get():
+            return
+        
+        # Delete existing grid
+        for gid in self.canvas_grid_ids:
+            self.canvas.delete(gid)
+        self.canvas_grid_ids.clear()
+        
+        # Draw new grid with appropriate params (cubicle grid if cubicle selected)
+        gx, gy, rotation, off_x, off_y = self.get_display_grid_params()
+        self.canvas_grid_ids = draw_grid(self.canvas_helper, gx, grid_size_y=gy, rotation=rotation, offset_x=off_x, offset_y=off_y)
+        
+        # Position grid in correct z-order layer (below walls, above cubicles)
+        # Try to lower below wall_layer, if no walls exist, try other layers
+        for layer in ["wall_layer", "door_layer", "window_layer", "roomtone_layer", 
+                      "spawn_layer", "label_layer", "anchor_layer"]:
+            layer_items = self.canvas.find_withtag(layer)
+            if layer_items:
+                # Lower grid below the first item in this layer
+                for gid in self.canvas_grid_ids:
+                    self.canvas.tag_lower(gid, layer_items[0])
+                return
+        
+        # No upper layers found, just lower to back
+        for gid in self.canvas_grid_ids:
+            self.canvas.tag_lower(gid)
 
     def create_anchor_marker(self, wx, wy, color="#ff8844", size=5, state="hidden", meta=None):
         sx, sy = self.world_to_screen(wx, wy)
@@ -1091,6 +1252,8 @@ class FloorplanEditor:
 
     def set_selected(self, obj, add=False):
         """Set selection to obj, optionally adding to existing selection."""
+        had_cubicle = self._selection_has_cubicle()
+        
         if not add:
             for o in self.selected_objects:
                 self.style_object(o, selected=False)
@@ -1099,6 +1262,9 @@ class FloorplanEditor:
             self._clear_unified_selection_anchors()
 
         if not obj:
+            # Check if grid needs updating (cubicle deselected)
+            if had_cubicle:
+                self._redraw_grid()
             self.update_properties_panel()
             return
 
@@ -1116,6 +1282,11 @@ class FloorplanEditor:
         if not add or not self.selected_obj:
             self.selected_obj = obj
 
+        # Update grid if cubicle selection state changed
+        has_cubicle = self._selection_has_cubicle()
+        if had_cubicle != has_cubicle:
+            self._redraw_grid()
+
         # Update anchor visibility for single vs multi-selection
         self.draw_selection_anchors()
         
@@ -1128,11 +1299,15 @@ class FloorplanEditor:
 
     def remove_from_selection(self, obj):
         """Remove obj from selection."""
+        had_cubicle = self._selection_has_cubicle()
         if obj in self.selected_objects:
             self.style_object(obj, selected=False)
             self.selected_objects.remove(obj)
             if self.selected_obj is obj:
                 self.selected_obj = self.selected_objects[0] if self.selected_objects else None
+        # Update grid if cubicle selection state changed
+        if had_cubicle != self._selection_has_cubicle():
+            self._redraw_grid()
         # Update anchor visibility for single vs multi-selection
         self.draw_selection_anchors()
         self.canvas.update_idletasks()  # Force immediate visual update
