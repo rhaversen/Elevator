@@ -20,7 +20,18 @@ from geometry import (
     rotate_point,
     get_axis_vectors_for_yaw,
 )
-from file_io import load_layout_file, save_layout_file, get_display_name
+from file_io import (
+    load_layout_file,
+    save_layout_file,
+    get_display_name,
+    get_temp_path,
+    temp_exists,
+    delete_temp,
+    compute_content_hash,
+    save_session,
+    load_session,
+    clear_session,
+)
 from object_types import get_object_type, get_mode_color, LINE_MODES, RECT_MODES, POINT_MODES, TYPE_MAP
 from canvas_helper import CanvasHelper, draw_grid
 from object_renderer import ObjectRenderer
@@ -99,6 +110,11 @@ class FloorplanEditor:
             value=self._cubicle_snap_value_to_label[self.cubicle_snap_divisions.get()]
         )
 
+        # File state tracking
+        self._prod_file_path: str | None = None  # Original "prod" file
+        self._prod_hash: str | None = None  # Hash of prod content at load time
+        self._auto_save_pending = False  # Flag for debounced auto-save
+
         # Set up traces
         self.current_mode.trace_add("write", self.on_mode_changed)
         self.grid_size.trace_add("write", self.on_grid_setting_changed)
@@ -119,6 +135,9 @@ class FloorplanEditor:
             lambda: (self.cubicle_display_width.get(), self.cubicle_display_depth.get()),
             lambda: self.show_lamps.get()
         )
+        
+        # Try to restore last session
+        self._try_restore_session()
 
     # =========================================================================
     # State Property Accessors (delegate to EditorState)
@@ -208,6 +227,7 @@ class FloorplanEditor:
         self._build_grid_frame(toolbar_bottom, toolbar_bg)
         self._build_display_frame(toolbar_bottom, toolbar_bg)
         self._build_properties_panel()
+        self._build_file_status_ribbon()  # Ribbon below toolbar
         self._build_status_bar()
         self._build_canvas()
         self._build_menu()
@@ -305,20 +325,86 @@ class FloorplanEditor:
         """Build the properties panel."""
         self.properties_panel = PropertiesPanel(
             parent=self.root,
-            on_property_changed=lambda: self.rebuild_canvas(preserve_selection=True),
+            on_property_changed=self._on_property_changed,
             get_lock_floor_ceiling=lambda: self.lock_floor_ceiling.get(),
             sync_floor_ceiling_partner=self.sync_floor_ceiling_partner,
         )
 
+    def _on_property_changed(self):
+        """Called when a property is changed in the properties panel."""
+        self.push_undo()  # Save state for undo and trigger auto-save
+        self.rebuild_canvas(preserve_selection=True)
+
+    def _build_file_status_ribbon(self):
+        """Build a thin ribbon showing file status below the toolbar."""
+        self._file_ribbon = tk.Frame(self.root, height=24, bg="#e8e8e8")
+        self._file_ribbon.pack(side=tk.TOP, fill=tk.X)
+        self._file_ribbon.pack_propagate(False)  # Keep fixed height
+        
+        # File name label (left)
+        self._file_name_label = tk.Label(
+            self._file_ribbon,
+            text="No file loaded",
+            anchor=tk.W, bg="#e8e8e8", fg="#666666",
+            font=("Segoe UI", 9))
+        self._file_name_label.pack(side=tk.LEFT, padx=8, pady=2)
+        
+        # Status indicator (right) - clickable to save when unsaved
+        self._file_status_indicator = tk.Label(
+            self._file_ribbon,
+            text="",
+            anchor=tk.E, bg="#e8e8e8", fg="#666666",
+            font=("Segoe UI", 9, "bold"), padx=12, pady=2,
+            cursor="hand2")
+        self._file_status_indicator.pack(side=tk.RIGHT, padx=0)
+        self._file_status_indicator.bind("<Button-1>", self._on_status_indicator_click)
+
+    def _on_status_indicator_click(self, event=None):
+        """Handle click on status indicator - save if unsaved."""
+        if self._has_changes_vs_prod():
+            self.save_file()
+
     def _build_status_bar(self):
-        """Build the status bar."""
+        """Build the status bar with help text."""
         status_frame = tk.Frame(self.root, relief=tk.FLAT, bd=1, bg="#e1e1e1", height=28)
         status_frame.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        # Help text
         self.status_label = tk.Label(
             status_frame,
-            text="Pan: Right/Middle drag | Zoom: Wheel | Undo: Ctrl+Z | Copy/Paste: Ctrl+C/V",
+            text="Ctrl+S: Save | Pan: Right/Middle drag | Zoom: Wheel",
             anchor=tk.W, bg="#e1e1e1", fg="#333333", font=("Segoe UI", 9))
         self.status_label.pack(side=tk.LEFT, padx=8, pady=4)
+
+    def _update_file_status_indicator(self):
+        """Update the file status ribbon."""
+        if not hasattr(self, '_file_ribbon'):
+            return
+        
+        if not self._prod_file_path:
+            # No file - gray ribbon
+            self._file_ribbon.config(bg="#e8e8e8")
+            self._file_name_label.config(text="No file loaded", bg="#e8e8e8", fg="#666666")
+            self._file_status_indicator.config(text="", bg="#e8e8e8")
+            return
+        
+        name = get_display_name(self._prod_file_path)
+        modified = self._has_changes_vs_prod()
+        
+        if modified:
+            # Modified - amber/orange ribbon
+            ribbon_bg = "#fff3e0"
+            self._file_ribbon.config(bg=ribbon_bg)
+            self._file_name_label.config(text=f"📄 {name}", bg=ribbon_bg, fg="#333333")
+            self._file_status_indicator.config(
+                text="● UNSAVED", bg="#ff9800", fg="#ffffff")
+        else:
+            # Saved - subtle green accent
+            ribbon_bg = "#e8f5e9"
+            self._file_ribbon.config(bg=ribbon_bg)
+            self._file_name_label.config(text=f"📄 {name}", bg=ribbon_bg, fg="#333333")
+            self._file_status_indicator.config(
+                text="✓ SAVED", bg="#4caf50", fg="#ffffff")
 
     def _build_canvas(self):
         """Build the main canvas."""
@@ -326,6 +412,9 @@ class FloorplanEditor:
                                 height=self.canvas_height, bg="#ffffff",
                                 highlightthickness=0)
         self.canvas.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+
+        # Allow canvas to receive focus (for clicking out of input fields)
+        self.canvas.configure(takefocus=True)
 
         # Mouse bindings
         self.canvas.bind("<Button-1>", self.on_left_click)
@@ -353,6 +442,7 @@ class FloorplanEditor:
         self.root.bind("<Control-a>", self._wrap_shortcut(self.on_select_all))
         self.root.bind("<Control-z>", self._wrap_shortcut(self.undo))
         self.root.bind("<Control-y>", self._wrap_shortcut(self.redo))
+        self.root.bind("<Control-s>", self._wrap_shortcut(self.save_file))
     
     def _wrap_shortcut(self, handler):
         """Wrap a keyboard shortcut handler to ignore when focus is in a text entry."""
@@ -369,8 +459,11 @@ class FloorplanEditor:
         menubar = tk.Menu(self.root)
         filemenu = tk.Menu(menubar, tearoff=0)
         filemenu.add_command(label="Open...", command=self.open_file)
-        filemenu.add_command(label="Reload", command=self.reload_file)
+        filemenu.add_separator()
+        filemenu.add_command(label="Save", command=self.save_file, accelerator="Ctrl+S")
         filemenu.add_command(label="Save As...", command=self.save_file_as)
+        filemenu.add_separator()
+        filemenu.add_command(label="Revert to Saved", command=self.revert_to_saved)
         menubar.add_cascade(label="File", menu=filemenu)
         self.root.config(menu=menubar)
 
@@ -606,30 +699,137 @@ class FloorplanEditor:
     # File I/O
     # =========================================================================
 
-    def open_file(self):
+    def _try_restore_session(self):
+        """Restore last session on startup if available."""
+        last_prod = load_session()
+        if last_prod and os.path.exists(last_prod):
+            self._open_prod_file(last_prod)
+
+    def open_file(self, event=None):
+        """Open a layout file."""
         path = filedialog.askopenfilename(
             filetypes=[("JSON files", "*.json"), ("All files", "*.*")])
         if path:
-            self.load_file(path)
+            self._open_prod_file(path)
 
-    def reload_file(self):
-        if self.current_file_path:
-            self.load_file(self.current_file_path)
-        else:
-            messagebox.showinfo("Info", "Open a layout first to reload it.")
-
-    def load_file(self, path):
-        root_json, elements, error = load_layout_file(path)
-        if error:
-            messagebox.showerror("Error", f"Failed to open file:\n{error}")
+    def _open_prod_file(self, prod_path: str):
+        """Open a prod file, auto-resuming from temp if it exists."""
+        # Load prod to get the baseline hash
+        prod_root, prod_elements, prod_error = load_layout_file(prod_path)
+        if prod_error:
+            messagebox.showerror("Error", f"Failed to open file:\n{prod_error}")
             return
         
+        self._prod_file_path = prod_path
+        self._prod_hash = compute_content_hash(prod_elements, prod_root)
+        
+        # Auto-load temp if it exists (transparent to user)
+        if temp_exists(prod_path):
+            temp_path = get_temp_path(prod_path)
+            root_json, elements, error = load_layout_file(temp_path)
+            if error:
+                # Temp corrupted, fall back to prod
+                root_json, elements = prod_root, prod_elements
+        else:
+            root_json, elements = prod_root, prod_elements
+        
         self.state.set_data(elements, root_json)
-        self.state.current_file_path = path
+        self.state.current_file_path = prod_path
+        save_session(prod_path)  # Remember this file for next launch
         self.reset_view()
-        self.root.title(f"Floorplan Editor - {get_display_name(path)}")
+        self._update_title()
 
-    def save_file_as(self):
+    def _auto_save_to_temp(self):
+        """Auto-save current work to temp file (called internally after changes)."""
+        if not self._prod_file_path or not self.data:
+            return
+        
+        # Only save if there are actual changes vs prod
+        if not self._has_changes_vs_prod():
+            # No changes - clean up any stale temp
+            delete_temp(self._prod_file_path)
+            return
+        
+        temp_path = get_temp_path(self._prod_file_path)
+        error = save_layout_file(temp_path, self.data, self.root_json)
+        if error:
+            print(f"Auto-save failed: {error}")  # Silent failure, just log
+
+    def revert_to_saved(self, event=None):
+        """Revert to the saved version, discarding all modifications."""
+        if not self._prod_file_path:
+            messagebox.showinfo("Info", "Open a layout first.")
+            return
+        
+        if not self._has_changes_vs_prod():
+            messagebox.showinfo("Info", "No changes to revert.")
+            return
+        
+        result = messagebox.askyesno(
+            "Revert to Saved?",
+            "This will discard all changes and reload the saved version.\nContinue?"
+        )
+        if not result:
+            return
+        
+        # Load saved file directly
+        prod_root, prod_elements, prod_error = load_layout_file(self._prod_file_path)
+        if prod_error:
+            messagebox.showerror("Error", f"Failed to load saved version:\n{prod_error}")
+            return
+        
+        delete_temp(self._prod_file_path)
+        self.state.set_data(prod_elements, prod_root)
+        self.state.current_file_path = self._prod_file_path
+        self.reset_view()
+        self._update_title()
+
+    def save_file(self, event=None):
+        """Save current work to the layout file (Ctrl+S)."""
+        if not self._prod_file_path:
+            # No file open - use save as
+            self.save_file_as()
+            return
+        
+        if not self._has_changes_vs_prod():
+            # Nothing to save
+            return
+        
+        error = save_layout_file(self._prod_file_path, self.data, self.root_json)
+        if error:
+            messagebox.showerror("Error", f"Failed to save:\n{error}")
+        else:
+            # Update hash
+            self._prod_hash = compute_content_hash(self.data, self.root_json)
+            # Clean up temp file
+            delete_temp(self._prod_file_path)
+            self._update_title()
+
+    def _has_changes_vs_prod(self) -> bool:
+        """Check if current state differs from published version."""
+        if not self.data or not self._prod_hash:
+            return False
+        current_hash = compute_content_hash(self.data, self.root_json)
+        return current_hash != self._prod_hash
+
+    def _update_title(self):
+        """Update window title and status bar to show file status."""
+        self._update_file_status_indicator()
+        
+        if not self._prod_file_path:
+            self.root.title("Floorplan Editor")
+            return
+        
+        name = get_display_name(self._prod_file_path)
+        
+        if self._has_changes_vs_prod():
+            status = " [unsaved]"
+        else:
+            status = ""
+        
+        self.root.title(f"Floorplan Editor - {name}{status}")
+
+    def save_file_as(self, event=None):
         if not self.data:
             messagebox.showinfo("Info", "Nothing to save.")
             return
@@ -643,8 +843,12 @@ class FloorplanEditor:
         if error:
             messagebox.showerror("Error", f"Failed to save file:\n{error}")
         else:
+            # This becomes the new prod file
+            self._prod_file_path = path
+            self._prod_hash = compute_content_hash(self.data, self.root_json)
             self.current_file_path = path
-            self.root.title(f"Floorplan Editor - {get_display_name(path)}")
+            save_session(path)  # Remember this file for next launch
+            self._update_title()
 
     def update_world_bbox_from_floor(self):
         for item in self.data:
@@ -753,6 +957,7 @@ class FloorplanEditor:
 
         self.update_properties_panel()
         self.draw_selection_anchors()
+        self._update_title()
 
     def create_anchor_marker(self, wx, wy, color="#ff8844", size=5, state="hidden", meta=None):
         sx, sy = self.world_to_screen(wx, wy)
@@ -1099,6 +1304,9 @@ class FloorplanEditor:
 
     def on_left_click(self, event):
         """Handle left click on canvas."""
+        # Take focus away from any input fields
+        self.canvas.focus_set()
+        
         sx, sy = event.x, event.y
         wx, wy = self.screen_to_world(sx, sy)
 
@@ -1832,8 +2040,10 @@ class FloorplanEditor:
     # =========================================================================
 
     def push_undo(self):
-        """Push current state to undo stack."""
+        """Push current state to undo stack and schedule auto-save."""
         self.state.save_state()
+        # Schedule auto-save after current event completes (data will be modified by then)
+        self.root.after_idle(self._sync_temp_file)
 
     def undo(self, event=None):
         """Undo last action."""
@@ -1842,6 +2052,7 @@ class FloorplanEditor:
                 self.root_json["Elements"] = self.data
             self._clear_unified_selection_anchors()
             self.rebuild_canvas()
+            self._sync_temp_file()
 
     def redo(self, event=None):
         """Redo last undone action."""
@@ -1850,6 +2061,12 @@ class FloorplanEditor:
                 self.root_json["Elements"] = self.data
             self._clear_unified_selection_anchors()
             self.rebuild_canvas()
+            self._sync_temp_file()
+
+    def _sync_temp_file(self):
+        """Sync temp file with current state and update UI."""
+        self._auto_save_to_temp()
+        self._update_title()
 
 
 # ============================================================================
