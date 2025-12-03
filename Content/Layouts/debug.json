@@ -1,0 +1,68 @@
+{
+  "Elements": [
+    {
+      "Type": "Floor",
+      "Start": {
+        "X": -300.0,
+        "Y": -300.0
+      },
+      "End": {
+        "X": 300.0,
+        "Y": 300.0
+      }
+    },
+    {
+      "Type": "Elevator",
+      "Start": {
+        "X": -300.0,
+        "Y": 200.0
+      },
+      "End": {
+        "X": -300.0,
+        "Y": -200.0
+      },
+      "Id": "MainElevator"
+    },
+    {
+      "Type": "Ceiling",
+      "Start": {
+        "X": -300.0,
+        "Y": -300.0
+      },
+      "End": {
+        "X": 300.0,
+        "Y": 300.0
+      }
+    },
+    {
+      "Type": "SpawnPoint",
+      "Start": {
+        "X": -4.78314444267528,
+        "Y": 208.48491338533552
+      },
+      "Yaw": 270.0,
+      "Player": false
+    },
+    {
+      "Type": "Cubicle",
+      "Start": {
+        "X": 0.0,
+        "Y": -282.5
+      },
+      "Yaw": 0.0,
+      "Seed": 0,
+      "Id": "MainCubicle"
+    },
+    {
+      "Type": "CeilingLight",
+      "Start": {
+        "X": -200.0,
+        "Y": -200.0
+      },
+      "End": {
+        "X": 200.0,
+        "Y": 200.0
+      }
+    }
+  ]
+}
