@@ -15,7 +15,7 @@ REGISTER_SCREEN_PROGRAM(FWorkflowRouterProgram, "WorkflowRouter")
 namespace
 {
     constexpr float NodeRadiusNormalized = 0.075f;
-    constexpr int32 CircleSegments = 32;
+    constexpr int32 WorkflowCircleSegments = 32;
     constexpr double FailureFadeDurationSeconds = 0.35;
     constexpr double SuccessAdvanceDelaySeconds = 0.45;
 }
@@ -159,9 +159,9 @@ int32 STrailWidget::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
         
         // Draw circle
         TArray<FVector2D> CirclePoints;
-        for (int32 s = 0; s <= CircleSegments; ++s)
+        for (int32 s = 0; s <= WorkflowCircleSegments; ++s)
         {
-            const float Angle = (static_cast<float>(s) / CircleSegments) * 2.0f * PI;
+            const float Angle = (static_cast<float>(s) / WorkflowCircleSegments) * 2.0f * PI;
             CirclePoints.Add(Center + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * NodeRadius);
         }
         

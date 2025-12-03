@@ -12,7 +12,7 @@ REGISTER_SCREEN_PROGRAM(FProofDiffViewerProgram, "ProofDiffViewer")
 
 namespace
 {
-    constexpr int32 CircleSegments = 16;
+    constexpr int32 ProofDiffCircleSegments = 16;
     
     // Draw a symbol at the given center position
     // All symbols are the same size - subtle variations only

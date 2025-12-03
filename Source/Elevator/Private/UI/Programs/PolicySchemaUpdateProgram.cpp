@@ -14,7 +14,7 @@ REGISTER_SCREEN_PROGRAM(FPolicySchemaUpdateProgram, "PolicySchemaUpdate")
 
 namespace
 {
-    constexpr int32 CircleSegments = 24;
+    constexpr int32 PolicySchemaCircleSegments = 24;
     constexpr double RecalibrateDelaySeconds = 0.8;
     
     // Draw a shape at the given center position
@@ -42,9 +42,9 @@ namespace
             Points.Add(Center + FVector2D(-Size * 0.4f, -Size * 0.4f)); // Close
             break;
         case 2: // Circle
-            for (int32 i = 0; i <= CircleSegments; ++i)
+            for (int32 i = 0; i <= PolicySchemaCircleSegments; ++i)
             {
-                const float Angle = (static_cast<float>(i) / CircleSegments) * 2.0f * PI;
+                const float Angle = (static_cast<float>(i) / PolicySchemaCircleSegments) * 2.0f * PI;
                 Points.Add(Center + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * Size * 0.4f);
             }
             break;
