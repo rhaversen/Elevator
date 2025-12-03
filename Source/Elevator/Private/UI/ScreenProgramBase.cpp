@@ -1,6 +1,10 @@
 #include "UI/ScreenProgramBase.h"
 
+#include "Styling/CoreStyle.h"
 #include "Widgets/SNullWidget.h"
+#include "Widgets/Text/STextBlock.h"
+#include "Widgets/Layout/SBorder.h"
+#include "Widgets/SBoxPanel.h"
 
 FScreenProgramBase::FScreenProgramBase()
 {
@@ -25,8 +29,21 @@ TSharedRef<SWidget> FScreenProgramBase::CreateWidget(const FVector2D& Size, cons
     TSharedRef<SWidget> Widget = BuildProgramWidget();
     RootWidget = Widget;
 
+    // Register tick handler
+    Widget->RegisterActiveTimer(0.0f, FWidgetActiveTimerDelegate::CreateSP(this, &FScreenProgramBase::HandleTick));
+
     HandleScreenResized(ProgramSize);
     return Widget;
+}
+
+void FScreenProgramBase::OnTick(float DeltaTime)
+{
+}
+
+EActiveTimerReturnType FScreenProgramBase::HandleTick(double InCurrentTime, float InDeltaTime)
+{
+    OnTick(InDeltaTime);
+    return EActiveTimerReturnType::Continue;
 }
 
 void FScreenProgramBase::OnPointerMoved(const FScreenPointerEvent& Event)
@@ -120,4 +137,154 @@ void FScreenProgramBase::SetTaskComplete(bool bCompleted)
 void FScreenProgramBase::SetCursorOverride(TOptional<EMouseCursor::Type> InCursorOverride)
 {
     CursorOverride = InCursorOverride;
+}
+
+FString FScreenProgramBase::BuildProgressBarString(int32 Current, int32 Total)
+{
+    FString Progress;
+    for (int32 i = 0; i < Total; ++i)
+    {
+        Progress += (i < Current) ? TEXT("\u25A0") : TEXT("\u25A1");
+    }
+    return Progress;
+}
+
+TSharedRef<SWidget> FScreenProgramBase::BuildProgressBarWidget(TFunction<int32()> CurrentGetter, int32 Total) const
+{
+    const FScreenProgramStyle& Style = GetProgramStyle();
+    return SNew(STextBlock)
+        .Text_Lambda([CurrentGetter, Total]() { return FText::FromString(BuildProgressBarString(CurrentGetter(), Total)); })
+    .Font(MakeFont(TEXT("Regular"), Style.TextSize))
+        .ColorAndOpacity(Style.GetDimColor());
+}
+
+FString FScreenProgramBase::BuildTimerBarString(float Progress, int32 Width)
+{
+    const int32 FilledBars = FMath::RoundToInt(Progress * Width);
+    FString Bar;
+    for (int32 i = 0; i < Width; ++i)
+    {
+        Bar += (i < FilledBars) ? TEXT("|") : TEXT(".");
+    }
+    return Bar;
+}
+
+TSharedRef<SWidget> FScreenProgramBase::BuildTimerBarWidget(TFunction<float()> ProgressGetter, TFunction<FSlateColor()> ColorGetter, int32 Width) const
+{
+    const FScreenProgramStyle& Style = GetProgramStyle();
+    
+    TSharedRef<STextBlock> TimerBar = SNew(STextBlock)
+        .Text_Lambda([ProgressGetter, Width]() { return FText::FromString(BuildTimerBarString(ProgressGetter(), Width)); })
+        .Font(MakeFont(TEXT("Mono"), Style.TextSize + 2));
+    
+    if (ColorGetter)
+    {
+        TimerBar->SetColorAndOpacity(TAttribute<FSlateColor>::CreateLambda(ColorGetter));
+    }
+    else
+    {
+        TimerBar->SetColorAndOpacity(Style.GetPrimaryColor());
+    }
+    
+    return TimerBar;
+}
+
+TSharedRef<SWidget> FScreenProgramBase::BuildHeader(const FText& Title) const
+{
+    const FScreenProgramStyle& Style = GetProgramStyle();
+    return SNew(SVerticalBox)
+        + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(Style.GetSmallPadding())
+        [
+            BuildTitleWidget(Title, 2.0f)
+        ];
+}
+
+TSharedRef<SWidget> FScreenProgramBase::BuildButton(const FText& Label, TAttribute<bool> IsHovered, TAttribute<bool> IsPressed) const
+{
+    const FScreenProgramStyle& Style = GetProgramStyle();
+    
+    return SNew(SBorder)
+        .BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+        .BorderBackgroundColor_Lambda([this, IsHovered, IsPressed]() {
+            if (IsPressed.Get(false)) return GetProgramStyle().GetPressedFillColor();
+            if (IsHovered.Get(false)) return GetProgramStyle().GetHoveredFillColor();
+            return FSlateColor(FLinearColor::Transparent);
+        })
+        .Padding(Style.GetPadding())
+        [
+            SNew(STextBlock)
+            .Text(Label)
+            .Font(MakeScaledFont(TEXT("Bold"), 1.5f))
+            .ColorAndOpacity_Lambda([this, IsHovered, IsPressed]() {
+                if (IsPressed.Get(false) || IsHovered.Get(false)) return GetProgramStyle().GetActiveTextColor();
+                return GetProgramStyle().GetDimColor();
+            })
+            .Justification(ETextJustify::Center)
+        ];
+}
+
+TSharedRef<SWidget> FScreenProgramBase::BuildCard(TSharedRef<SWidget> Content) const
+{
+    const FScreenProgramStyle& Style = GetProgramStyle();
+    return SNew(SBorder)
+        .BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+        .BorderBackgroundColor(FLinearColor::Transparent)
+        .Padding(Style.GetPadding())
+        [
+            Content
+        ];
+}
+FSlateFontInfo FScreenProgramBase::MakeFont(const FString& Typeface, int32 Size) const
+{
+    const int32 ClampedSize = FMath::Max(Size, 1);
+    return FCoreStyle::GetDefaultFontStyle(FName(*Typeface), ClampedSize);
+}
+
+FSlateFontInfo FScreenProgramBase::MakeScaledFont(const FString& Typeface, float SizeMultiplier) const
+{
+    const FScreenProgramStyle& Style = GetProgramStyle();
+    const float BaseSize = static_cast<float>(FMath::Max(Style.TextSize, 1));
+    const int32 ComputedSize = FMath::Max(1, FMath::RoundToInt(BaseSize * SizeMultiplier));
+    return MakeFont(Typeface, ComputedSize);
+}
+
+TSharedRef<STextBlock> FScreenProgramBase::BuildTitleWidget(const FText& TitleText, float SizeMultiplier) const
+{
+    return SNew(STextBlock)
+        .Text(TitleText)
+        .Font(MakeScaledFont(TEXT("Bold"), SizeMultiplier))
+        .ColorAndOpacity(GetProgramStyle().GetPrimaryColor())
+        .Justification(ETextJustify::Center);
+}
+
+TSharedRef<STextBlock> FScreenProgramBase::BuildSectionLabel(const FText& LabelText, float SizeMultiplier) const
+{
+    return SNew(STextBlock)
+        .Text(LabelText)
+        .Font(MakeScaledFont(TEXT("Bold"), SizeMultiplier))
+        .ColorAndOpacity(GetProgramStyle().GetPrimaryColor());
+}
+
+TSharedRef<STextBlock> FScreenProgramBase::BuildStyledText(const FText& Text, const FString& Typeface, float SizeMultiplier, TFunction<FSlateColor()> ColorGetter, TOptional<ETextJustify::Type> Justification) const
+{
+    const FSlateFontInfo Font = MakeScaledFont(Typeface, SizeMultiplier);
+    TSharedRef<STextBlock> Label = SNew(STextBlock)
+        .Text(Text)
+        .Font(Font);
+
+    if (ColorGetter)
+    {
+        Label->SetColorAndOpacity(TAttribute<FSlateColor>::CreateLambda(ColorGetter));
+    }
+    else
+    {
+        Label->SetColorAndOpacity(GetProgramStyle().GetPrimaryColor());
+    }
+
+    if (Justification.IsSet())
+    {
+        Label->SetJustification(Justification.GetValue());
+    }
+
+    return Label;
 }

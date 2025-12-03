@@ -1,16 +1,76 @@
 {
-	"DefaultProgramId": "SimpleButton",
+	"DefaultProgramId": "DailyPacket",
 	"DefaultElementOverrideSets": ["Default"],
 	"DefaultLockedButtons": ["Alarm", "CallUp"],
 	"DefaultOfficeLayout": "DefaultOffice",
 	"Days": [
 		{
 			"DayNumber": 0,
-			"ProgramId": "SimpleButton"
+			"ProgramId": "MemoryDefragWizard"
 		},
 		{
 			"DayNumber": 1,
-			"ProgramId": "SimpleButton"
+			"ProgramId": "TimeDriftSynchronizer"
+		},
+		{
+			"DayNumber": 2,
+			"ProgramId": "ProxyHandshakeVerifier"
+		},
+		{
+			"DayNumber": 3,
+			"ProgramId": "AllowlistRefresher"
+		},
+		{
+			"DayNumber": 4,
+			"ProgramId": "RecallOverrideChannel"
+		},
+		{
+			"DayNumber": 5,
+			"ProgramId": "FollowUpMarker"
+		},
+		{
+			"DayNumber": 6,
+			"ProgramId": "TabRestoreOrder"
+		},
+		{
+			"DayNumber": 7,
+			"ProgramId": "WorkflowRouter"
+		},
+		{
+			"DayNumber": 8,
+			"ProgramId": "PolicySchemaUpdate"
+		},
+		{
+			"DayNumber": 9,
+			"ProgramId": "ProofDiffViewer"
+		},
+		{
+			"DayNumber": 10,
+			"ProgramId": "MarkAlignment"
+		},
+		{
+			"DayNumber": 11,
+			"ProgramId": "CodeSheetEntry"
+		},
+		{
+			"DayNumber": 12,
+			"ProgramId": "BudgetTicker"
+		},
+		{
+			"DayNumber": 13,
+			"ProgramId": "TemplateMatrix"
+		},
+		{
+			"DayNumber": 14,
+			"ProgramId": "VendorSandbox"
+		},
+		{
+			"DayNumber": 15,
+			"ProgramId": "ThemeConsistencyCheck"
+		},
+		{
+			"DayNumber": 16,
+			"ProgramId": "DirectoryIndexRebuild"
 		}
 	]
 }

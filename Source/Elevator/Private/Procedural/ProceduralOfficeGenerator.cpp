@@ -4,7 +4,7 @@
 #include "Procedural/ProceduralElevator.h"
 #include "Procedural/ElementOverrides.h"
 #include "UI/InteractiveScreenComponent.h"
-#include "UI/Programs/SimpleButtonProgram.h"
+#include "UI/ScreenProgramRegistry.h"
 #include "System/ElevatorGameManagerSubsystem.h"
 #include "FirstPersonCharacter.h"
 
@@ -182,8 +182,8 @@ void AProceduralOfficeGenerator::InitializeMonitorScreen()
     }
     else
     {
-        UE_LOG(LogProceduralOffice, Log, TEXT("[Workstation] Manager unavailable; using fallback SimpleButton program."));
-        MonitorScreenComponent->SetProgram(MakeShared<FSimpleButtonProgram>());
+        UE_LOG(LogProceduralOffice, Log, TEXT("[Workstation] Manager unavailable; using fallback DailyPacket program."));
+        MonitorScreenComponent->SetProgram(FScreenProgramRegistry::Get().CreateProgram(TEXT("DailyPacket")));
     }
     
     MonitorScreenComponent->InitializeScreen();
@@ -218,7 +218,7 @@ void AProceduralOfficeGenerator::HandleActiveProgramChanged(FName ProgramId)
     else
     {
         UE_LOG(LogProceduralOffice, Warning, TEXT("[Workstation] Manager unavailable during program switch; using fallback program."));
-        MonitorScreenComponent->SetProgram(MakeShared<FSimpleButtonProgram>());
+        MonitorScreenComponent->SetProgram(FScreenProgramRegistry::Get().CreateProgram(TEXT("DailyPacket")));
         MonitorScreenComponent->InitializeScreen();
         MonitorScreenComponent->ResetCursor();
     }

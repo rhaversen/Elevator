@@ -142,7 +142,7 @@ TSharedPtr<IScreenProgram> UElevatorGameManagerSubsystem::CreateProgramInstanceF
 {
     const FName RequestedId = ProgramId.IsNone() ? ActiveProgramId : ProgramId;
     const FName ResolvedId = RequestedId.IsNone() ? Schedule.DefaultProgramId : RequestedId;
-    const FName FallbackId = ScreenProgramIds::SimpleButton;
+    const FName FallbackId = ScreenProgramIds::DailyPacket;
     const FName FinalId = ResolvedId.IsNone() ? FallbackId : ResolvedId;
 
     UE_LOG(LogTemp, Log, TEXT("[Manager] Creating program instance. Requested=%s Resolved=%s Final=%s"),
@@ -197,7 +197,7 @@ void UElevatorGameManagerSubsystem::HandleElevatorButtonPressed(FName ButtonId)
 void UElevatorGameManagerSubsystem::LoadSchedule()
 {
     Schedule = FElevatorDaySchedule();
-    Schedule.DefaultProgramId = ScreenProgramIds::SimpleButton;
+    Schedule.DefaultProgramId = ScreenProgramIds::DailyPacket;
 
     const FString SchedulePath = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Data/DaySchedule.json"));
     FString FileContents;
@@ -333,7 +333,7 @@ void UElevatorGameManagerSubsystem::LoadSchedule()
 
     if (Schedule.DefaultProgramId.IsNone())
     {
-        Schedule.DefaultProgramId = ScreenProgramIds::SimpleButton;
+        Schedule.DefaultProgramId = ScreenProgramIds::DailyPacket;
     }
 
     Schedule.Days.Sort([](const FElevatorDayProgramEntry& LHS, const FElevatorDayProgramEntry& RHS)
@@ -405,7 +405,7 @@ void UElevatorGameManagerSubsystem::ApplyCurrentDayConfig(bool bBroadcast)
     ActiveProgramId = ActiveDayConfig.ProgramId.IsNone() ? Schedule.DefaultProgramId : ActiveDayConfig.ProgramId;
     if (ActiveProgramId.IsNone())
     {
-        ActiveProgramId = ScreenProgramIds::SimpleButton;
+        ActiveProgramId = ScreenProgramIds::DailyPacket;
     }
 
     CurrentLockedButtons = BuildLockedButtonSet(ActiveDayConfig);
@@ -428,7 +428,7 @@ FElevatorDayProgramEntry UElevatorGameManagerSubsystem::MakeDefaultEntry(int32 D
 {
     FElevatorDayProgramEntry Entry;
     Entry.DayNumber = DayIndex;
-    Entry.ProgramId = Schedule.DefaultProgramId.IsNone() ? ScreenProgramIds::SimpleButton : Schedule.DefaultProgramId;
+    Entry.ProgramId = Schedule.DefaultProgramId.IsNone() ? ScreenProgramIds::DailyPacket : Schedule.DefaultProgramId;
     Entry.LockedButtons = Schedule.DefaultLockedButtons;
     Entry.OfficeLayout = Schedule.DefaultOfficeLayout;
     Entry.ElementOverrideSets = Schedule.DefaultElementOverrideSets;

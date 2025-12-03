@@ -95,6 +95,22 @@ struct ELEVATOR_API FScreenProgramStyle
     FSlateColor GetDimmedTextColor() const { return FSlateColor(GetPrimaryColor() * 0.5f); }
 
     // -------------------------------------------------------------------------
+    // Additional Color Convenience Methods
+    // -------------------------------------------------------------------------
+
+    /** Alias for GetDimmedTextColor for brevity */
+    FSlateColor GetDimColor() const { return GetDimmedTextColor(); }
+
+    /** Highlight color for successful/positive states */
+    FSlateColor GetHighlightColor() const { return FSlateColor(GetPrimaryColor()); }
+
+    /** Error/warning color for negative states */
+    FSlateColor GetErrorColor() const { return FSlateColor(GetPrimaryColor() * 0.7f); }
+
+    /** Fill color when element is pressed */
+    FSlateColor GetPressedFillColor() const { return FSlateColor(GetPrimaryColor() * 0.8f); }
+
+    // -------------------------------------------------------------------------
     // Color Convenience Methods - Return appropriate color based on state
     // -------------------------------------------------------------------------
 
