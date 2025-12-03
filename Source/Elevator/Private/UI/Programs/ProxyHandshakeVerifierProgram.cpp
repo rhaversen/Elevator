@@ -65,12 +65,9 @@ TSharedRef<SWidget> FProxyHandshakeVerifierProgram::BuildTrialBody()
                 FString Display;
                 for (int32 i = 0; i < 5; ++i)
                 {
-                    bool bIsTarget = (i == TargetPosition);
-                    TCHAR Arrow = bIsTarget ? TargetArrow : FlankerArrow;
-                    if (bIsTarget)
-                        Display += FString::Printf(TEXT("[%c]"), Arrow);
-                    else
-                        Display += FString::Printf(TEXT(" %c "), Arrow);
+                    const bool bIsTarget = (i == TargetPosition);
+                    const TCHAR Arrow = bIsTarget ? TargetArrow : FlankerArrow;
+                    Display += FString::Printf(TEXT(" %c "), Arrow);
                 }
                 return FText::FromString(Display);
             }).Font(FCoreStyle::GetDefaultFontStyle("Mono", LargeTextSize)).ColorAndOpacity(Style.GetPrimaryColor())]
