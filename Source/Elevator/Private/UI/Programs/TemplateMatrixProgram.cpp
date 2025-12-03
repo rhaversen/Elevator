@@ -8,8 +8,6 @@
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Text/STextBlock.h"
 
-#define LOCTEXT_NAMESPACE "TemplateMatrixProgram"
-
 REGISTER_SCREEN_PROGRAM(FTemplateMatrixProgram, "TemplateMatrix")
 
 // ============================================================================
@@ -198,7 +196,7 @@ int32 STemplateMatrixWidget::OnPaint(const FPaintArgs& Args, const FGeometry& Al
 FTemplateMatrixProgram::FTemplateMatrixProgram()
     : FTrialProgramBase(5)  // 5 puzzles
 {
-    SetTrialTitle(LOCTEXT("TemplateMatrixTitle", "Template Matrix"));
+    SetTrialTitle(FText::FromString(TEXT("Template Matrix")));
     GenerateNewTrial();
 }
 
@@ -568,4 +566,3 @@ void FTemplateMatrixProgram::HandlePointerReleased(const FScreenPointerEvent& Ev
     ActivePointerKey = EKeys::Invalid;
 }
 
-#undef LOCTEXT_NAMESPACE

@@ -10,8 +10,6 @@
 #include "Widgets/Text/STextBlock.h"
 #include "Algo/RandomShuffle.h"
 
-#define LOCTEXT_NAMESPACE "VendorSandboxProgram"
-
 REGISTER_SCREEN_PROGRAM(FVendorSandboxProgram, "VendorSandbox")
 
 namespace VendorSandboxLayout
@@ -420,7 +418,7 @@ int32 SVendorSandboxWidget::OnPaint(const FPaintArgs& Args, const FGeometry& All
 FVendorSandboxProgram::FVendorSandboxProgram()
     : FTrialProgramBase(3)
 {
-    SetTrialTitle(LOCTEXT("VendorSandboxTitle", "Vendor Sandbox"));
+    SetTrialTitle(FText::FromString(TEXT("Vendor Sandbox")));
     DeckOutcomeSequences.SetNum(4);
     DeckOutcomeIndices.Init(0, 4);
     DeckDrawCounts.Init(0, 4);
@@ -723,4 +721,3 @@ void FVendorSandboxProgram::HandlePointerReleased(const FScreenPointerEvent& Eve
 {
 }
 
-#undef LOCTEXT_NAMESPACE

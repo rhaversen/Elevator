@@ -7,8 +7,6 @@
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Text/STextBlock.h"
 
-#define LOCTEXT_NAMESPACE "BudgetTickerProgram"
-
 REGISTER_SCREEN_PROGRAM(FBudgetTickerProgram, "BudgetTicker")
 
 // ============================================================================
@@ -228,7 +226,7 @@ int32 SBudgetTickerWidget::OnPaint(const FPaintArgs& Args, const FGeometry& Allo
 FBudgetTickerProgram::FBudgetTickerProgram()
     : FTrialProgramBase(12)  // 12 trials
 {
-    SetTrialTitle(LOCTEXT("BudgetTickerTitle", "Budget Ticker"));
+    SetTrialTitle(FText::FromString(TEXT("Budget Ticker")));
     // Initialize ticker with a sequence of random single-digit numbers
     // Start with just 2 numbers as requested
     NumberHistory.Empty();
@@ -402,4 +400,3 @@ void FBudgetTickerProgram::HandlePointerReleased(const FScreenPointerEvent& Even
     ActivePointerKey = EKeys::Invalid;
 }
 
-#undef LOCTEXT_NAMESPACE

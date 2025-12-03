@@ -3,8 +3,6 @@
 #include "Widgets/SNullWidget.h"
 #include "HAL/PlatformTime.h"
 
-#define LOCTEXT_NAMESPACE "TrialProgramBase"
-
 FTrialProgramBase::FTrialProgramBase(int32 InTotalTrials)
     : TotalTrials(InTotalTrials)
 {
@@ -17,7 +15,7 @@ FText FTrialProgramBase::GetTrialTitle() const
         return TrialTitle;
     }
 
-    return LOCTEXT("DefaultTrialTitle", "Trial Task");
+    return FText::FromString(TEXT("Trial Task"));
 }
 
 void FTrialProgramBase::SetTrialTitle(const FText& InTitle)
@@ -136,5 +134,4 @@ void FTrialProgramBase::OnTick(float DeltaTime)
     }
 }
 
-#undef LOCTEXT_NAMESPACE
 

@@ -6,8 +6,6 @@
 #include "Rendering/SlateRenderer.h"
 #include "Fonts/FontMeasure.h"
 
-#define LOCTEXT_NAMESPACE "DirectoryIndexRebuildProgram"
-
 REGISTER_SCREEN_PROGRAM(FDirectoryIndexRebuildProgram, "DirectoryIndexRebuild")
 
 // ============================================================
@@ -312,7 +310,7 @@ int32 SDirectoryIndexRebuildWidget::OnPaint(const FPaintArgs& Args, const FGeome
 FDirectoryIndexRebuildProgram::FDirectoryIndexRebuildProgram()
     : FTrialProgramBase(8)
 {
-    SetTrialTitle(LOCTEXT("DirectoryIndexRebuildTitle", "Directory Index Rebuild"));
+    SetTrialTitle(FText::FromString(TEXT("Directory Index Rebuild")));
     UserGrid.SetNum(GridCols * GridRows);
     for (int32& V : UserGrid) V = -1;
     GenerateNewTrial();
@@ -664,4 +662,3 @@ void FDirectoryIndexRebuildProgram::HandlePointerReleased(const FScreenPointerEv
     // Nothing needed - click-based interaction
 }
 
-#undef LOCTEXT_NAMESPACE

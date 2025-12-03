@@ -6,8 +6,6 @@
 #include "Fonts/FontMeasure.h"
 #include "Internationalization/Text.h"
 
-#define LOCTEXT_NAMESPACE "FollowUpMarkerProgram"
-
 REGISTER_SCREEN_PROGRAM(FFollowUpMarkerProgram, "FollowUpMarker")
 
 // ============================================================
@@ -75,7 +73,7 @@ int32 SFollowUpMarkerWidget::OnPaint(const FPaintArgs& Args, const FGeometry& Al
     if (Program->GetTaskComplete())
     {
         FSlateFontInfo CompleteFont = FCoreStyle::GetDefaultFontStyle("Bold", 32);
-        const FString Completion = LOCTEXT("CanvasCompletion", "Monitor clear.").ToString();
+        const FString Completion = TEXT("Monitor clear.");
         FSlateDrawElement::MakeText(OutDrawElements, LayerId,
             AllottedGeometry.ToPaintGeometry(FVector2f(300, 44), FSlateLayoutTransform(FVector2f(Size.X * 0.5f - 100.0f, Size.Y * 0.45f))),
             Completion, CompleteFont, ESlateDrawEffect::None, Primary);
@@ -316,6 +314,7 @@ int32 SFollowUpMarkerWidget::OnPaint(const FPaintArgs& Args, const FGeometry& Al
 
 FFollowUpMarkerProgram::FFollowUpMarkerProgram()
 {
+    SetTrialTitle(FText::FromString(TEXT("Follow-Up Marker")));
     GenerateSequence();
     TrialStartTime = FPlatformTime::Seconds();
 }
@@ -575,4 +574,3 @@ void FFollowUpMarkerProgram::HandlePointerReleased(const FScreenPointerEvent& Ev
     UpdateCursorForState(false, bMatchHovered && !bAlreadyResponded);
 }
 
-#undef LOCTEXT_NAMESPACE

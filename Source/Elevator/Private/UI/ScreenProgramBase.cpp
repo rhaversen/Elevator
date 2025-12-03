@@ -7,8 +7,6 @@
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SOverlay.h"
 
-#define LOCTEXT_NAMESPACE "ScreenProgramBase"
-
 FScreenProgramBase::FScreenProgramBase()
 {
     ProgramSize = FVector2D::ZeroVector;
@@ -252,7 +250,7 @@ FText FScreenProgramBase::GetCompletionText() const
         return CompletionTextOverride;
     }
 
-    return LOCTEXT("DefaultCompletionText", "TASK COMPLETE");
+    return FText::FromString(TEXT("TASK COMPLETE"));
 }
 
 bool FScreenProgramBase::ShouldShowCompletionOverlay() const
@@ -365,4 +363,3 @@ TSharedRef<STextBlock> FScreenProgramBase::BuildStyledText(const FText& Text, co
     return Label;
 }
 
-#undef LOCTEXT_NAMESPACE

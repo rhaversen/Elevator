@@ -431,7 +431,7 @@ protected:
     FVector CubicleNotepadScale = FVector(1.0f, 1.0f, 1.0f);
 
     UPROPERTY(EditAnywhere, Category = "Cubicles|Workstation", meta = (DisplayName = "Workstation Interaction Prompt"))
-    FText WorkstationInteractionPrompt = NSLOCTEXT("ProceduralOfficeGenerator", "WorkstationPrompt", "Press E to use workstation");
+    FText WorkstationInteractionPrompt = FText::FromString(TEXT("Press E to use workstation"));
 
     UPROPERTY(EditAnywhere, Category = "Cubicles|Workstation", meta = (MakeEditWidget = true))
     FTransform WorkstationInteractionTargetOffset = FTransform(FRotator(-5.0f, 180.0f, 0.0f), FVector(45.0f, 0.0f, 110.0f));

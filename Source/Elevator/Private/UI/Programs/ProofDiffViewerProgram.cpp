@@ -6,8 +6,6 @@
 #include "Widgets/Text/STextBlock.h"
 #include "HAL/PlatformTime.h"
 
-#define LOCTEXT_NAMESPACE "ProofDiffViewerProgram"
-
 REGISTER_SCREEN_PROGRAM(FProofDiffViewerProgram, "ProofDiffViewer")
 
 namespace
@@ -259,7 +257,7 @@ int32 SProofDiffWidget::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 FProofDiffViewerProgram::FProofDiffViewerProgram()
     : FTrialProgramBase(6)
 {
-    SetTrialTitle(LOCTEXT("ProofDiffViewerTitle", "Proof Diff Viewer"));
+    SetTrialTitle(FText::FromString(TEXT("Proof Diff Viewer")));
     LastStateChangeTime = FPlatformTime::Seconds();
     GenerateDifference();
 }
@@ -494,4 +492,3 @@ void FProofDiffViewerProgram::HandlePointerReleased(const FScreenPointerEvent& E
     // Nothing special on release
 }
 
-#undef LOCTEXT_NAMESPACE

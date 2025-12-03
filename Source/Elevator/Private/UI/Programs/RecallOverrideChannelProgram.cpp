@@ -5,14 +5,12 @@
 #include "Widgets/Text/STextBlock.h"
 #include "HAL/PlatformTime.h"
 
-#define LOCTEXT_NAMESPACE "RecallOverrideChannelProgram"
-
 REGISTER_SCREEN_PROGRAM(FRecallOverrideChannelProgram, "RecallOverrideChannel")
 
 FRecallOverrideChannelProgram::FRecallOverrideChannelProgram()
     : FTrialProgramBase(25)
 {
-    SetTrialTitle(LOCTEXT("TrialTitle", "RECALL OVERRIDE"));
+    SetTrialTitle(FText::FromString(TEXT("RECALL OVERRIDE")));
     GenerateNewTrial();
 }
 
@@ -92,8 +90,8 @@ TSharedRef<SWidget> FRecallOverrideChannelProgram::BuildTrialBody()
             + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
             [
                 SNew(STextBlock).Text_Lambda([this]() {
-                    static const FText StopText = LOCTEXT("StopSignalLabel", "STOP");
-                    static const FText ArrowText = LOCTEXT("ArrowSignalLabel", ">>>");
+                    static const FText StopText = FText::FromString(TEXT("STOP"));
+                    static const FText ArrowText = FText::FromString(TEXT(">>>"));
                     return IsStopSignalVisible() ? StopText : ArrowText;
                 }).Font(FCoreStyle::GetDefaultFontStyle("Bold", LargeTextSize * 3))
                 .ColorAndOpacity_Lambda([this]() -> FSlateColor {
@@ -122,7 +120,7 @@ TSharedRef<SWidget> FRecallOverrideChannelProgram::BuildTrialFooter()
         + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, GetProgramStyle().GetSmallPadding())
         [
             BuildButton(
-                LOCTEXT("SendButtonLabel", "SEND"),
+                FText::FromString(TEXT("SEND")),
                 TAttribute<bool>::CreateLambda([this]() { return bSendHovered; }),
                 TAttribute<bool>::CreateLambda([this]() { return false; })
             )
@@ -158,4 +156,3 @@ void FRecallOverrideChannelProgram::HandlePointerReleased(const FScreenPointerEv
     ActivePointerKey = EKeys::Invalid;
 }
 
-#undef LOCTEXT_NAMESPACE

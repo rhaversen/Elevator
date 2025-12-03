@@ -7,8 +7,6 @@
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Text/STextBlock.h"
 
-#define LOCTEXT_NAMESPACE "CodeSheetEntryProgram"
-
 REGISTER_SCREEN_PROGRAM(FCodeSheetEntryProgram, "CodeSheetEntry")
 
 // ============================================================================
@@ -266,7 +264,7 @@ int32 SCodeSheetWidget::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 FCodeSheetEntryProgram::FCodeSheetEntryProgram()
     : FTrialProgramBase(12)  // 12 trials
 {
-    SetTrialTitle(LOCTEXT("CodeSheetEntryTitle", "Code Sheet Entry"));
+    SetTrialTitle(FText::FromString(TEXT("Code Sheet Entry")));
     // Initialize the 9 key symbols - ASCII chars
     KeySymbols = {
         TEXT("#"),
@@ -405,4 +403,3 @@ void FCodeSheetEntryProgram::HandlePointerReleased(const FScreenPointerEvent& Ev
     ActivePointerKey = EKeys::Invalid;
 }
 
-#undef LOCTEXT_NAMESPACE

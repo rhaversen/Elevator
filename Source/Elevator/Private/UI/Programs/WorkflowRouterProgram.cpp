@@ -8,8 +8,6 @@
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/PlatformTime.h"
 
-#define LOCTEXT_NAMESPACE "WorkflowRouterProgram"
-
 REGISTER_SCREEN_PROGRAM(FWorkflowRouterProgram, "WorkflowRouter")
 
 namespace
@@ -203,7 +201,7 @@ int32 STrailWidget::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 FWorkflowRouterProgram::FWorkflowRouterProgram()
     : FTrialProgramBase(5)
 {
-    SetTrialTitle(LOCTEXT("WorkflowRouterTitle", "Workflow Router"));
+    SetTrialTitle(FText::FromString(TEXT("Workflow Router")));
     GenerateNodes();
 }
 
@@ -674,4 +672,3 @@ FVector2D FWorkflowRouterProgram::GetNormalizedPosition(const FVector2D& PixelPo
     );
 }
 
-#undef LOCTEXT_NAMESPACE

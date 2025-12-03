@@ -8,8 +8,6 @@
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/PlatformTime.h"
 
-#define LOCTEXT_NAMESPACE "PolicySchemaUpdateProgram"
-
 REGISTER_SCREEN_PROGRAM(FPolicySchemaUpdateProgram, "PolicySchemaUpdate")
 
 namespace
@@ -215,7 +213,7 @@ int32 SPolicyCardWidget::OnPaint(const FPaintArgs& Args, const FGeometry& Allott
 FPolicySchemaUpdateProgram::FPolicySchemaUpdateProgram()
     : FTrialProgramBase(4)  // 4 trials (rule shifts) with longer calibration each
 {
-    SetTrialTitle(LOCTEXT("PolicySchemaUpdateTitle", "Policy Schema Update"));
+    SetTrialTitle(FText::FromString(TEXT("Policy Schema Update")));
     // Set up exemplar cards for each pile - each unique in shape, fill, and number
     // Pile 0: 1x Triangle Solid
     // Pile 1: 2x Square Dither  
@@ -441,4 +439,3 @@ void FPolicySchemaUpdateProgram::HandlePointerReleased(const FScreenPointerEvent
     // Nothing special on release
 }
 
-#undef LOCTEXT_NAMESPACE

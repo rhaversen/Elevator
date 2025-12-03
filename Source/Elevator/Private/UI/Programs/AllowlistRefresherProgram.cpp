@@ -6,14 +6,12 @@
 #include "Widgets/Text/STextBlock.h"
 #include "HAL/PlatformTime.h"
 
-#define LOCTEXT_NAMESPACE "AllowlistRefresherProgram"
-
 REGISTER_SCREEN_PROGRAM(FAllowlistRefresherProgram, "AllowlistRefresher")
 
 FAllowlistRefresherProgram::FAllowlistRefresherProgram()
     : FTrialProgramBase(20)  // 20 trials
 {
-    SetTrialTitle(LOCTEXT("TrialTitle", "ALLOWLIST"));
+    SetTrialTitle(FText::FromString(TEXT("ALLOWLIST")));
     GenerateNewTrial();
 }
 
@@ -66,7 +64,7 @@ TSharedRef<SWidget> FAllowlistRefresherProgram::BuildTrialFooter()
         + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, GetProgramStyle().GetSmallPadding())
         [
             BuildButton(
-                LOCTEXT("ApproveButtonLabel", "APPROVE"),
+                FText::FromString(TEXT("APPROVE")),
                 TAttribute<bool>::CreateLambda([this]() { return bApproveHovered; }),
                 TAttribute<bool>::CreateLambda([this]() { return bApprovePressed; })
             )
@@ -113,8 +111,6 @@ FString FAllowlistRefresherProgram::GetCurrentIcon() const
         return TEXT("X");
     }
 }
-
-#undef LOCTEXT_NAMESPACE
 
 void FAllowlistRefresherProgram::Approve()
 {

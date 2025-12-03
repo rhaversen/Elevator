@@ -9,8 +9,6 @@
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Text/STextBlock.h"
 
-#define LOCTEXT_NAMESPACE "ThemeConsistencyCheckProgram"
-
 REGISTER_SCREEN_PROGRAM(FThemeConsistencyCheckProgram, "ThemeConsistencyCheck")
 
 // ============================================================
@@ -155,7 +153,7 @@ int32 SThemeConsistencyCheckWidget::OnPaint(const FPaintArgs& Args, const FGeome
 FThemeConsistencyCheckProgram::FThemeConsistencyCheckProgram()
     : FTrialProgramBase(12)
 {
-    SetTrialTitle(LOCTEXT("ThemeConsistencyCheckTitle", "Theme Consistency Check"));
+    SetTrialTitle(FText::FromString(TEXT("Theme Consistency Check")));
     GenerateNewTrial();
 }
 
@@ -328,4 +326,3 @@ float FThemeConsistencyCheckProgram::GetDragThreshold() const
     return FMath::Clamp(Base, 150.0f, 260.0f);
 }
 
-#undef LOCTEXT_NAMESPACE

@@ -6,14 +6,12 @@
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
 
-#define LOCTEXT_NAMESPACE "ProxyHandshakeVerifierProgram"
-
 REGISTER_SCREEN_PROGRAM(FProxyHandshakeVerifierProgram, "ProxyHandshakeVerifier")
 
 FProxyHandshakeVerifierProgram::FProxyHandshakeVerifierProgram()
     : FTrialProgramBase(12)
 {
-    SetTrialTitle(LOCTEXT("TrialTitle", "PROXY HANDSHAKE VERIFIER"));
+    SetTrialTitle(FText::FromString(TEXT("PROXY HANDSHAKE VERIFIER")));
     GenerateNewTrial();
 }
 
@@ -56,7 +54,7 @@ TSharedRef<SWidget> FProxyHandshakeVerifierProgram::BuildTrialBody()
             SNew(SVerticalBox)
             // Signal bus display
             + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
-            [SNew(STextBlock).Text(LOCTEXT("SignalBusLabel", "SIGNAL BUS"))
+            [SNew(STextBlock).Text(FText::FromString(TEXT("SIGNAL BUS")))
                 .Font(FCoreStyle::GetDefaultFontStyle("Mono", Style.TextSize)).ColorAndOpacity(Style.GetDimColor())]
             + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, Style.GetSmallPadding())
             [SNew(STextBlock).Text_Lambda([this]() {
@@ -84,7 +82,7 @@ TSharedRef<SWidget> FProxyHandshakeVerifierProgram::BuildTrialFooter()
         + SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Center).VAlign(VAlign_Center)
         [SNew(SVerticalBox)
             + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
-            [SNew(STextBlock).Text(LOCTEXT("PortALabel", "PORT A"))
+            [SNew(STextBlock).Text(FText::FromString(TEXT("PORT A")))
                 .Font(FCoreStyle::GetDefaultFontStyle("Mono", Style.TextSize)).ColorAndOpacity(Style.GetDimColor())]
             + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
             [SNew(STextBlock).Text(FText::FromString(TEXT("<<<")))
@@ -96,7 +94,7 @@ TSharedRef<SWidget> FProxyHandshakeVerifierProgram::BuildTrialFooter()
         + SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Center).VAlign(VAlign_Center)
         [SNew(SVerticalBox)
             + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
-            [SNew(STextBlock).Text(LOCTEXT("PortBLabel", "PORT B"))
+            [SNew(STextBlock).Text(FText::FromString(TEXT("PORT B")))
                 .Font(FCoreStyle::GetDefaultFontStyle("Mono", Style.TextSize)).ColorAndOpacity(Style.GetDimColor())]
             + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
             [SNew(STextBlock).Text(FText::FromString(TEXT(">>>")))
@@ -125,8 +123,6 @@ void FProxyHandshakeVerifierProgram::HandlePointerMoved(const FScreenPointerEven
     
     UpdateCursorForState(false, HoveredSocket >= 0);
 }
-
-#undef LOCTEXT_NAMESPACE
 
 void FProxyHandshakeVerifierProgram::HandlePointerPressed(const FScreenPointerEvent& Event, bool bHandledByPreProcessor)
 {

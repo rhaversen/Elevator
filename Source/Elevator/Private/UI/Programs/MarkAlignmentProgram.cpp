@@ -5,8 +5,6 @@
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Text/STextBlock.h"
 
-#define LOCTEXT_NAMESPACE "MarkAlignmentProgram"
-
 REGISTER_SCREEN_PROGRAM(FMarkAlignmentProgram, "MarkAlignment")
 
 namespace
@@ -382,7 +380,7 @@ int32 SMarkAlignmentWidget::OnPaint(const FPaintArgs& Args, const FGeometry& All
 FMarkAlignmentProgram::FMarkAlignmentProgram()
     : FTrialProgramBase(8)
 {
-    SetTrialTitle(LOCTEXT("MarkAlignmentTitle", "Mark Alignment"));
+    SetTrialTitle(FText::FromString(TEXT("Mark Alignment")));
     GenerateNewTrial();
 }
 
@@ -697,4 +695,3 @@ void FMarkAlignmentProgram::HandlePointerReleased(const FScreenPointerEvent& Eve
     DragTarget = EMarkAlignmentDragTarget::None;
 }
 
-#undef LOCTEXT_NAMESPACE
