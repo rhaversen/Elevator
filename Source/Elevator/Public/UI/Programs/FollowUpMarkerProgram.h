@@ -1,6 +1,6 @@
 #pragma once
 #include "CoreMinimal.h"
-#include "UI/ScreenProgramBase.h"
+#include "UI/Programs/TrialProgramBase.h"
 
 class FFollowUpMarkerProgram;
 
@@ -35,20 +35,22 @@ private:
  *  - Click MATCH when candidate != n-2: back -1 trial  
  *  - Don't click: no change
  */
-class ELEVATOR_API FFollowUpMarkerProgram : public FScreenProgramBase
+class ELEVATOR_API FFollowUpMarkerProgram : public FTrialProgramBase
 {
     friend class SFollowUpMarkerWidget;
 public:
     FFollowUpMarkerProgram();
 protected:
-    virtual TSharedRef<SWidget> BuildProgramWidget() override;
+    virtual TSharedRef<SWidget> BuildTrialBody() override;
+    virtual void GenerateNewTrial() override;
+    virtual void OnTick(float DeltaTime) override;
     virtual void HandlePointerMoved(const FScreenPointerEvent& Event, bool bHandledByPreProcessor) override;
     virtual void HandlePointerPressed(const FScreenPointerEvent& Event, bool bHandledByPreProcessor) override;
     virtual void HandlePointerReleased(const FScreenPointerEvent& Event, bool bHandledByPreProcessor) override;
 private:
     void GenerateSequence();
     void GenerateNextItem();
-    void AdvanceTrial();
+    void AdvanceSequence();
     void InvalidateWidget() const;
     
     // Slot positions (0=n+1/left, 1=n+0, 2=n-1, 3=n-2/right)
@@ -61,8 +63,7 @@ private:
     // Sequence data
     TArray<FString> Sequence;
     int32 TrialIndex = 0;           // Current trial (n)
-    int32 TrialsRequired = 5;      // Complete after this many successful trials
-    int32 TrialsCompleted = 0;      // Progress counter
+    static constexpr int32 TrialsRequired = 10;      // Complete after this many successful trials
     int32 MatchesGenerated = 0;     // Number of n-back matches injected into sequence
     int32 NonMatchesGenerated = 0;  // Number of non-matching entries generated
     
@@ -78,6 +79,8 @@ private:
     bool bAlreadyResponded = false; // Prevent multiple clicks per trial
     bool bShowingFeedback = false;  // True when showing match result
     bool bLastMatchCorrect = false; // Was the last match correct?
+    bool bAdvanceTrialQueued = false;
+    bool bFailTrialQueued = false;
     
     FKey ActivePointerKey = EKeys::Invalid;
     TWeakPtr<SFollowUpMarkerWidget> CanvasWidget;

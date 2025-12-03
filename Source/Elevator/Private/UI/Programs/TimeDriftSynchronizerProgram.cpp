@@ -198,7 +198,16 @@ int32 SClockWidget::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 REGISTER_SCREEN_PROGRAM(FTimeDriftSynchronizerProgram, "TimeDriftSynchronizer")
 
 FTimeDriftSynchronizerProgram::FTimeDriftSynchronizerProgram()
+    : FTrialProgramBase(1)
 {
+    SetTrialTitle(FText::FromString(TEXT("TIME DRIFT SYNCHRONIZER")));
+    SetTaskComplete(false);
+    InitializeClock();
+}
+
+void FTimeDriftSynchronizerProgram::GenerateNewTrial()
+{
+    SetTaskComplete(false);
     InitializeClock();
 }
 
@@ -227,6 +236,7 @@ void FTimeDriftSynchronizerProgram::InitializeClock()
     bTargetHidden = false;
     DragTarget = EDragTarget::None;
     HoveredHandle = EDragTarget::None;
+    SetTaskComplete(false);
 }
 
 void FTimeDriftSynchronizerProgram::GenerateTargetTime()
@@ -283,15 +293,11 @@ float FTimeDriftSynchronizerProgram::AngleFromPosition(const FVector2D& Pos) con
     return NormalizeAngle(Angle);
 }
 
-TSharedRef<SWidget> FTimeDriftSynchronizerProgram::BuildProgramWidget()
+TSharedRef<SWidget> FTimeDriftSynchronizerProgram::BuildTrialBody()
 {
     const FScreenProgramStyle& Style = GetProgramStyle();
-    const int32 LargeTextSize = Style.TextSize * 2;
     
     return SNew(SVerticalBox)
-        + SVerticalBox::Slot().AutoHeight().Padding(Style.GetSmallPadding())
-        [SNew(STextBlock).Text(FText::FromString(TEXT("TIME DRIFT SYNCHRONIZER")))
-            .Font(FCoreStyle::GetDefaultFontStyle("Bold", LargeTextSize)).ColorAndOpacity(Style.GetPrimaryColor())]
         + SVerticalBox::Slot().AutoHeight().Padding(Style.GetSmallPadding()).HAlign(HAlign_Center)
         [SNew(STextBlock).Text_Lambda([this]() { 
             return FText::FromString(FString::Printf(TEXT("%d:%02d"), Clock.TargetHour, Clock.TargetMinute));
@@ -388,7 +394,10 @@ void FTimeDriftSynchronizerProgram::HandlePointerPressed(const FScreenPointerEve
     {
         if (CheckTimeMatch())
         {
-            SetTaskComplete(true);
+            if (!IsTaskComplete())
+            {
+                AdvanceTrial();
+            }
         }
         else
         {

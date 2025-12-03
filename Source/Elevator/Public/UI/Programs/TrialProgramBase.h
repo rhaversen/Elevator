@@ -67,7 +67,7 @@ protected:
     virtual TSharedRef<SWidget> BuildTrialFooter();
 
     /** Standard implementation of BuildProgramWidget that assembles the trial layout. */
-    virtual TSharedRef<SWidget> BuildProgramWidget() override final;
+    virtual TSharedRef<SWidget> BuildProgramWidget() override;
     
     /** Handle timer updates. */
     virtual void OnTick(float DeltaTime) override;

@@ -1,14 +1,15 @@
 #pragma once
 #include "CoreMinimal.h"
-#include "UI/ScreenProgramBase.h"
+#include "UI/Programs/TrialProgramBase.h"
 
 /** Program A: Memory Defrag Wizard - Tower of Hanoi */
-class ELEVATOR_API FMemoryDefragWizardProgram : public FScreenProgramBase
+class ELEVATOR_API FMemoryDefragWizardProgram : public FTrialProgramBase
 {
 public:
     FMemoryDefragWizardProgram();
 protected:
-    virtual TSharedRef<SWidget> BuildProgramWidget() override;
+    virtual TSharedRef<SWidget> BuildTrialBody() override;
+    virtual void GenerateNewTrial() override;
     virtual void HandlePointerMoved(const FScreenPointerEvent& Event, bool bHandledByPreProcessor) override;
     virtual void HandlePointerPressed(const FScreenPointerEvent& Event, bool bHandledByPreProcessor) override;
     virtual void HandlePointerReleased(const FScreenPointerEvent& Event, bool bHandledByPreProcessor) override;

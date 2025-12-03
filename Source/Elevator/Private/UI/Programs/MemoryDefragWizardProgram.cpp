@@ -8,13 +8,33 @@
 
 REGISTER_SCREEN_PROGRAM(FMemoryDefragWizardProgram, "MemoryDefragWizard")
 
-FMemoryDefragWizardProgram::FMemoryDefragWizardProgram() { InitializeBlocks(); }
+FMemoryDefragWizardProgram::FMemoryDefragWizardProgram()
+    : FTrialProgramBase(1)
+{
+    SetTrialTitle(FText::FromString(TEXT("MEMORY DEFRAG WIZARD")));
+    SetTaskComplete(false);
+    InitializeBlocks();
+}
+
+void FMemoryDefragWizardProgram::GenerateNewTrial()
+{
+    InitializeBlocks();
+    SetTaskComplete(false);
+}
 
 void FMemoryDefragWizardProgram::InitializeBlocks()
 {
     Pegs.SetNum(3);
     for (auto& P : Pegs) P.Empty();
     for (int32 i = NumBlocks; i >= 1; --i) Pegs[0].Add(i);
+    SelectedPeg = -1;
+    HoveredPeg = -1;
+    DraggedBlock = -1;
+    DragSourcePeg = -1;
+    DragPosition = FVector2D::ZeroVector;
+    MoveCount = 0;
+    bShowingReindex = false;
+    ActivePointerKey = EKeys::Invalid;
 }
 
 bool FMemoryDefragWizardProgram::CanMoveBlock(int32 FromPeg, int32 ToPeg) const
@@ -31,7 +51,10 @@ void FMemoryDefragWizardProgram::MoveBlock(int32 FromPeg, int32 ToPeg)
     if (!CanMoveBlock(FromPeg, ToPeg)) return;
     Pegs[ToPeg].Add(Pegs[FromPeg].Pop());
     MoveCount++;
-    if (CheckWinCondition()) SetTaskComplete(true);
+    if (!IsTaskComplete() && CheckWinCondition())
+    {
+        AdvanceTrial();
+    }
 }
 
 bool FMemoryDefragWizardProgram::CheckWinCondition() const { return Pegs[2].Num() == NumBlocks; }
@@ -112,15 +135,11 @@ FString FMemoryDefragWizardProgram::RenderPegColumn(int32 PegIndex) const
     return Result;
 }
 
-TSharedRef<SWidget> FMemoryDefragWizardProgram::BuildProgramWidget()
+TSharedRef<SWidget> FMemoryDefragWizardProgram::BuildTrialBody()
 {
     const FScreenProgramStyle& Style = GetProgramStyle();
-    const int32 LargeTextSize = Style.TextSize * 2;
     
     return SNew(SVerticalBox)
-        + SVerticalBox::Slot().AutoHeight().Padding(Style.GetSmallPadding())
-        [SNew(STextBlock).Text(FText::FromString(TEXT("MEMORY DEFRAG WIZARD")))
-            .Font(FCoreStyle::GetDefaultFontStyle("Bold", LargeTextSize)).ColorAndOpacity(Style.GetPrimaryColor())]
         + SVerticalBox::Slot().AutoHeight().Padding(0, Style.GetSmallPadding())
         [SNew(STextBlock).Text_Lambda([this]() { 
             if (bShowingReindex) return FText::FromString(TEXT("Reindexing..."));
@@ -182,7 +201,10 @@ void FMemoryDefragWizardProgram::HandlePointerPressed(const FScreenPointerEvent&
             MoveCount++;
             DraggedBlock = -1;
             DragSourcePeg = -1;
-            if (CheckWinCondition()) SetTaskComplete(true);
+            if (!IsTaskComplete() && CheckWinCondition())
+            {
+                AdvanceTrial();
+            }
         }
         else
         {

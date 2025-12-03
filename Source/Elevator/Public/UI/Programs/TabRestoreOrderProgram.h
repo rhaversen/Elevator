@@ -1,15 +1,16 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "Styling/SlateColor.h"
-#include "UI/ScreenProgramBase.h"
+#include "UI/Programs/TrialProgramBase.h"
 
 /** Program M: Tab Restore Order - Corsi Block-Tapping Test */
-class ELEVATOR_API FTabRestoreOrderProgram : public FScreenProgramBase
+class ELEVATOR_API FTabRestoreOrderProgram : public FTrialProgramBase
 {
 public:
     FTabRestoreOrderProgram();
 protected:
-    virtual TSharedRef<SWidget> BuildProgramWidget() override;
+    virtual TSharedRef<SWidget> BuildTrialBody() override;
+    virtual void GenerateNewTrial() override;
     virtual void HandlePointerMoved(const FScreenPointerEvent& Event, bool bHandledByPreProcessor) override;
     virtual void HandlePointerPressed(const FScreenPointerEvent& Event, bool bHandledByPreProcessor) override;
     virtual void HandlePointerReleased(const FScreenPointerEvent& Event, bool bHandledByPreProcessor) override;
@@ -52,7 +53,7 @@ private:
     TArray<int32> TargetSequence;
     TArray<int32> PlayerSequence;
     int32 SequenceLength = 1;
-    int32 MaxLength = 5;
+    static constexpr int32 MaxLength = 5;
 
     EPhase Phase = EPhase::ShowingSequence;
     int32 HoveredBlock = -1;
@@ -60,7 +61,8 @@ private:
     int32 FeedbackBlock = -1;
     int32 ShowingIndex = -1;
     bool bFlashVisible = false;
-    bool bPendingSequenceReset = false;
+    bool bAdvanceAfterFeedback = false;
+    bool bFailAfterFeedback = false;
 
     double NextPhaseTime = 0.0;
     double ResponseStartTime = 0.0;

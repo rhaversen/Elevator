@@ -313,10 +313,16 @@ int32 SFollowUpMarkerWidget::OnPaint(const FPaintArgs& Args, const FGeometry& Al
 // ============================================================
 
 FFollowUpMarkerProgram::FFollowUpMarkerProgram()
+    : FTrialProgramBase(TrialsRequired)
 {
     SetTrialTitle(FText::FromString(TEXT("Follow-Up Marker")));
     GenerateSequence();
     TrialStartTime = FPlatformTime::Seconds();
+}
+
+void FFollowUpMarkerProgram::GenerateNewTrial()
+{
+    AdvanceSequence();
 }
 
 void FFollowUpMarkerProgram::GenerateSequence()
@@ -324,6 +330,7 @@ void FFollowUpMarkerProgram::GenerateSequence()
     Sequence.Empty();
     MatchesGenerated = 0;
     NonMatchesGenerated = 0;
+    SetTaskComplete(false);
     
     // Generate initial items (need at least 4 for the display: n+1, n+0, n-1, n-2)
     // We start at TrialIndex=2, so we need items 0,1,2,3 initially
@@ -334,10 +341,11 @@ void FFollowUpMarkerProgram::GenerateSequence()
     
     // Start at trial 2 so we have n-2 history
     TrialIndex = 2;
-    TrialsCompleted = 0;
     bAlreadyResponded = false;
     bShowingFeedback = false;
     bLastMatchCorrect = false;
+    bAdvanceTrialQueued = false;
+    bFailTrialQueued = false;
 }
 
 void FFollowUpMarkerProgram::GenerateNextItem()
@@ -399,7 +407,7 @@ float FFollowUpMarkerProgram::GetAnimProgress() const
     return FMath::Clamp(static_cast<float>(Elapsed / TimePerTrial), 0.0f, 1.0f);
 }
 
-void FFollowUpMarkerProgram::AdvanceTrial()
+void FFollowUpMarkerProgram::AdvanceSequence()
 {
     TrialIndex++;
     TrialStartTime = FPlatformTime::Seconds();
@@ -408,12 +416,6 @@ void FFollowUpMarkerProgram::AdvanceTrial()
     
     // Generate next item on the fly
     GenerateNextItem();
-    
-    // Check completion - only when we have enough successful trials
-    if (TrialsCompleted >= TrialsRequired)
-    {
-        SetTaskComplete(true);
-    }
     
     InvalidateWidget();
 }
@@ -486,40 +488,45 @@ bool FFollowUpMarkerProgram::IsPointInRect(const FVector2D& Point, const FVector
     return FMath::Abs(Point.X - Center.X) <= Size.X * 0.5f && FMath::Abs(Point.Y - Center.Y) <= Size.Y * 0.5f;
 }
 
-TSharedRef<SWidget> FFollowUpMarkerProgram::BuildProgramWidget()
+TSharedRef<SWidget> FFollowUpMarkerProgram::BuildTrialBody()
 {
-    const FScreenProgramStyle& Style = GetProgramStyle();
-
     TSharedPtr<SFollowUpMarkerWidget> Canvas;
-
-    TSharedRef<SVerticalBox> Layout = SNew(SVerticalBox)
-        + SVerticalBox::Slot().AutoHeight()
-        [
-            BuildHeader(LOCTEXT("ProgramTitle", "Follow-Up Marker"))
-        ]
-        + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, Style.GetSmallPadding())
-        [
-            BuildProgressBarWidget([this]() { return TrialsCompleted; }, TrialsRequired)
-        ]
-        + SVerticalBox::Slot().FillHeight(1.0f).Padding(FMargin(0.0f, Style.GetSmallPadding()))
-        [
-            SAssignNew(Canvas, SFollowUpMarkerWidget).Program(this)
-        ];
-
+    TSharedRef<SWidget> Widget = SAssignNew(Canvas, SFollowUpMarkerWidget).Program(this);
     CanvasWidget = Canvas;
-    return Layout;
+    return Widget;
+}
+
+void FFollowUpMarkerProgram::OnTick(float DeltaTime)
+{
+    FTrialProgramBase::OnTick(DeltaTime);
+
+    if (GetTaskComplete())
+    {
+        return;
+    }
+
+    if (GetAnimProgress() >= 1.0f)
+    {
+        if (bAdvanceTrialQueued)
+        {
+            bAdvanceTrialQueued = false;
+            AdvanceTrial();
+        }
+        else if (bFailTrialQueued)
+        {
+            bFailTrialQueued = false;
+            FailTrial();
+        }
+        else
+        {
+            AdvanceSequence();
+        }
+    }
 }
 
 void FFollowUpMarkerProgram::HandlePointerMoved(const FScreenPointerEvent& Event, bool bHandledByPreProcessor)
 {
     if (bHandledByPreProcessor || GetTaskComplete()) return;
-    
-    // Check if timer expired - advance to next trial
-    if (GetAnimProgress() >= 1.0f)
-    {
-        AdvanceTrial();
-    }
-    
     const FVector2D& Pos = Event.ProgramPixelPosition;
     
     bMatchHovered = IsPointInRect(Pos, GetMatchButtonCenter(), GetMatchButtonSize());
@@ -554,13 +561,13 @@ void FFollowUpMarkerProgram::HandlePointerPressed(const FScreenPointerEvent& Eve
         
         if (bIsMatch)
         {
-            // Correct! Progress +1
-            TrialsCompleted++;
+            bAdvanceTrialQueued = true;
+            bFailTrialQueued = false;
         }
         else
         {
-            // Wrong! Back -1 (but don't go below 0)
-            TrialsCompleted = FMath::Max(0, TrialsCompleted - 1);
+            bFailTrialQueued = true;
+            bAdvanceTrialQueued = false;
         }
         
         InvalidateWidget();

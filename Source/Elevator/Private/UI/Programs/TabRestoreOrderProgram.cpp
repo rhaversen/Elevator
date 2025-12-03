@@ -16,12 +16,22 @@ namespace
 REGISTER_SCREEN_PROGRAM(FTabRestoreOrderProgram, "TabRestoreOrder")
 
 FTabRestoreOrderProgram::FTabRestoreOrderProgram()
+    : FTrialProgramBase(MaxLength)
 {
+    SetTrialTitle(FText::FromString(TEXT("PROCESS RESTORE")));
+    SetTaskComplete(false);
+    GenerateSequence();
+}
+
+void FTabRestoreOrderProgram::GenerateNewTrial()
+{
+    SetTaskComplete(false);
     GenerateSequence();
 }
 
 void FTabRestoreOrderProgram::GenerateSequence()
 {
+    SequenceLength = FMath::Clamp(GetCurrentTrial() + 1, 1, MaxLength);
     TargetSequence.Empty();
     PlayerSequence.Empty();
 
@@ -36,7 +46,8 @@ void FTabRestoreOrderProgram::GenerateSequence()
     FeedbackBlock = -1;
     ShowingIndex = -1;
     bFlashVisible = false;
-    bPendingSequenceReset = false;
+    bAdvanceAfterFeedback = false;
+    bFailAfterFeedback = false;
 
     const double Now = FPlatformTime::Seconds();
     NextPhaseTime = Now + IntroPauseDuration;
@@ -48,6 +59,8 @@ void FTabRestoreOrderProgram::GenerateSequence()
         ? FText::FromString(TEXT("Reading {0} address..."))
         : FText::FromString(TEXT("Reading {0} addresses..."));
     StatusMessage = FText::Format(FormatText, FText::AsNumber(AddressCount));
+
+    SetTaskComplete(false);
 }
 
 void FTabRestoreOrderProgram::UpdateState()
@@ -88,7 +101,6 @@ void FTabRestoreOrderProgram::UpdateState()
             const double Elapsed = Now - ResponseStartTime;
             if (Elapsed >= ResponseDuration)
             {
-                SequenceLength = FMath::Max(1, SequenceLength - 1);
                 const int32 ExpectedBlock = TargetSequence.IsValidIndex(PlayerSequence.Num()) ? TargetSequence[PlayerSequence.Num()] : -1;
                 StartFeedback(false, ExpectedBlock, TOptional<FText>(TimeoutReplayText));
             }
@@ -96,9 +108,30 @@ void FTabRestoreOrderProgram::UpdateState()
         break;
 
     case EPhase::Feedback:
-        if (Now >= NextPhaseTime && bPendingSequenceReset)
+        if (Now >= NextPhaseTime)
         {
-            GenerateSequence();
+            if (bFailAfterFeedback)
+            {
+                bFailAfterFeedback = false;
+                FailTrial();
+                return;
+            }
+
+            if (bAdvanceAfterFeedback)
+            {
+                bAdvanceAfterFeedback = false;
+                const bool bCompletedAll = AdvanceTrial();
+                if (bCompletedAll)
+                {
+                    StatusMessage = FText::FromString(TEXT("Process restored."));
+                }
+                return;
+            }
+
+            if (!IsTaskComplete())
+            {
+                GenerateSequence();
+            }
         }
         break;
     }
@@ -111,7 +144,8 @@ void FTabRestoreOrderProgram::StartInputPhase()
     FeedbackBlock = -1;
     bFlashVisible = false;
     ShowingIndex = -1;
-    bPendingSequenceReset = false;
+    bAdvanceAfterFeedback = false;
+    bFailAfterFeedback = false;
 
     const double Now = FPlatformTime::Seconds();
     ResponseStartTime = Now;
@@ -146,7 +180,8 @@ void FTabRestoreOrderProgram::StartFeedback(bool bSuccess, int32 ErrorBlock, TOp
         StatusMessage = FText::FromString(TEXT("Stack fault. Rewinding..."));
     }
 
-    bPendingSequenceReset = !GetTaskComplete();
+    bAdvanceAfterFeedback = bSuccess;
+    bFailAfterFeedback = !bSuccess;
 }
 
 const TArray<FTabRestoreOrderProgram::FTabDescriptor>& FTabRestoreOrderProgram::GetTabDescriptors()
@@ -216,22 +251,16 @@ void FTabRestoreOrderProgram::TapBlock(int32 BlockIndex)
     const int32 CurrentIndex = PlayerSequence.Num() - 1;
     if (!TargetSequence.IsValidIndex(CurrentIndex) || TargetSequence[CurrentIndex] != BlockIndex)
     {
-        SequenceLength = FMath::Max(1, SequenceLength - 1);
         StartFeedback(false, BlockIndex, TOptional<FText>(MismatchReplayText));
         return;
     }
 
     if (PlayerSequence.Num() == TargetSequence.Num())
     {
-        SequenceLength++;
-        if (SequenceLength > MaxLength)
+        const bool bFinalTrial = (GetCurrentTrial() + 1 >= GetTotalTrials());
+        if (bFinalTrial)
         {
-            SetTaskComplete(true);
-            StatusMessage = FText::FromString(TEXT("Process restored."));
-            Phase = EPhase::Feedback;
-            HighlightedBlock = -1;
-            FeedbackBlock = -1;
-            bPendingSequenceReset = false;
+            StartFeedback(true, -1, TOptional<FText>(FText::FromString(TEXT("Process restored."))));
         }
         else
         {
@@ -300,10 +329,9 @@ FSlateColor FTabRestoreOrderProgram::GetBlockTextColor(int32 BlockIndex) const
     return Style.GetDimColor();
 }
 
-TSharedRef<SWidget> FTabRestoreOrderProgram::BuildProgramWidget()
+TSharedRef<SWidget> FTabRestoreOrderProgram::BuildTrialBody()
 {
     const FScreenProgramStyle& Style = GetProgramStyle();
-    const int32 TitleSize = Style.TextSize * 2;
     const int32 BlockFontSize = Style.TextSize + 4;
 
     TSharedPtr<SBorder> GridContainer;
@@ -371,13 +399,6 @@ TSharedRef<SWidget> FTabRestoreOrderProgram::BuildProgramWidget()
     }
 
     TSharedRef<SVerticalBox> Content = SNew(SVerticalBox)
-        + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(Style.GetSmallPadding())
-        [SNew(STextBlock)
-            .Text(FText::FromString(TEXT("PROCESS RESTORE")))
-            .Font(FCoreStyle::GetDefaultFontStyle("Bold", TitleSize))
-            .ColorAndOpacity(Style.GetPrimaryColor())]
-        + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, Style.GetSmallPadding())
-        [BuildProgressBarWidget([this]() { return SequenceLength; }, MaxLength)]
         + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, Style.GetSmallPadding())
         [SNew(STextBlock)
             .Text_Lambda([this]() { return GetStatusText(); })
