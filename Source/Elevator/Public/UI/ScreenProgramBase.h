@@ -126,6 +126,21 @@ protected:
     /** Card-style container with consistent padding and border. */
     TSharedRef<SWidget> BuildCard(TSharedRef<SWidget> Content) const;
 
+    /** Override the default completion text shown by BuildCompletionOverlay. */
+    void SetCompletionText(const FText& InText);
+
+    /** Provides the completion text; subclasses can override for custom messaging. */
+    virtual FText GetCompletionText() const;
+
+    /** Determines whether the completion overlay should be visible. */
+    virtual bool ShouldShowCompletionOverlay() const;
+
+    /** Shared completion frame widget used by trial programs. */
+    TSharedRef<SWidget> BuildCompletionOverlay() const;
+
+    /** Wrap arbitrary content with the shared completion frame. */
+    TSharedRef<SWidget> WrapWithCompletionOverlay(TSharedRef<SWidget> InContent) const;
+
     // -------------------------------------------------------------------------
     // Cursor Convenience Methods - Standard patterns for hover/drag states
     // -------------------------------------------------------------------------
@@ -200,6 +215,9 @@ private:
     EMouseCursor::Type BaseCursor = EMouseCursor::Default;
     FVector2D LastPointerNormalized = FVector2D(0.5f, 0.5f);
     FVector2D LastPointerPixel = FVector2D::ZeroVector;
+
+    FText CompletionTextOverride;
+    bool bHasCompletionTextOverride = false;
 
     EActiveTimerReturnType HandleTick(double InCurrentTime, float InDeltaTime);
 };

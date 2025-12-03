@@ -5,6 +5,9 @@
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/SBoxPanel.h"
+#include "Widgets/SOverlay.h"
+
+#define LOCTEXT_NAMESPACE "ScreenProgramBase"
 
 FScreenProgramBase::FScreenProgramBase()
 {
@@ -26,14 +29,15 @@ TSharedRef<SWidget> FScreenProgramBase::CreateWidget(const FVector2D& Size, cons
     LastPointerNormalized = FVector2D(0.5f, 0.5f);
     LastPointerPixel = FVector2D::ZeroVector;
 
-    TSharedRef<SWidget> Widget = BuildProgramWidget();
-    RootWidget = Widget;
+    TSharedRef<SWidget> Content = BuildProgramWidget();
+    TSharedRef<SWidget> Wrapped = WrapWithCompletionOverlay(Content);
+    RootWidget = Wrapped;
 
     // Register tick handler
-    Widget->RegisterActiveTimer(0.0f, FWidgetActiveTimerDelegate::CreateSP(this, &FScreenProgramBase::HandleTick));
+    Wrapped->RegisterActiveTimer(0.0f, FWidgetActiveTimerDelegate::CreateSP(this, &FScreenProgramBase::HandleTick));
 
     HandleScreenResized(ProgramSize);
-    return Widget;
+    return Wrapped;
 }
 
 void FScreenProgramBase::OnTick(float DeltaTime)
@@ -234,6 +238,78 @@ TSharedRef<SWidget> FScreenProgramBase::BuildCard(TSharedRef<SWidget> Content) c
             Content
         ];
 }
+
+void FScreenProgramBase::SetCompletionText(const FText& InText)
+{
+    CompletionTextOverride = InText;
+    bHasCompletionTextOverride = true;
+}
+
+FText FScreenProgramBase::GetCompletionText() const
+{
+    if (bHasCompletionTextOverride)
+    {
+        return CompletionTextOverride;
+    }
+
+    return LOCTEXT("DefaultCompletionText", "TASK COMPLETE");
+}
+
+bool FScreenProgramBase::ShouldShowCompletionOverlay() const
+{
+    return IsTaskComplete();
+}
+
+TSharedRef<SWidget> FScreenProgramBase::BuildCompletionOverlay() const
+{
+    const FScreenProgramStyle& Style = GetProgramStyle();
+    const FLinearColor CompletionGreen(0.0f, 0.82f, 0.0f, 1.0f);
+
+    return SNew(SBorder)
+        .Visibility_Lambda([this]() { return ShouldShowCompletionOverlay() ? EVisibility::Visible : EVisibility::Collapsed; })
+        .BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+        .BorderBackgroundColor(FLinearColor::Black)
+        .Padding(0.0f)
+        [
+            SNew(SOverlay)
+            + SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)
+            [
+                SNew(SBorder)
+                .BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+                .BorderBackgroundColor(CompletionGreen)
+                .Padding(FMargin(Style.GetLargePadding()))
+                [
+                    SNew(SBorder)
+                    .BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+                    .BorderBackgroundColor(FLinearColor::Black)
+                    .Padding(FMargin(Style.GetLargePadding()))
+                    [
+                        SNew(STextBlock)
+                        .Text_Lambda([this]() { return GetCompletionText(); })
+                        .Font(MakeScaledFont(TEXT("Bold"), 2.2f))
+                        .Justification(ETextJustify::Center)
+                        .ColorAndOpacity(CompletionGreen)
+                        .WrapTextAt(Style.GetTitleBarHeight() * 6.0f)
+                    ]
+                ]
+            ]
+        ];
+}
+
+TSharedRef<SWidget> FScreenProgramBase::WrapWithCompletionOverlay(TSharedRef<SWidget> InContent) const
+{
+    return SNew(SOverlay)
+        + SOverlay::Slot()
+        [
+            InContent
+        ]
+        + SOverlay::Slot()
+        .HAlign(HAlign_Fill)
+        .VAlign(VAlign_Fill)
+        [
+            BuildCompletionOverlay()
+        ];
+}
 FSlateFontInfo FScreenProgramBase::MakeFont(const FString& Typeface, int32 Size) const
 {
     const int32 ClampedSize = FMath::Max(Size, 1);
@@ -288,3 +364,5 @@ TSharedRef<STextBlock> FScreenProgramBase::BuildStyledText(const FText& Text, co
 
     return Label;
 }
+
+#undef LOCTEXT_NAMESPACE
