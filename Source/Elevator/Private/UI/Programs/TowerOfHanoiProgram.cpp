@@ -93,7 +93,12 @@ FString FTowerOfHanoiProgram::RenderPegColumn(int32 PegIndex) const
     TArray<FString> Lines;
     
     // Peg header
-    FString Header = FString::Printf(TEXT("DIMM %c"), TEXT('A') + PegIndex);
+    FString Header;
+    if (PegIndex == 0) Header = TEXT("DIMM 1");
+    else if (PegIndex == 1) Header = TEXT("BUFFER");
+    else if (PegIndex == 2) Header = TEXT("DIMM 2");
+    else Header = FString::Printf(TEXT("DIMM %c"), TEXT('A') + PegIndex);
+
     int32 HeaderPad = (MaxBlockWidth - Header.Len()) / 2;
     Lines.Add(FString::ChrN(HeaderPad, TEXT(' ')) + Header);
     
@@ -140,36 +145,55 @@ TSharedRef<SWidget> FTowerOfHanoiProgram::BuildTrialBody()
     const FScreenProgramStyle& Style = GetProgramStyle();
     
     return SNew(SVerticalBox)
-        + SVerticalBox::Slot().AutoHeight().Padding(0, Style.GetSmallPadding())
-        [SNew(STextBlock).Text_Lambda([this]() { 
-            if (bShowingReindex) return FText::FromString(TEXT("Reindexing..."));
-            return FText::FromString(FString::Printf(TEXT("Moves: %d | Move all blocks to DIMM C"), MoveCount)); 
-        }).Font(FCoreStyle::GetDefaultFontStyle("Regular", Style.TextSize)).ColorAndOpacity(Style.GetDimColor())]
         + SVerticalBox::Slot().FillHeight(1.0f).HAlign(HAlign_Center).VAlign(VAlign_Center)
         [SNew(SHorizontalBox)
             + SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Center)
-            [SNew(STextBlock).Text_Lambda([this]() { return FText::FromString(RenderPegColumn(0)); })
-                .Font(FCoreStyle::GetDefaultFontStyle("Mono", GetProgramStyle().TextSize * 2))
-                .ColorAndOpacity_Lambda([this]() { return (HoveredPeg == 0 || DragSourcePeg == 0) ? GetProgramStyle().GetPrimaryColor() : GetProgramStyle().GetDimColor(); })
-                .Justification(ETextJustify::Center)]
+            [
+                SNew(SVerticalBox)
+                + SVerticalBox::Slot().AutoHeight()
+                [
+                    SNew(STextBlock).Text_Lambda([this]() { return FText::FromString(RenderPegColumn(0)); })
+                    .Font(FCoreStyle::GetDefaultFontStyle("Mono", GetProgramStyle().TextSize * 2))
+                    .ColorAndOpacity_Lambda([this]() { return (HoveredPeg == 0 || DragSourcePeg == 0) ? GetProgramStyle().GetPrimaryColor() : GetProgramStyle().GetDimColor(); })
+                    .Justification(ETextJustify::Center)
+                ]
+                + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, Style.GetSmallPadding(), 0, 0)
+                [
+                    SNew(STextBlock).Text(FText::FromString(TEXT("CORRUPTED")))
+                    .Font(FCoreStyle::GetDefaultFontStyle("Bold", Style.TextSize))
+                    .ColorAndOpacity(Style.GetErrorColor())
+                ]
+            ]
             + SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Center)
             [SNew(STextBlock).Text_Lambda([this]() { return FText::FromString(RenderPegColumn(1)); })
                 .Font(FCoreStyle::GetDefaultFontStyle("Mono", GetProgramStyle().TextSize * 2))
                 .ColorAndOpacity_Lambda([this]() { return (HoveredPeg == 1 || DragSourcePeg == 1) ? GetProgramStyle().GetPrimaryColor() : GetProgramStyle().GetDimColor(); })
                 .Justification(ETextJustify::Center)]
             + SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Center)
-            [SNew(STextBlock).Text_Lambda([this]() { return FText::FromString(RenderPegColumn(2)); })
-                .Font(FCoreStyle::GetDefaultFontStyle("Mono", GetProgramStyle().TextSize * 2))
-                .ColorAndOpacity_Lambda([this]() { return (HoveredPeg == 2 || DragSourcePeg == 2) ? GetProgramStyle().GetPrimaryColor() : GetProgramStyle().GetDimColor(); })
-                .Justification(ETextJustify::Center)]]
+            [
+                SNew(SVerticalBox)
+                + SVerticalBox::Slot().AutoHeight()
+                [
+                    SNew(STextBlock).Text_Lambda([this]() { return FText::FromString(RenderPegColumn(2)); })
+                    .Font(FCoreStyle::GetDefaultFontStyle("Mono", GetProgramStyle().TextSize * 2))
+                    .ColorAndOpacity_Lambda([this]() { return (HoveredPeg == 2 || DragSourcePeg == 2) ? GetProgramStyle().GetPrimaryColor() : GetProgramStyle().GetDimColor(); })
+                    .Justification(ETextJustify::Center)
+                ]
+                + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, Style.GetSmallPadding(), 0, 0)
+                [
+                    SNew(STextBlock).Text(FText::FromString(TEXT("FUNCTIONING")))
+                    .Font(FCoreStyle::GetDefaultFontStyle("Bold", Style.TextSize))
+                    .ColorAndOpacity(Style.GetPrimaryColor())
+                ]
+            ]]
         + SVerticalBox::Slot().AutoHeight().Padding(Style.GetSmallPadding())
         [SNew(STextBlock).Text_Lambda([this]() {
             if (DraggedBlock > 0)
             {
                 FString Block = FString::ChrN(DraggedBlock * 2, TEXT('='));
-                return FText::FromString(FString::Printf(TEXT("Holding: [%s] - Click target DIMM"), *Block));
+                return FText::FromString(FString::Printf(TEXT("Holding: [%s]"), *Block));
             }
-            return FText::FromString(TEXT("Click a block to pick up"));
+            return FText::FromString(TEXT(""));
         }).Font(FCoreStyle::GetDefaultFontStyle("Regular", Style.TextSize)).ColorAndOpacity(Style.GetDimColor()).Justification(ETextJustify::Center)];
 }
 
