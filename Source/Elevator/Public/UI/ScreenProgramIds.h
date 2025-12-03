@@ -4,9 +4,6 @@
 
 namespace ScreenProgramIds
 {
-    // Main Completable Task
-    static const FName DailyPacket(TEXT("DailyPacket"));
-    
     // Pop-up Blocker Programs (A-Q)
     static const FName MemoryDefragWizard(TEXT("MemoryDefragWizard"));           // A: Tower of Hanoi
     static const FName TimeDriftSynchronizer(TEXT("TimeDriftSynchronizer"));     // B: Clock Drawing

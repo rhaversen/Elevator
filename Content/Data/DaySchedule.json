@@ -1,5 +1,5 @@
 {
-	"DefaultProgramId": "DailyPacket",
+	"DefaultProgramId": "tower_of_hanoi",
 	"DefaultElementOverrideSets": ["Default"],
 	"DefaultLockedButtons": ["Alarm", "CallUp"],
 	"DefaultOfficeLayout": "DefaultOffice",

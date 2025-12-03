@@ -164,25 +164,22 @@ TSharedPtr<IScreenProgram> UElevatorGameManagerSubsystem::CreateProgramInstanceF
 {
     const FName RequestedId = ProgramId.IsNone() ? ActiveProgramId : ProgramId;
     const FName ResolvedId = RequestedId.IsNone() ? Schedule.DefaultProgramId : RequestedId;
-    const FName FallbackId = ScreenProgramIds::DailyPacket;
-    const FName FinalId = ResolvedId.IsNone() ? FallbackId : ResolvedId;
-
-    UE_LOG(LogTemp, Log, TEXT("[Manager] Creating program instance. Requested=%s Resolved=%s Final=%s"),
-        *RequestedId.ToString(),
-        *ResolvedId.ToString(),
-        *FinalId.ToString());
-
-    TSharedPtr<IScreenProgram> Instance = FScreenProgramRegistry::Get().CreateProgram(FinalId);
-
-    if (!Instance.IsValid() && FinalId != FallbackId)
+    
+    if (ResolvedId.IsNone())
     {
-        UE_LOG(LogTemp, Warning, TEXT("Unknown workstation program '%s'. Attempting fallback '%s'."), *FinalId.ToString(), *FallbackId.ToString());
-        Instance = FScreenProgramRegistry::Get().CreateProgram(FallbackId);
+        UE_LOG(LogTemp, Error, TEXT("[Manager] Failed to create workstation program. No program ID specified and no default available."));
+        return nullptr;
     }
+
+    UE_LOG(LogTemp, Log, TEXT("[Manager] Creating program instance. Requested=%s Resolved=%s"),
+        *RequestedId.ToString(),
+        *ResolvedId.ToString());
+
+    TSharedPtr<IScreenProgram> Instance = FScreenProgramRegistry::Get().CreateProgram(ResolvedId);
 
     if (!Instance.IsValid())
     {
-        UE_LOG(LogTemp, Error, TEXT("Failed to create workstation program for id '%s'. No fallback available."), *FinalId.ToString());
+        UE_LOG(LogTemp, Error, TEXT("Failed to create workstation program for id '%s'. Program not registered."), *ResolvedId.ToString());
     }
 
     return Instance;
@@ -286,7 +283,7 @@ void UElevatorGameManagerSubsystem::HandleElevatorButtonPressed(FName ButtonId)
 void UElevatorGameManagerSubsystem::LoadSchedule()
 {
     Schedule = FElevatorDaySchedule();
-    Schedule.DefaultProgramId = ScreenProgramIds::DailyPacket;
+    // No default program ID set initially. Must be provided by JSON.
 
     const FString SchedulePath = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Data/DaySchedule.json"));
     FString FileContents;
@@ -422,7 +419,7 @@ void UElevatorGameManagerSubsystem::LoadSchedule()
 
     if (Schedule.DefaultProgramId.IsNone())
     {
-        Schedule.DefaultProgramId = ScreenProgramIds::DailyPacket;
+        UE_LOG(LogTemp, Warning, TEXT("[Manager] No DefaultProgramId specified in schedule. Programs must be explicitly defined for each day."));
     }
 
     Schedule.Days.Sort([](const FElevatorDayProgramEntry& LHS, const FElevatorDayProgramEntry& RHS)
@@ -492,9 +489,10 @@ void UElevatorGameManagerSubsystem::ApplyCurrentDayConfig(bool bBroadcast)
     ActiveDayConfig.DayNumber = CurrentDayIndex;
 
     ActiveProgramId = ActiveDayConfig.ProgramId.IsNone() ? Schedule.DefaultProgramId : ActiveDayConfig.ProgramId;
+    
     if (ActiveProgramId.IsNone())
     {
-        ActiveProgramId = ScreenProgramIds::DailyPacket;
+        UE_LOG(LogTemp, Error, TEXT("[Manager] No program ID resolved for Day %d. Check DaySchedule.json."), CurrentDayIndex);
     }
 
     CurrentLockedButtons = BuildLockedButtonSet(ActiveDayConfig);
@@ -517,7 +515,7 @@ FElevatorDayProgramEntry UElevatorGameManagerSubsystem::MakeDefaultEntry(int32 D
 {
     FElevatorDayProgramEntry Entry;
     Entry.DayNumber = DayIndex;
-    Entry.ProgramId = Schedule.DefaultProgramId.IsNone() ? ScreenProgramIds::DailyPacket : Schedule.DefaultProgramId;
+    Entry.ProgramId = Schedule.DefaultProgramId;
     Entry.LockedButtons = Schedule.DefaultLockedButtons;
     Entry.OfficeLayout = Schedule.DefaultOfficeLayout;
     Entry.ElementOverrideSets = Schedule.DefaultElementOverrideSets;
