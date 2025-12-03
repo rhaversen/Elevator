@@ -431,6 +431,10 @@ void FFollowUpMarkerProgram::InvalidateWidget() const
 FVector2D FFollowUpMarkerProgram::GetSlotPosition(int32 SlotIndex, float AnimProgress) const
 {
     FVector2D Size = GetProgramSize();
+    if (TSharedPtr<SFollowUpMarkerWidget> Widget = CanvasWidget.Pin())
+    {
+        Size = Widget->GetCachedGeometry().GetLocalSize();
+    }
     
     // Slot positions, evenly spaced (200px wide slots need ~230px spacing)
     // SlotIndex -1 = n+2 (incoming, off-left), 0 = n+1 (leftmost visible), 
@@ -527,7 +531,12 @@ void FFollowUpMarkerProgram::OnTick(float DeltaTime)
 void FFollowUpMarkerProgram::HandlePointerMoved(const FScreenPointerEvent& Event, bool bHandledByPreProcessor)
 {
     if (bHandledByPreProcessor || GetTaskComplete()) return;
-    const FVector2D& Pos = Event.ProgramPixelPosition;
+    
+    FVector2D Pos = Event.ProgramPixelPosition;
+    if (TSharedPtr<SFollowUpMarkerWidget> Widget = CanvasWidget.Pin())
+    {
+        Pos = Widget->GetCachedGeometry().AbsoluteToLocal(Event.ScreenPixelPosition);
+    }
     
     bMatchHovered = IsPointInRect(Pos, GetMatchButtonCenter(), GetMatchButtonSize());
     
