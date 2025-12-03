@@ -317,7 +317,7 @@ FNBackTaskProgram::FNBackTaskProgram()
 {
     SetTrialTitle(FText::FromString(TEXT("N-Back Task")));
     GenerateSequence();
-    TrialStartTime = FPlatformTime::Seconds();
+    StartTrialTimer(TimePerTrial);
 }
 
 void FNBackTaskProgram::GenerateNewTrial()
@@ -403,14 +403,14 @@ void FNBackTaskProgram::GenerateNextItem()
 
 float FNBackTaskProgram::GetAnimProgress() const
 {
-    double Elapsed = FPlatformTime::Seconds() - TrialStartTime;
-    return FMath::Clamp(static_cast<float>(Elapsed / TimePerTrial), 0.0f, 1.0f);
+    if (GetTaskComplete()) return 1.0f;
+    return GetTimerProgress();
 }
 
 void FNBackTaskProgram::AdvanceSequence()
 {
     TrialIndex++;
-    TrialStartTime = FPlatformTime::Seconds();
+    StartTrialTimer(TimePerTrial);
     bAlreadyResponded = false;
     bShowingFeedback = false;  // Clear feedback when advancing
     
@@ -497,7 +497,16 @@ TSharedRef<SWidget> FNBackTaskProgram::BuildTrialBody()
     TSharedPtr<SFollowUpMarkerWidget> Canvas;
     TSharedRef<SWidget> Widget = SAssignNew(Canvas, SFollowUpMarkerWidget).Program(this);
     CanvasWidget = Canvas;
-    return Widget;
+    
+    return SNew(SVerticalBox)
+        + SVerticalBox::Slot().FillHeight(1.0f)
+        [
+            Widget
+        ]
+        + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, GetProgramStyle().GetLargePadding())
+        [
+            BuildTimerBarWidget([this]() { return GetTimerProgress(); })
+        ];
 }
 
 void FNBackTaskProgram::OnTick(float DeltaTime)
