@@ -33,7 +33,7 @@ int32 SClockWidget::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
     const float Radius = FMath::Min(Size.X, Size.Y) * 0.45f;
     const FLinearColor Color = ClockColor.Get() * InWidgetStyle.GetColorAndOpacityTint();
     const FLinearColor DimColor = Color * 0.5f;
-    const FLinearColor HighlightColor = FLinearColor::White;
+    const FLinearColor HighlightColor = FLinearColor::Green;
     const float Thickness = LineThickness.Get();
     const ESlateDrawEffect DrawEffects = ESlateDrawEffect::None;
     const float HandleSize = 12.0f;
@@ -198,7 +198,7 @@ int32 SClockWidget::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 REGISTER_SCREEN_PROGRAM(FClockDrawingTestProgram, "clock_drawing_test")
 
 FClockDrawingTestProgram::FClockDrawingTestProgram()
-    : FTrialProgramBase(1)
+    : FTrialProgramBase(5)
 {
     SetTrialTitle(FText::FromString(TEXT("Clock Drawing Test")));
     SetTaskComplete(false);
@@ -249,11 +249,11 @@ FVector2D FClockDrawingTestProgram::GetClockCenter() const
 {
     // The clock widget is 300x300, centered in the middle slot of a vertical box
     // We need to estimate where it actually renders
-    // Header (title + target time) takes roughly 15% of screen
+    // Header (title + target time) takes roughly 25% of screen (adjusted to align hitboxes)
     // Footer (SYNC button) takes roughly 10% of screen
     // Clock is centered in the remaining middle area
     FVector2D Size = GetProgramSize();
-    float HeaderHeight = Size.Y * 0.15f;
+    float HeaderHeight = Size.Y * 0.23f;
     float FooterHeight = Size.Y * 0.12f;
     float MiddleHeight = Size.Y - HeaderHeight - FooterHeight;
     float ClockCenterY = HeaderHeight + (MiddleHeight * 0.5f);
@@ -356,11 +356,11 @@ void FClockDrawingTestProgram::HandlePointerMoved(const FScreenPointerEvent& Eve
     float DistToMinute = FVector2D::Distance(Pos, MinuteHandlePos);
     
     // Check minute handle first (it's on top/longer)
-    if (DistToMinute <= HandleRadius * 1.5f)
+    if (DistToMinute <= HandleRadius * 2.5f)
     {
         HoveredHandle = EDragTarget::MinuteHand;
     }
-    else if (DistToHour <= HandleRadius * 1.5f)
+    else if (DistToHour <= HandleRadius * 2.5f)
     {
         HoveredHandle = EDragTarget::HourHand;
     }
