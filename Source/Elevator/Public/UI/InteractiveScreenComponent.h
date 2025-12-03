@@ -94,11 +94,19 @@ private:
     FSlateColor GetExitButtonBorderColor() const;
     FSlateColor GetExitButtonTextColor() const;
     FSlateColor GetExitButtonFillColor() const;
+    FSlateColor GetPrevTaskButtonBorderColor() const;
+    FSlateColor GetPrevTaskButtonTextColor() const;
+    FSlateColor GetPrevTaskButtonFillColor() const;
+    FSlateColor GetNextTaskButtonBorderColor() const;
+    FSlateColor GetNextTaskButtonTextColor() const;
+    FSlateColor GetNextTaskButtonFillColor() const;
     FText GetFooterDateText() const;
     FText GetFooterTimeText() const;
     FText GetFooterWeekdayText() const;
     FText GetFooterTaskStatusText() const;
     FSlateColor GetFooterTaskStatusColor() const;
+
+    void RequestTaskNavigation(int32 Direction);
 
     UPROPERTY(EditAnywhere, Category = "Interactive Screen")
     TObjectPtr<UTextureRenderTarget2D> ScreenRenderTarget;
@@ -155,8 +163,14 @@ private:
 
     FBox2D ProgramAreaRect;
     FBox2D ExitButtonRect;
+    FBox2D PrevTaskButtonRect;
+    FBox2D NextTaskButtonRect;
     bool bExitButtonHovered = false;
     bool bExitButtonPressed = false;
+    bool bPrevTaskButtonHovered = false;
+    bool bPrevTaskButtonPressed = false;
+    bool bNextTaskButtonHovered = false;
+    bool bNextTaskButtonPressed = false;
     bool bExitRequested = false;
     TSet<FKey> ActivePointerButtons;
     EMouseCursor::Type CachedCursorType = EMouseCursor::Default;

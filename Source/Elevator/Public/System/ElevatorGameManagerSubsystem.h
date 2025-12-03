@@ -97,6 +97,8 @@ public:
 
     TSharedPtr<IScreenProgram> CreateActiveProgramInstance() const;
     TSharedPtr<IScreenProgram> CreateProgramInstanceForId(FName ProgramId) const;
+    bool TrySelectProgramById(FName ProgramId);
+    bool TrySelectProgramByOffset(int32 Offset);
 
     void HandleElevatorButtonPressed(FName ButtonId);
 

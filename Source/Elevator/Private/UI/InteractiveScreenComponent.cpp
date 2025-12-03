@@ -2,6 +2,7 @@
 
 #include "UI/IScreenProgram.h"
 #include "UI/SlateWidgetHelpers.h"
+#include "System/ElevatorGameManagerSubsystem.h"
 
 #include "Engine/World.h"
 #include "Math/UnrealMathUtility.h"
@@ -9,6 +10,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Misc/DateTime.h"
+#include "Logging/LogMacros.h"
 #include "TimerManager.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Images/SImage.h"
@@ -102,8 +104,9 @@ namespace
     constexpr float FooterBarHeight = 96.0f;
     constexpr float FooterTextSpacing = 24.0f;
     constexpr float FooterHorizontalPadding = 48.0f;
-    constexpr float FooterExitButtonSpacing = 12.0f;
+    constexpr float FooterButtonSpacing = 12.0f;
     const FVector2D ExitButtonSize(180.0f, 60.0f);
+    const FVector2D NavigationButtonSize(160.0f, 60.0f);
 }
 
 UInteractiveScreenComponent::UInteractiveScreenComponent()
@@ -275,6 +278,22 @@ void UInteractiveScreenComponent::ProcessPointerPressed(const FKey& PointerKey)
 
     ActivePointerButtons.Add(PointerKey);
 
+    if (PrevTaskButtonRect.bIsValid && PrevTaskButtonRect.IsInside(PixelPos))
+    {
+        bPrevTaskButtonPressed = true;
+        RefreshRender();
+        UpdateHardwareCursor();
+        return;
+    }
+
+    if (NextTaskButtonRect.bIsValid && NextTaskButtonRect.IsInside(PixelPos))
+    {
+        bNextTaskButtonPressed = true;
+        RefreshRender();
+        UpdateHardwareCursor();
+        return;
+    }
+
     if (ExitButtonRect.bIsValid && ExitButtonRect.IsInside(PixelPos))
     {
         bExitButtonPressed = true;
@@ -303,15 +322,29 @@ void UInteractiveScreenComponent::ProcessPointerReleased(const FKey& PointerKey)
         VirtualCursorPosition.X * WidgetSize.X,
         VirtualCursorPosition.Y * WidgetSize.Y);
 
+    const bool bWasPressedOnPrev = bPrevTaskButtonPressed;
+    const bool bWasPressedOnNext = bNextTaskButtonPressed;
     const bool bWasPressedOnExit = bExitButtonPressed;
+    const bool bIsReleasingOverPrev = PrevTaskButtonRect.bIsValid && PrevTaskButtonRect.IsInside(PixelPos);
+    const bool bIsReleasingOverNext = NextTaskButtonRect.bIsValid && NextTaskButtonRect.IsInside(PixelPos);
     const bool bIsReleasingOverExit = ExitButtonRect.bIsValid && ExitButtonRect.IsInside(PixelPos);
 
     ActivePointerButtons.Remove(PointerKey);
+    bPrevTaskButtonPressed = false;
+    bNextTaskButtonPressed = false;
     bExitButtonPressed = false;
 
-    if (bWasPressedOnExit)
+    if (bWasPressedOnPrev || bWasPressedOnNext || bWasPressedOnExit)
     {
-        if (bIsReleasingOverExit)
+        if (bWasPressedOnPrev && bIsReleasingOverPrev)
+        {
+            RequestTaskNavigation(-1);
+        }
+        else if (bWasPressedOnNext && bIsReleasingOverNext)
+        {
+            RequestTaskNavigation(1);
+        }
+        else if (bWasPressedOnExit && bIsReleasingOverExit)
         {
             bExitRequested = true;
         }
@@ -522,6 +555,34 @@ void UInteractiveScreenComponent::CreateInterfaceIfNeeded()
                         .VAlign(VAlign_Center)
                         [
                             SlateWidgetHelpers::CreateOutlinedButton(
+                                NavigationButtonSize,
+                                FText::FromString(TEXT("Prev Task")),
+                                TextSize,
+                                LineThickness,
+                                TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateUObject(this, &UInteractiveScreenComponent::GetPrevTaskButtonBorderColor)),
+                                TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateUObject(this, &UInteractiveScreenComponent::GetPrevTaskButtonFillColor)),
+                                TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateUObject(this, &UInteractiveScreenComponent::GetPrevTaskButtonTextColor)))
+                        ]
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .VAlign(VAlign_Center)
+                        .Padding(FMargin(FooterButtonSpacing, 0.0f, 0.0f, 0.0f))
+                        [
+                            SlateWidgetHelpers::CreateOutlinedButton(
+                                NavigationButtonSize,
+                                FText::FromString(TEXT("Next Task")),
+                                TextSize,
+                                LineThickness,
+                                TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateUObject(this, &UInteractiveScreenComponent::GetNextTaskButtonBorderColor)),
+                                TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateUObject(this, &UInteractiveScreenComponent::GetNextTaskButtonFillColor)),
+                                TAttribute<FSlateColor>::Create(TAttribute<FSlateColor>::FGetter::CreateUObject(this, &UInteractiveScreenComponent::GetNextTaskButtonTextColor)))
+                        ]
+                        + SHorizontalBox::Slot()
+                        .AutoWidth()
+                        .VAlign(VAlign_Center)
+                        .Padding(FMargin(FooterButtonSpacing, 0.0f, 0.0f, 0.0f))
+                        [
+                            SlateWidgetHelpers::CreateOutlinedButton(
                                 ExitButtonSize,
                                 FText::FromString(TEXT("Exit")),
                                 TextSize,
@@ -635,12 +696,15 @@ void UInteractiveScreenComponent::UpdateCursorInternal(const FVector2D& Normaliz
         Clamped.X * WidgetSize.X,
         Clamped.Y * WidgetSize.Y);
 
+    bPrevTaskButtonHovered = PrevTaskButtonRect.bIsValid && PrevTaskButtonRect.IsInside(PixelPos);
+    bNextTaskButtonHovered = NextTaskButtonRect.bIsValid && NextTaskButtonRect.IsInside(PixelPos);
     bExitButtonHovered = ExitButtonRect.bIsValid && ExitButtonRect.IsInside(PixelPos);
 
     if (DisplayState == EDisplayState::ShowingProgram && CurrentProgram.IsValid() && ProgramWidget.IsValid())
     {
         const FVector2D ProgramCursor = ConvertPixelToProgramNormalized(PixelPos);
-        if (!bExitButtonPressed)
+        const bool bChromePressed = bExitButtonPressed || bPrevTaskButtonPressed || bNextTaskButtonPressed;
+        if (!bChromePressed)
         {
             const FScreenPointerEvent Event = BuildPointerEvent(ProgramCursor, PixelPos, FKey());
             CurrentProgram->OnPointerMoved(Event);
@@ -663,11 +727,21 @@ void UInteractiveScreenComponent::UpdateLayout(const FVector2D& Size)
     ProgramAreaRect.bIsValid = ProgramAreaSize.X > KINDA_SMALL_NUMBER && ProgramAreaSize.Y > KINDA_SMALL_NUMBER;
 
     const float FooterTop = Size.Y - FooterBarHeight;
-    const float ExitButtonTop = FooterTop + (FooterBarHeight - ExitButtonSize.Y) * 0.5f;
-    ExitButtonRect = FBox2D(
-        FVector2D(Size.X - FooterHorizontalPadding - ExitButtonSize.X, ExitButtonTop),
-        FVector2D(Size.X - FooterHorizontalPadding, ExitButtonTop + ExitButtonSize.Y));
+    const float ButtonTop = FooterTop + (FooterBarHeight - ExitButtonSize.Y) * 0.5f;
+    const float ExitButtonRight = Size.X - FooterHorizontalPadding;
+    const FVector2D ExitButtonMin(ExitButtonRight - ExitButtonSize.X, ButtonTop);
+    ExitButtonRect = FBox2D(ExitButtonMin, ExitButtonMin + ExitButtonSize);
     ExitButtonRect.bIsValid = true;
+
+    const float NextButtonRight = ExitButtonMin.X - FooterButtonSpacing;
+    const FVector2D NextButtonMin(NextButtonRight - NavigationButtonSize.X, ButtonTop);
+    NextTaskButtonRect = FBox2D(NextButtonMin, NextButtonMin + NavigationButtonSize);
+    NextTaskButtonRect.bIsValid = true;
+
+    const float PrevButtonRight = NextButtonMin.X - FooterButtonSpacing;
+    const FVector2D PrevButtonMin(PrevButtonRight - NavigationButtonSize.X, ButtonTop);
+    PrevTaskButtonRect = FBox2D(PrevButtonMin, PrevButtonMin + NavigationButtonSize);
+    PrevTaskButtonRect.bIsValid = true;
 
     if (ProgramContainer.IsValid())
     {
@@ -710,6 +784,10 @@ void UInteractiveScreenComponent::DispatchSyntheticPointerReleases()
     {
         bExitButtonPressed = false;
         bExitButtonHovered = false;
+        bPrevTaskButtonPressed = false;
+        bPrevTaskButtonHovered = false;
+        bNextTaskButtonPressed = false;
+        bNextTaskButtonHovered = false;
         bExitRequested = false;
         return;
     }
@@ -738,6 +816,10 @@ void UInteractiveScreenComponent::DispatchSyntheticPointerReleases()
 
     bExitButtonPressed = false;
     bExitButtonHovered = false;
+    bPrevTaskButtonPressed = false;
+    bPrevTaskButtonHovered = false;
+    bNextTaskButtonPressed = false;
+    bNextTaskButtonHovered = false;
     bExitRequested = false;
 }
 
@@ -746,6 +828,10 @@ void UInteractiveScreenComponent::ClearPointerState()
     ActivePointerButtons.Empty();
     bExitButtonPressed = false;
     bExitButtonHovered = false;
+    bPrevTaskButtonPressed = false;
+    bPrevTaskButtonHovered = false;
+    bNextTaskButtonPressed = false;
+    bNextTaskButtonHovered = false;
     UpdateHardwareCursor();
 }
 
@@ -767,11 +853,11 @@ void UInteractiveScreenComponent::UpdateHardwareCursor()
 {
     EMouseCursor::Type DesiredCursor = EMouseCursor::Default;
 
-    if (bExitButtonPressed)
+    if (bExitButtonPressed || bPrevTaskButtonPressed || bNextTaskButtonPressed)
     {
         DesiredCursor = EMouseCursor::GrabHand;
     }
-    else if (bExitButtonHovered)
+    else if (bExitButtonHovered || bPrevTaskButtonHovered || bNextTaskButtonHovered)
     {
         DesiredCursor = EMouseCursor::Hand;
     }
@@ -939,12 +1025,66 @@ FSlateColor UInteractiveScreenComponent::GetExitButtonBorderColor() const
 
 FSlateColor UInteractiveScreenComponent::GetExitButtonTextColor() const
 {
-    return bExitButtonHovered ? FSlateColor(FLinearColor::Black) : FSlateColor(FLinearColor::Green);
+    if (bExitButtonPressed || bExitButtonHovered)
+    {
+        return FSlateColor(FLinearColor::Black);
+    }
+    return FSlateColor(FLinearColor::Green);
 }
 
 FSlateColor UInteractiveScreenComponent::GetExitButtonFillColor() const
 {
+    if (bExitButtonPressed)
+    {
+        return FSlateColor(FLinearColor::Green * 0.8f);
+    }
     return bExitButtonHovered ? FSlateColor(FLinearColor::Green) : FSlateColor(FLinearColor::Transparent);
+}
+
+FSlateColor UInteractiveScreenComponent::GetPrevTaskButtonBorderColor() const
+{
+    return FSlateColor(FLinearColor::Green);
+}
+
+FSlateColor UInteractiveScreenComponent::GetPrevTaskButtonTextColor() const
+{
+    if (bPrevTaskButtonPressed || bPrevTaskButtonHovered)
+    {
+        return FSlateColor(FLinearColor::Black);
+    }
+    return FSlateColor(FLinearColor::Green);
+}
+
+FSlateColor UInteractiveScreenComponent::GetPrevTaskButtonFillColor() const
+{
+    if (bPrevTaskButtonPressed)
+    {
+        return FSlateColor(FLinearColor::Green * 0.8f);
+    }
+    return bPrevTaskButtonHovered ? FSlateColor(FLinearColor::Green) : FSlateColor(FLinearColor::Transparent);
+}
+
+FSlateColor UInteractiveScreenComponent::GetNextTaskButtonBorderColor() const
+{
+    return FSlateColor(FLinearColor::Green);
+}
+
+FSlateColor UInteractiveScreenComponent::GetNextTaskButtonTextColor() const
+{
+    if (bNextTaskButtonPressed || bNextTaskButtonHovered)
+    {
+        return FSlateColor(FLinearColor::Black);
+    }
+    return FSlateColor(FLinearColor::Green);
+}
+
+FSlateColor UInteractiveScreenComponent::GetNextTaskButtonFillColor() const
+{
+    if (bNextTaskButtonPressed)
+    {
+        return FSlateColor(FLinearColor::Green * 0.8f);
+    }
+    return bNextTaskButtonHovered ? FSlateColor(FLinearColor::Green) : FSlateColor(FLinearColor::Transparent);
 }
 
 FText UInteractiveScreenComponent::GetFooterDateText() const
@@ -994,4 +1134,29 @@ FSlateColor UInteractiveScreenComponent::GetFooterTaskStatusColor() const
         return FSlateColor(FLinearColor(0.5f, 0.5f, 0.5f));
     }
     return CurrentProgram->IsTaskComplete() ? FSlateColor(FLinearColor::Green) : FSlateColor(FLinearColor(1.0f, 0.5f, 0.0f));
+}
+
+void UInteractiveScreenComponent::RequestTaskNavigation(int32 Direction)
+{
+    if (Direction == 0)
+    {
+        return;
+    }
+
+    bool bHandled = false;
+
+    if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
+    {
+        bHandled = Manager->TrySelectProgramByOffset(Direction);
+    }
+
+    if (bHandled)
+    {
+        ActivatePendingProgram(false);
+        RefreshRender();
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[InteractiveScreen] Unable to navigate tasks; manager unavailable or selection failed (Direction=%d)."), Direction);
+    }
 }

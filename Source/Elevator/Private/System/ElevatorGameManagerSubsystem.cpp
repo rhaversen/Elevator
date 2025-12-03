@@ -166,6 +166,73 @@ TSharedPtr<IScreenProgram> UElevatorGameManagerSubsystem::CreateProgramInstanceF
     return Instance;
 }
 
+bool UElevatorGameManagerSubsystem::TrySelectProgramById(FName ProgramId)
+{
+    if (ProgramId.IsNone())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[Manager] Cannot select workstation program: provided id is None."));
+        return false;
+    }
+
+    if (!FScreenProgramRegistry::Get().IsProgramRegistered(ProgramId))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[Manager] Cannot select workstation program '%s': id is not registered."), *ProgramId.ToString());
+        return false;
+    }
+
+    if (ProgramId == ActiveProgramId)
+    {
+        UE_LOG(LogTemp, Verbose, TEXT("[Manager] Workstation program '%s' is already active."), *ProgramId.ToString());
+        return false;
+    }
+
+    ActiveProgramId = ProgramId;
+    ActiveDayConfig.ProgramId = ProgramId;
+    SetTaskComplete(false);
+
+    UE_LOG(LogTemp, Log, TEXT("[Manager] Active workstation program changed to '%s'."), *ActiveProgramId.ToString());
+    ProgramChangedDelegate.Broadcast(ActiveProgramId);
+    return true;
+}
+
+bool UElevatorGameManagerSubsystem::TrySelectProgramByOffset(int32 Offset)
+{
+    if (Offset == 0)
+    {
+        return false;
+    }
+
+    TArray<FName> ProgramIds = FScreenProgramRegistry::Get().GetRegisteredProgramIds();
+    if (ProgramIds.Num() == 0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[Manager] Cannot cycle workstation programs: registry is empty."));
+        return false;
+    }
+
+    ProgramIds.Sort(FNameLexicalLess());
+
+    const int32 Count = ProgramIds.Num();
+    int32 CurrentIndex = ProgramIds.IndexOfByKey(ActiveProgramId);
+    if (CurrentIndex == INDEX_NONE)
+    {
+        CurrentIndex = 0;
+    }
+
+    int32 TargetIndex = CurrentIndex + Offset;
+    TargetIndex %= Count;
+    if (TargetIndex < 0)
+    {
+        TargetIndex += Count;
+    }
+
+    if (TargetIndex == CurrentIndex && ProgramIds[TargetIndex] == ActiveProgramId)
+    {
+        return false;
+    }
+
+    return TrySelectProgramById(ProgramIds[TargetIndex]);
+}
+
 void UElevatorGameManagerSubsystem::HandleElevatorButtonPressed(FName ButtonId)
 {
     if (ButtonId.IsNone())
