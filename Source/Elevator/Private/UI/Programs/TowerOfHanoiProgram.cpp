@@ -104,8 +104,8 @@ FString FTowerOfHanoiProgram::RenderPegColumn(int32 PegIndex) const
     
     // Empty rows for blocks not present (top of stack)
     int32 EmptyRows = NumBlocks - Pegs[PegIndex].Num();
-    FString Rail = TEXT("|");
-    int32 RailPad = MaxBlockWidth / 2;
+    FString Rail = TEXT("||");
+    int32 RailPad = (MaxBlockWidth - Rail.Len()) / 2;
     FString RailLine = FString::ChrN(RailPad, TEXT(' ')) + Rail;
     for (int32 i = 0; i < EmptyRows; ++i)
     {
