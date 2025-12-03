@@ -84,6 +84,9 @@ public:
     FName GetActiveProgramId() const { return ActiveProgramId; }
     const FElevatorDayProgramEntry& GetActiveDayConfig() const { return ActiveDayConfig; }
 
+    /** Get the resolved layout file path for the current day (e.g., "Layouts/DefaultOffice.json") */
+    FString GetActiveLayoutPath() const;
+
     /** Get the currently active element override set IDs (merged from defaults and day-specific) */
     const TArray<FName>& GetActiveElementOverrideSets() const { return CurrentElementOverrideSets; }
 

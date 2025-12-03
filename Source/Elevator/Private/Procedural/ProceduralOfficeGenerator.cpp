@@ -20,6 +20,8 @@
 #include "GameFramework/PlayerStart.h"
 #include "Kismet/GameplayStatics.h"
 #include "JsonObjectConverter.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -52,8 +54,6 @@ AProceduralOfficeGenerator::AProceduralOfficeGenerator()
 {
     Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
     SetRootComponent(Root);
-
-    LayoutFileRelativePath = TEXT("Layouts/DefaultOffice.json");
 
     ElevatorActorClass = AProceduralElevator::StaticClass();
 
@@ -230,6 +230,9 @@ void AProceduralOfficeGenerator::HandleDayChanged(int32 DayIndex, const FElevato
     CurrentInteractionInstanceIndex = INDEX_NONE;
     bBootPendingForCurrentInteraction = false;
 
+    // Regenerate the office with the new day's layout
+    GenerateFromData();
+
     if (MonitorScreenComponent)
     {
         MonitorScreenComponent->SetProgram(TSharedPtr<IScreenProgram>());
@@ -278,8 +281,7 @@ void AProceduralOfficeGenerator::PostEditChangeProperty(FPropertyChangedEvent &P
     if (bRegenerateOnConstruction && PropertyChangedEvent.Property)
     {
         const FName Name = PropertyChangedEvent.Property->GetFName();
-        if (Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, LayoutFileRelativePath) ||
-            Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, FloorHeight) ||
+        if (Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, FloorHeight) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, FloorThickness) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingHeight) ||
             Name == GET_MEMBER_NAME_CHECKED(AProceduralOfficeGenerator, CeilingThickness) ||
@@ -418,16 +420,35 @@ void AProceduralOfficeGenerator::GenerateFromData()
     // Load element overrides from JSON
     LoadElementOverrides();
 
-    // Always use the default layout path
-    ActiveLayoutPath = LayoutFileRelativePath;
-
-    FOfficeLayout Layout;
-    if (!LoadLayoutData(Layout))
+    // Get layout path from game manager (runtime) or load from JSON directly (editor)
+    FString LayoutPath;
+    if (UElevatorGameManagerSubsystem* Manager = UElevatorGameManagerSubsystem::Get(this))
     {
-        UE_LOG(LogProceduralOffice, Warning, TEXT("Failed to load office layout: %s"), *ActiveLayoutPath);
+        LayoutPath = Manager->GetActiveLayoutPath();
+        UE_LOG(LogProceduralOffice, Log, TEXT("Using layout from game manager: %s"), *LayoutPath);
+    }
+    else
+    {
+        // Editor mode: load default layout directly from DaySchedule.json
+        LayoutPath = LoadDefaultLayoutPathFromSchedule();
+        UE_LOG(LogProceduralOffice, Log, TEXT("Editor mode - Using layout from DaySchedule.json: %s"), *LayoutPath);
+    }
+
+    if (LayoutPath.IsEmpty())
+    {
+        UE_LOG(LogProceduralOffice, Warning, TEXT("No layout path configured in DaySchedule.json"));
         return;
     }
 
+    FOfficeLayout Layout;
+    if (!LoadLayoutData(LayoutPath, Layout))
+    {
+        UE_LOG(LogProceduralOffice, Warning, TEXT("Failed to load office layout: %s"), *LayoutPath);
+        return;
+    }
+
+    UE_LOG(LogProceduralOffice, Log, TEXT("Loaded layout with %d elements from: %s"), Layout.Elements.Num(), *LayoutPath);
+    
     BuildFromLayout(Layout);
 
     UpdateMonitorInteractionDebug();
@@ -438,11 +459,40 @@ void AProceduralOfficeGenerator::ClearGeneratedContent()
     DestroySpawnedComponents();
 }
 
-bool AProceduralOfficeGenerator::LoadLayoutData(FOfficeLayout &OutLayout) const
+FString AProceduralOfficeGenerator::LoadDefaultLayoutPathFromSchedule()
 {
-    // Use ActiveLayoutPath if set, otherwise fall back to LayoutFileRelativePath
-    const FString& LayoutPath = ActiveLayoutPath.IsEmpty() ? LayoutFileRelativePath : ActiveLayoutPath;
+    const FString SchedulePath = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Data/DaySchedule.json"));
     
+    FString FileContents;
+    if (!FPaths::FileExists(SchedulePath) || !FFileHelper::LoadFileToString(FileContents, *SchedulePath))
+    {
+        return FString();
+    }
+
+    TSharedPtr<FJsonObject> RootObject;
+    const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(FileContents);
+    if (!FJsonSerializer::Deserialize(Reader, RootObject) || !RootObject.IsValid())
+    {
+        return FString();
+    }
+
+    FString LayoutId;
+    if (!RootObject->TryGetStringField(TEXT("DefaultOfficeLayout"), LayoutId) || LayoutId.IsEmpty())
+    {
+        return FString();
+    }
+
+    // Convert layout ID to path if needed
+    if (LayoutId.Contains(TEXT("/")) || LayoutId.EndsWith(TEXT(".json")))
+    {
+        return LayoutId;
+    }
+    
+    return FString::Printf(TEXT("Layouts/%s.json"), *LayoutId);
+}
+
+bool AProceduralOfficeGenerator::LoadLayoutData(const FString& LayoutPath, FOfficeLayout& OutLayout) const
+{
     if (LayoutPath.IsEmpty())
     {
         return false;
@@ -469,23 +519,6 @@ bool AProceduralOfficeGenerator::LoadLayoutData(FOfficeLayout &OutLayout) const
     }
 
     return true;
-}
-
-FString AProceduralOfficeGenerator::ResolveLayoutPath(const FString& LayoutId)
-{
-    if (LayoutId.IsEmpty())
-    {
-        return FString();
-    }
-    
-    // If it already looks like a path (contains / or .json), use as-is
-    if (LayoutId.Contains(TEXT("/")) || LayoutId.EndsWith(TEXT(".json")))
-    {
-        return LayoutId;
-    }
-    
-    // Convention: LayoutId -> Layouts/LayoutId.json
-    return FString::Printf(TEXT("Layouts/%s.json"), *LayoutId);
 }
 
 bool AProceduralOfficeGenerator::LoadElementOverrides() const
@@ -795,6 +828,7 @@ void AProceduralOfficeGenerator::DestroySpawnedComponents()
         SpawnedElevatorLights.Num(),
         WorkstationTargetVisualizers.Num());
 
+    // Destroy tracked components
     for (UInstancedStaticMeshComponent *Component : SpawnedInstancedComponents)
     {
         if (Component)
@@ -857,6 +891,36 @@ void AProceduralOfficeGenerator::DestroySpawnedComponents()
     }
 
     ComputerMeshComponent = nullptr;
+
+    // Also clean up any orphaned components that might have been serialized with the level
+    // This handles the case where arrays were not marked Transient in older versions
+    TArray<UActorComponent*> ComponentsToDestroy;
+    for (UActorComponent* Component : GetComponents())
+    {
+        if (!Component || Component == Root || Component == MonitorScreenComponent || Component == MonitorInteractionDebugProxy)
+        {
+            continue;
+        }
+        
+        // Destroy any ISMCs, ChildActors, Audio, or RectLight components that we created
+        if (Cast<UInstancedStaticMeshComponent>(Component) ||
+            Cast<UChildActorComponent>(Component) ||
+            Cast<UAudioComponent>(Component) ||
+            Cast<URectLightComponent>(Component) ||
+            Cast<UArrowComponent>(Component))
+        {
+            ComponentsToDestroy.Add(Component);
+        }
+    }
+
+    if (ComponentsToDestroy.Num() > 0)
+    {
+        UE_LOG(LogProceduralOffice, Log, TEXT("DestroySpawnedComponents: Also destroying %d orphaned components from level serialization"), ComponentsToDestroy.Num());
+        for (UActorComponent* Component : ComponentsToDestroy)
+        {
+            Component->DestroyComponent();
+        }
+    }
 }
 
 bool AProceduralOfficeGenerator::EvaluateInteractionFocus_Implementation(APawn *PlayerPawn, const FHitResult &Hit, float AssistRadius, UPrimitiveComponent *&OutHighlightComponent)

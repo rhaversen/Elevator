@@ -84,6 +84,28 @@ void UElevatorGameManagerSubsystem::Initialize(FSubsystemCollectionBase& Collect
     TaskStateChangedDelegate.Broadcast(bTaskComplete);
 }
 
+FString UElevatorGameManagerSubsystem::GetActiveLayoutPath() const
+{
+    // Get the layout ID from the active config, fall back to default
+    const FString& LayoutId = ActiveDayConfig.OfficeLayout.IsEmpty() 
+        ? Schedule.DefaultOfficeLayout 
+        : ActiveDayConfig.OfficeLayout;
+    
+    if (LayoutId.IsEmpty())
+    {
+        return FString();
+    }
+    
+    // If it already looks like a path (contains / or .json), use as-is
+    if (LayoutId.Contains(TEXT("/")) || LayoutId.EndsWith(TEXT(".json")))
+    {
+        return LayoutId;
+    }
+    
+    // Convention: LayoutId -> Layouts/LayoutId.json
+    return FString::Printf(TEXT("Layouts/%s.json"), *LayoutId);
+}
+
 void UElevatorGameManagerSubsystem::SetTaskComplete(bool bCompleted)
 {
     if (bTaskComplete == bCompleted)

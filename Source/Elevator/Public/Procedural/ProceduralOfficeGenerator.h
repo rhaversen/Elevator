@@ -150,8 +150,12 @@ public:
     void EnsureElementOverridesLoaded() const;
 
 protected:
-    bool LoadLayoutData(FOfficeLayout& OutLayout) const;
+    bool LoadLayoutData(const FString& LayoutPath, FOfficeLayout& OutLayout) const;
     bool LoadElementOverrides() const;
+    
+    /** Load the default layout path directly from DaySchedule.json (for editor use when game manager unavailable) */
+    static FString LoadDefaultLayoutPathFromSchedule();
+    
     void BuildFromLayout(const FOfficeLayout& Layout);
     void BuildElement(const FOfficeElementDefinition& Element);
     
@@ -170,9 +174,6 @@ protected:
 
     UInstancedStaticMeshComponent* GetOrCreateISMC(UStaticMesh* Mesh, const FName& ComponentName, UMaterialInterface* OverrideMaterial = nullptr);
     void DestroySpawnedComponents();
-    
-    /** Convert a layout ID to a file path using convention: ID -> Layouts/ID.json */
-    static FString ResolveLayoutPath(const FString& LayoutId);
 
     /** Cached element overrides data loaded from JSON (mutable for lazy-loading in const methods) */
     mutable FElementOverridesData ElementOverridesData;
@@ -180,14 +181,8 @@ protected:
     /** Currently active element override set IDs (mutable for lazy-loading in const methods) */
     mutable TArray<FName> ActiveOverrideSetIds;
 
-    /** The currently active layout path (may be overridden by day schedule) */
-    FString ActiveLayoutPath;
-
     UPROPERTY(VisibleAnywhere, Category = "Generation")
     TObjectPtr<USceneComponent> Root;
-
-    UPROPERTY(EditAnywhere, Category = "Layout")
-    FString LayoutFileRelativePath;
 
     UPROPERTY(EditAnywhere, Category = "Layout")
     bool bRegenerateOnConstruction = true;
@@ -594,7 +589,7 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Layout")
     FName SpawnPointTag = FName(TEXT("ProceduralSpawn"));
 
-    UPROPERTY()
+    UPROPERTY(Transient)
     TArray<TObjectPtr<class UChildActorComponent>> SpawnedChildActors;
 
     UPROPERTY(Transient)
@@ -609,7 +604,7 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Audio")
     FProceduralAudioRegistry AudioRegistry;
 
-    UPROPERTY()
+    UPROPERTY(Transient)
     TArray<TObjectPtr<class UAudioComponent>> SpawnedAudioComponents;
 
     UPROPERTY(VisibleAnywhere, Category = "UI")
