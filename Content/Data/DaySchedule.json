@@ -6,71 +6,71 @@
 	"Days": [
 		{
 			"DayNumber": 0,
-			"ProgramId": "MemoryDefragWizard"
+			"ProgramId": "tower_of_hanoi"
 		},
 		{
 			"DayNumber": 1,
-			"ProgramId": "TimeDriftSynchronizer"
+			"ProgramId": "clock_drawing_test"
 		},
 		{
 			"DayNumber": 2,
-			"ProgramId": "ProxyHandshakeVerifier"
+			"ProgramId": "eriksen_flanker_task"
 		},
 		{
 			"DayNumber": 3,
-			"ProgramId": "AllowlistRefresher"
+			"ProgramId": "go_no_go_task"
 		},
 		{
 			"DayNumber": 4,
-			"ProgramId": "RecallOverrideChannel"
+			"ProgramId": "stop_signal_visual"
 		},
 		{
 			"DayNumber": 5,
-			"ProgramId": "FollowUpMarker"
+			"ProgramId": "n_back_task"
 		},
 		{
 			"DayNumber": 6,
-			"ProgramId": "TabRestoreOrder"
+			"ProgramId": "corsi_block_tapping"
 		},
 		{
 			"DayNumber": 7,
-			"ProgramId": "WorkflowRouter"
+			"ProgramId": "trail_making_test"
 		},
 		{
 			"DayNumber": 8,
-			"ProgramId": "PolicySchemaUpdate"
+			"ProgramId": "wisconsin_card_sorting_test"
 		},
 		{
 			"DayNumber": 9,
-			"ProgramId": "ProofDiffViewer"
+			"ProgramId": "flicker_change_detection"
 		},
 		{
 			"DayNumber": 10,
-			"ProgramId": "MarkAlignment"
+			"ProgramId": "mental_rotation"
 		},
 		{
 			"DayNumber": 11,
-			"ProgramId": "CodeSheetEntry"
+			"ProgramId": "symbol_digit_modalities"
 		},
 		{
 			"DayNumber": 12,
-			"ProgramId": "BudgetTicker"
+			"ProgramId": "pasat_visual"
 		},
 		{
 			"DayNumber": 13,
-			"ProgramId": "TemplateMatrix"
+			"ProgramId": "ravens_progressive_matrices"
 		},
 		{
 			"DayNumber": 14,
-			"ProgramId": "VendorSandbox"
+			"ProgramId": "iowa_gambling_task"
 		},
 		{
 			"DayNumber": 15,
-			"ProgramId": "ThemeConsistencyCheck"
+			"ProgramId": "feature_stroop"
 		},
 		{
 			"DayNumber": 16,
-			"ProgramId": "DirectoryIndexRebuild"
+			"ProgramId": "rey_osterrieth_copy"
 		}
 	]
 }
