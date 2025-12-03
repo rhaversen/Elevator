@@ -50,8 +50,10 @@ private:
     
     TArray<int32> MatrixCells;     // 9 cells (3x3), -1 for blank
     TArray<int32> CandidateTiles;  // 6 candidate answers
+    TArray<int32> PatternUsageCounts;
     int32 CorrectAnswer = 0;
     int32 HoveredOption = -1;
+    int32 LastPatternType = -1;
     FKey ActivePointerKey = EKeys::Invalid;
     TWeakPtr<SWidget> MatrixWidget;
 };

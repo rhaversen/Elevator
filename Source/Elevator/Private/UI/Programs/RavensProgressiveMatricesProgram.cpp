@@ -194,9 +194,13 @@ int32 STemplateMatrixWidget::OnPaint(const FPaintArgs& Args, const FGeometry& Al
 // ============================================================================
 
 FRavensProgressiveMatricesProgram::FRavensProgressiveMatricesProgram()
-    : FTrialProgramBase(5)  // 5 puzzles
+    : FTrialProgramBase(15)  // 10 puzzles
 {
     SetTrialTitle(FText::FromString(TEXT("Raven's Progressive Matrices")));
+    
+    // Initialize usage counts for 12 patterns
+    PatternUsageCounts.Init(0, 12);
+    
     GenerateNewTrial();
 }
 
@@ -210,7 +214,38 @@ void FRavensProgressiveMatricesProgram::GenerateNewTrial()
     // We cannot use "increment" or "sequence" logic because shapes have no inherent order
     // Valid patterns: repetition, matching, completion (each row/col has same set)
     
-    const int32 PatternType = FMath::RandRange(0, 3);
+    // Find least used patterns
+    int32 MinUsage = MAX_int32;
+    for (int32 Count : PatternUsageCounts)
+    {
+        if (Count < MinUsage) MinUsage = Count;
+    }
+    
+    TArray<int32> Candidates;
+    for (int32 i = 0; i < PatternUsageCounts.Num(); ++i)
+    {
+        if (PatternUsageCounts[i] == MinUsage)
+        {
+            // Avoid repeating the exact same pattern immediately if possible
+            if (i != LastPatternType || PatternUsageCounts.Num() == 1)
+            {
+                Candidates.Add(i);
+            }
+        }
+    }
+    
+    // If we filtered out everything (e.g. only one candidate and it was the last one), put it back
+    if (Candidates.Num() == 0)
+    {
+        for (int32 i = 0; i < PatternUsageCounts.Num(); ++i)
+        {
+            if (PatternUsageCounts[i] == MinUsage) Candidates.Add(i);
+        }
+    }
+    
+    int32 PatternType = Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
+    PatternUsageCounts[PatternType]++;
+    LastPatternType = PatternType;
     
     // Get 3 distinct shapes for the pattern
     TArray<int32> AllShapes;
@@ -289,6 +324,110 @@ void FRavensProgressiveMatricesProgram::GenerateNewTrial()
             CorrectAnswer = A;
             break;
         }
+        case 4:
+        {
+            // Pattern: Constant Rows
+            // Row 0: A  A  A
+            // Row 1: B  B  B
+            // Row 2: C  C  ?
+            // Answer: C
+            MatrixCells.Add(A); MatrixCells.Add(A); MatrixCells.Add(A);
+            MatrixCells.Add(B); MatrixCells.Add(B); MatrixCells.Add(B);
+            MatrixCells.Add(C); MatrixCells.Add(C); MatrixCells.Add(-1);
+            CorrectAnswer = C;
+            break;
+        }
+        case 5:
+        {
+            // Pattern: Constant Columns
+            // Row 0: A  B  C
+            // Row 1: A  B  C
+            // Row 2: A  B  ?
+            // Answer: C
+            MatrixCells.Add(A); MatrixCells.Add(B); MatrixCells.Add(C);
+            MatrixCells.Add(A); MatrixCells.Add(B); MatrixCells.Add(C);
+            MatrixCells.Add(A); MatrixCells.Add(B); MatrixCells.Add(-1);
+            CorrectAnswer = C;
+            break;
+        }
+        case 6:
+        {
+            // Pattern: Checkerboard / X
+            // Row 0: A  B  A
+            // Row 1: B  A  B
+            // Row 2: A  B  ?
+            // Answer: A
+            MatrixCells.Add(A); MatrixCells.Add(B); MatrixCells.Add(A);
+            MatrixCells.Add(B); MatrixCells.Add(A); MatrixCells.Add(B);
+            MatrixCells.Add(A); MatrixCells.Add(B); MatrixCells.Add(-1);
+            CorrectAnswer = A;
+            break;
+        }
+        case 7:
+        {
+            // Pattern: Center Cross
+            // Row 0: B  A  B
+            // Row 1: A  A  A
+            // Row 2: B  A  ?
+            // Answer: B
+            MatrixCells.Add(B); MatrixCells.Add(A); MatrixCells.Add(B);
+            MatrixCells.Add(A); MatrixCells.Add(A); MatrixCells.Add(A);
+            MatrixCells.Add(B); MatrixCells.Add(A); MatrixCells.Add(-1);
+            CorrectAnswer = B;
+            break;
+        }
+        case 8:
+        {
+            // Pattern: Cyclic Shift Left
+            // Row 0: A  B  C
+            // Row 1: B  C  A
+            // Row 2: C  A  ?
+            // Answer: B
+            MatrixCells.Add(A); MatrixCells.Add(B); MatrixCells.Add(C);
+            MatrixCells.Add(B); MatrixCells.Add(C); MatrixCells.Add(A);
+            MatrixCells.Add(C); MatrixCells.Add(A); MatrixCells.Add(-1);
+            CorrectAnswer = B;
+            break;
+        }
+        case 9:
+        {
+            // Pattern: Cyclic Shift Right
+            // Row 0: A  B  C
+            // Row 1: C  A  B
+            // Row 2: B  C  ?
+            // Answer: A
+            MatrixCells.Add(A); MatrixCells.Add(B); MatrixCells.Add(C);
+            MatrixCells.Add(C); MatrixCells.Add(A); MatrixCells.Add(B);
+            MatrixCells.Add(B); MatrixCells.Add(C); MatrixCells.Add(-1);
+            CorrectAnswer = A;
+            break;
+        }
+        case 10:
+        {
+            // Pattern: Vertical Mirror (Col 0 == Col 2)
+            // Row 0: A  B  A
+            // Row 1: C  A  C
+            // Row 2: B  C  ?
+            // Answer: B
+            MatrixCells.Add(A); MatrixCells.Add(B); MatrixCells.Add(A);
+            MatrixCells.Add(C); MatrixCells.Add(A); MatrixCells.Add(C);
+            MatrixCells.Add(B); MatrixCells.Add(C); MatrixCells.Add(-1);
+            CorrectAnswer = B;
+            break;
+        }
+        case 11:
+        {
+            // Pattern: Diamond / Center Unique
+            // Row 0: A  B  A
+            // Row 1: B  C  B
+            // Row 2: A  B  ?
+            // Answer: A
+            MatrixCells.Add(A); MatrixCells.Add(B); MatrixCells.Add(A);
+            MatrixCells.Add(B); MatrixCells.Add(C); MatrixCells.Add(B);
+            MatrixCells.Add(A); MatrixCells.Add(B); MatrixCells.Add(-1);
+            CorrectAnswer = A;
+            break;
+        }
     }
     
     // Generate 6 candidate tiles
@@ -323,12 +462,8 @@ void FRavensProgressiveMatricesProgram::GenerateNewTrial()
         }
     }
     
-    // Shuffle all candidates
-    for (int32 i = CandidateTiles.Num() - 1; i > 0; --i)
-    {
-        const int32 j = FMath::RandRange(0, i);
-        CandidateTiles.Swap(i, j);
-    }
+    // Sort candidates to have a constant layout (always 0-5 in order)
+    CandidateTiles.Sort();
     
     HoveredOption = -1;
     InvalidateWidget();
