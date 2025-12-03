@@ -53,7 +53,7 @@ private:
     TArray<int32> TargetSequence;
     TArray<int32> PlayerSequence;
     int32 SequenceLength = 1;
-    static constexpr int32 MaxLength = 5;
+    static constexpr int32 MaxLength = 7;
 
     EPhase Phase = EPhase::ShowingSequence;
     int32 HoveredBlock = -1;
